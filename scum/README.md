@@ -51,6 +51,17 @@ All in `SCUM/Saved/Config/WindowsServer/`:
 
 Save data is in `SCUM/Saved/SaveFiles/`. Back up the whole `SCUM/Saved` folder before you update or change settings.
 
+## Settings editor and mods (SCUM Manager plugin)
+
+The [SCUM Manager plugin](../plugins/scum-manager) adds three pages to SCUM servers:
+- **SCUM Settings:** a form editor for `ServerSettings.ini`
+- **SCUM Player Lists:** admin, whitelist and ban lists
+- **SCUM Mods:** installs UE4SS and manages mods
+
+This egg has the `scum_manager` feature, so the pages appear automatically once the plugin is installed.
+
+SCUM has no official mod support yet, so server-side mods run through UE4SS. The **Wine DLL Overrides** variable (`WINEDLLOVERRIDES`, default `mscoree,mshtml=;dwmapi=n,b`) makes Wine load UE4SS's `dwmapi.dll` from the server folder. It does nothing when UE4SS isn't installed.
+
 ## Troubleshooting
 
 - **The server runs but doesn't show in the server browser:**

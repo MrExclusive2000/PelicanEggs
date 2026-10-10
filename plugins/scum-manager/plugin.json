@@ -1,0 +1,18 @@
+{
+    "id": "scum-manager",
+    "name": "SCUM Manager",
+    "author": "MrExclusive2000",
+    "version": "1.0.0",
+    "description": "Edit SCUM server settings and player lists, and install UE4SS mods, from the server panel.",
+    "category": "plugin",
+    "url": "https://github.com/MrExclusive2000/PelicanEggs/tree/main/plugins/scum-manager",
+    "update_url": null,
+    "namespace": "MrExclusive\\ScumManager",
+    "class": "ScumManagerPlugin",
+    "panels": [
+        "server"
+    ],
+    "panel_version": null,
+    "api_version": 1,
+    "composer_packages": null
+}

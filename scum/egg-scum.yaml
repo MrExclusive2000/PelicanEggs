@@ -13,8 +13,10 @@ description: |-
 tags:
   - steamcmd
   - wine
+  - scum
 features:
   - steam_disk_space
+  - scum_manager
 docker_images:
   'Wine Staging': 'ghcr.io/pelican-eggs/yolks:wine_staging'
   'Wine Latest': 'ghcr.io/pelican-eggs/yolks:wine_latest'
@@ -236,6 +238,18 @@ variables:
       - string
       - 'max:20'
     sort: 12
+  -
+    name: '[WINE] DLL Overrides'
+    description: 'WINEDLLOVERRIDES. dwmapi=n,b makes Wine load UE4SS (the SCUM mod loader) from the server folder; it does nothing when UE4SS is not installed.'
+    env_variable: WINEDLLOVERRIDES
+    default_value: 'mscoree,mshtml=;dwmapi=n,b'
+    user_viewable: true
+    user_editable: true
+    rules:
+      - nullable
+      - string
+      - 'max:255'
+    sort: 14
   -
     name: '[WINE] Xvfb'
     description: 'Start a virtual X display. The dedicated server is headless and does not need it.'
