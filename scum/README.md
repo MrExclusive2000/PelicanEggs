@@ -26,7 +26,7 @@ SCUM binds the primary port **and the next two ports**. Players connect to **pri
 | Game / Connect     | 7779    | Primary + 2, players connect here       |
 | Query              | 27015   | Set with the Query Port variable        |
 
-Every port above needs an allocation on the server. Don't use 27020-27050 for the query port, because Steam reserves that range.
+Every port above needs an allocation on the server, and the **Query Port** variable must equal the query allocation. Don't use 27020-27050 for the query port, because Steam reserves that range.
 
 ## How it works
 
@@ -52,6 +52,13 @@ All in `SCUM/Saved/Config/WindowsServer/`:
 Save data is in `SCUM/Saved/SaveFiles/`. Back up the whole `SCUM/Saved` folder before you update or change settings.
 
 ## Troubleshooting
+
+- **The server runs but doesn't show in the server browser:**
+  1. The **primary** allocation must be the lowest of the three consecutive game ports. For example, with 7779/7780/7781 the primary is 7779 and players connect on 7781.
+  2. The **Query Port** variable must match the extra query allocation (e.g. 27017). The panel doesn't sync it on its own.
+  3. Open every allocation for **UDP** (and TCP) on the host firewall, and forward them on the router if the node is behind NAT.
+  4. Check whether Steam can see the server: open `https://api.steampowered.com/ISteamApps/GetServersAtAddress/v1/?addr=<public IP>`. It should list the server, with `gameport` set to the primary port.
+  5. Try **Direct Connect** to `<public IP>:<primary + 2>`. If that works, the network is fine and only the browser listing is missing. A new server can take 10-15 minutes to appear, so search for it by name.
 
 - **The panel stays on "Starting":** the server is marked running when the log prints `Config entry: GameID scum` (BattlEye) or `Engine is initialized.`. If your build logs neither, edit the egg's startup "done" strings to a line from your `SCUM.log`.
 - **The server crashes at start with missing DLL errors:** set **Winetricks** to `vcrun2022` and restart. It installs on every start, so the first boot takes longer.

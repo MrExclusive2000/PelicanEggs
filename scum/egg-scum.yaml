@@ -191,11 +191,11 @@ variables:
     sort: 8
   -
     name: '[SERVER] Query Port'
-    description: 'Steam query port. Needs its own allocation. Do not use 27020-27050, Steam reserves them.'
+    description: 'Steam query port used by the server browser. Must match one of the server''s allocations. Do not use 27020-27050, Steam reserves them.'
     env_variable: QUERY_PORT
     default_value: 27015
     user_viewable: true
-    user_editable: false
+    user_editable: true
     rules:
       - required
       - integer
