@@ -1,0 +1,249 @@
+_comment: 'DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PANEL'
+meta:
+  version: PLCN_v3
+  update_url: null
+exported_at: '2026-10-10T16:34:37+00:00'
+name: SCUM
+author: georgetaylder@gmail.com
+uuid: 3c20139c-c289-488d-838e-0bf1348bfea2
+description: |-
+  SCUM is a hardcore open world survival game focused on realism: detailed metabolism, weapon
+  maintenance, stamina and inventory management. The dedicated server is Windows-only, so this egg
+  runs it under Wine.
+tags:
+  - steamcmd
+  - wine
+features:
+  - steam_disk_space
+docker_images:
+  'Wine Staging': 'ghcr.io/pelican-eggs/yolks:wine_staging'
+  'Wine Latest': 'ghcr.io/pelican-eggs/yolks:wine_latest'
+file_denylist: {  }
+startup_commands:
+  Default: 'wine ./SCUM/Binaries/Win64/SCUMServer.exe -log -port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -MaxPlayers={{MAX_PLAYERS}} {{ADDITIONAL_ARGS}} & SCUM_PID=$!; trap ''kill -INT $SCUM_PID'' INT TERM; tail -c0 -F ./SCUM/Saved/Logs/SCUM.log --pid=$SCUM_PID & wait $SCUM_PID; wait $SCUM_PID'
+config:
+  files:
+    SCUM/Saved/Config/WindowsServer/ServerSettings.ini:
+      parser: ini
+      find:
+        'General.[scum.ServerName]': '{{server.environment.SERVER_NAME}}'
+        'General.[scum.ServerDescription]': '{{server.environment.SERVER_DESCRIPTION}}'
+        'General.[scum.ServerPassword]': '{{server.environment.SERVER_PASSWORD}}'
+        'General.[scum.ServerPlaystyle]': '{{server.environment.SERVER_PLAYSTYLE}}'
+  startup:
+    done:
+      - 'Config entry: GameID scum'
+      - 'LogInit: Display: Engine is initialized.'
+  logs: {  }
+  stop: ^C
+scripts:
+  installation:
+    script: |-
+      #!/bin/bash
+      # SCUM steamcmd installation script
+      #
+      # Server Files: /mnt/server
+
+      ## just in case someone removed the defaults.
+      if [[ "${STEAM_USER}" == "" ]] || [[ "${STEAM_PASS}" == "" ]]; then
+          echo -e "steam user is not set.\n"
+          echo -e "Using anonymous user.\n"
+          STEAM_USER=anonymous
+          STEAM_PASS=""
+          STEAM_AUTH=""
+      else
+          echo -e "user set to ${STEAM_USER}"
+      fi
+
+      ## download and install steamcmd
+      cd /tmp
+      mkdir -p /mnt/server/steamcmd
+      curl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz
+      tar -xzvf steamcmd.tar.gz -C /mnt/server/steamcmd
+      mkdir -p /mnt/server/steamapps # Fix steamcmd disk write error when this folder is missing
+      cd /mnt/server/steamcmd
+
+      # SteamCMD fails otherwise for some reason, even running as root.
+      # This is changed at the end of the install process anyways.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install game using steamcmd
+      ./steamcmd.sh +force_install_dir /mnt/server +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} $( [[ "${WINDOWS_INSTALL}" == "1" ]] && printf %s '+@sSteamCmdForcePlatformType windows' ) +app_update ${SRCDS_APPID} $( [[ -z ${SRCDS_BETAID} ]] || printf %s "-beta ${SRCDS_BETAID}" ) $( [[ -z ${SRCDS_BETAPASS} ]] || printf %s "-betapassword ${SRCDS_BETAPASS}" ) ${INSTALL_FLAGS} validate +quit
+
+      ## set up 32 bit libraries
+      mkdir -p /mnt/server/.steam/sdk32
+      cp -v linux32/steamclient.so ../.steam/sdk32/steamclient.so
+
+      ## set up 64 bit libraries
+      mkdir -p /mnt/server/.steam/sdk64
+      cp -v linux64/steamclient.so ../.steam/sdk64/steamclient.so
+
+      ## make sure the log and config folders exist so the startup tail and config parser have a target
+      mkdir -p /mnt/server/SCUM/Saved/Logs /mnt/server/SCUM/Saved/Config/WindowsServer
+
+      if [ ! -f /mnt/server/SCUM/Binaries/Win64/SCUMServer.exe ]; then
+          echo "SCUMServer.exe was not found - the steamcmd download failed. Reinstall the server to retry."
+          exit 1
+      fi
+
+      ## install end
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+    container: 'ghcr.io/pelican-eggs/installers:debian'
+    entrypoint: bash
+variables:
+  -
+    name: '[STEAM] App ID'
+    description: 'Steam App ID of the SCUM dedicated server.'
+    env_variable: SRCDS_APPID
+    default_value: 3792580
+    user_viewable: false
+    user_editable: false
+    rules:
+      - required
+      - numeric
+      - 'in:3792580'
+    sort: 1
+  -
+    name: '[STEAM] Auto Update'
+    description: 'Update the server through steamcmd every time it starts.'
+    env_variable: AUTO_UPDATE
+    default_value: 1
+    user_viewable: true
+    user_editable: true
+    rules:
+      - required
+      - boolean
+    sort: 2
+  -
+    name: '[STEAM] Windows Install'
+    description: 'Forces steamcmd to download the Windows build, which is the only one SCUM ships.'
+    env_variable: WINDOWS_INSTALL
+    default_value: 1
+    user_viewable: false
+    user_editable: false
+    rules:
+      - required
+      - boolean
+      - 'in:1'
+    sort: 3
+  -
+    name: '[SERVER] Server Name'
+    description: 'Name shown in the server browser. Written to ServerSettings.ini on every start.'
+    env_variable: SERVER_NAME
+    default_value: 'A Pelican Hosted SCUM Server'
+    user_viewable: true
+    user_editable: true
+    rules:
+      - required
+      - string
+      - 'max:64'
+    sort: 4
+  -
+    name: '[SERVER] Server Description'
+    description: 'Description shown in the server browser.'
+    env_variable: SERVER_DESCRIPTION
+    default_value: 'A Pelican Hosted SCUM Server'
+    user_viewable: true
+    user_editable: true
+    rules:
+      - nullable
+      - string
+      - 'max:255'
+    sort: 5
+  -
+    name: '[SERVER] Server Password'
+    description: 'Password required to join. Leave empty for a public server.'
+    env_variable: SERVER_PASSWORD
+    default_value: ''
+    user_viewable: true
+    user_editable: true
+    rules:
+      - nullable
+      - string
+      - 'max:30'
+    sort: 6
+  -
+    name: '[SERVER] Max Players'
+    description: 'Player limit. Passed on the command line, so it overrides the value in ServerSettings.ini.'
+    env_variable: MAX_PLAYERS
+    default_value: 64
+    user_viewable: true
+    user_editable: true
+    rules:
+      - required
+      - integer
+      - 'between:1,128'
+    sort: 7
+  -
+    name: '[SERVER] Playstyle'
+    description: 'Server playstyle shown in the browser: PVP or PVE.'
+    env_variable: SERVER_PLAYSTYLE
+    default_value: PVP
+    user_viewable: true
+    user_editable: true
+    rules:
+      - required
+      - string
+      - 'in:PVE,PVP'
+    sort: 8
+  -
+    name: '[SERVER] Query Port'
+    description: 'Steam query port. Needs its own allocation. Do not use 27020-27050, Steam reserves them.'
+    env_variable: QUERY_PORT
+    default_value: 27015
+    user_viewable: true
+    user_editable: false
+    rules:
+      - required
+      - integer
+      - 'between:1024,65535'
+    sort: 9
+  -
+    name: '[SERVER] Additional Arguments'
+    description: 'Extra launch arguments, e.g. -nobattleye to disable BattlEye (not recommended).'
+    env_variable: ADDITIONAL_ARGS
+    default_value: ''
+    user_viewable: true
+    user_editable: true
+    rules:
+      - nullable
+      - string
+      - 'max:255'
+    sort: 10
+  -
+    name: '[WINE] Winetricks'
+    description: 'Space separated winetricks packages installed on every start, e.g. vcrun2022. Leave empty unless the server fails to start.'
+    env_variable: WINETRICKS_RUN
+    default_value: ''
+    user_viewable: true
+    user_editable: false
+    rules:
+      - nullable
+      - string
+    sort: 11
+  -
+    name: '[WINE] Wine Debug'
+    description: 'WINEDEBUG channel settings. -all keeps the console quiet.'
+    env_variable: WINEDEBUG
+    default_value: '-all'
+    user_viewable: false
+    user_editable: false
+    rules:
+      - required
+      - string
+      - 'max:20'
+    sort: 12
+  -
+    name: '[WINE] Xvfb'
+    description: 'Start a virtual X display. The dedicated server is headless and does not need it.'
+    env_variable: XVFB
+    default_value: 0
+    user_viewable: false
+    user_editable: false
+    rules:
+      - required
+      - boolean
+    sort: 13
