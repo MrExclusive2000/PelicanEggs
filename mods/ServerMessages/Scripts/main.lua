@@ -5,8 +5,7 @@
     - Announcements: a list of messages broadcast in turn, one every few minutes.
     - Join/leave log: who came and went, in players.log and the Pelican console.
 
-    Announcements go through SCUM's admin command processor (the same one PelicanConsole uses),
-    as "#Announce <text>".
+    Announcements are shown the way #Announce shows them (ConZGameMode.SendHUDMessageToAll).
 
     Settings: config.lua in this mod's folder.
 ]]
@@ -141,7 +140,18 @@ local function adminCommand(command)
     return ok
 end
 
+local GAME_MODE_CLASSES = { "BP_ConZGameMode_C", "ConZGameMode" }
+
+-- The on-screen message #Announce shows. SCUM's command processor ignores commands sent
+-- without an admin, so call the game mode directly and only fall back to the command.
 local function announce(message)
+    for _, className in ipairs(GAME_MODE_CLASSES) do
+        local gameMode = safe(function() return FindFirstOf(className) end)
+        if isValid(gameMode) then
+            local ok = pcall(function() gameMode:SendHUDMessageToAll(message, false) end)
+            if ok then return true end
+        end
+    end
     return adminCommand(config.commandPrefix .. "Announce " .. message)
 end
 

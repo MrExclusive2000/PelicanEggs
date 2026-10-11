@@ -68,7 +68,7 @@ class ScumConsolePage extends Page
         return $schema->components([
             Section::make('Output')
                 ->description(fn () => $this->modInstalled
-                    ? 'Runs SCUM admin commands (the ones you type after # in chat) through the PelicanConsole mod, no admin in game needed. Type them without the #, e.g. ListPlayers or Announce Hello.'
+                    ? 'Runs SCUM admin commands through the PelicanConsole mod. Announce, ListPlayers and Kick <name> work any time; other commands need an admin from AdminUsers.ini online and run as if they typed them in chat. Type commands without the #.'
                     : 'Install the PelicanConsole mod on the SCUM Mods page and restart the server to use this page.')
                 ->schema([
                     TextEntry::make('console_output')

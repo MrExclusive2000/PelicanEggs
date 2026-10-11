@@ -61,7 +61,14 @@ function FindAllOf(className)
     if className == "ConZPlayerController" then return players end
     return nil
 end
-function FindFirstOf(className) if className == "World" then return world end end
+local hud = {}
+local gameModeAvailable = true
+local gameMode = object()
+function gameMode:SendHUDMessageToAll(message, beep) assert(beep == false) hud[#hud + 1] = message end
+function FindFirstOf(className)
+    if className == "World" then return world end
+    if className == "ConZGameMode" and gameModeAvailable then return gameMode end
+end
 function StaticFindObject(path)
     if path == "/Script/SCUM.Default__MiscStatics" and processorAvailable then return processor end
     return nil
@@ -109,7 +116,7 @@ alice.name = "Alice"
 advance(5)
 check("join logged to console", string.find(consoleLog(), "Alice joined.", 1, true) ~= nil)
 check("join logged to players.log with date", string.find(read(dir .. "/players.log"), "%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d %[ServerMessages%] Alice joined%.") ~= nil)
-check("no join announcement by default", #commands == 0)
+check("no join announcement by default", #commands == 0 and #hud == 0)
 
 alice.pawn = Pawn("BP_Prisoner_C")
 advance(5)
@@ -123,19 +130,20 @@ check("welcome not repeated", #private == 1)
 
 -- Announcements: first one after the interval, then rotating.
 advance(30 * 60)
-check("announcement after interval", commands[1] == "#Announce Server rules: no cheating, no exploiting, respect other players.")
+check("announcement after interval", hud[1] == "Server rules: no cheating, no exploiting, respect other players.")
+check("announcement not sent as an admin command", #commands == 0)
 
 -- Leave.
 players = {}
 advance(5)
 check("leave logged", string.find(consoleLog(), "Alice left.", 1, true) ~= nil)
 
-local before = #commands
+local before = #hud
 advance(31 * 60)
-check("no announcements to an empty server", #commands == before)
+check("no announcements to an empty server", #hud == before)
 
 -- ------------------------------------------------------------------ scenario 2: custom config
-players, commands, private, clock = {}, {}, {}, 5000
+players, commands, private, hud, clock = {}, {}, {}, {}, 5000
 os.remove(mods .. "/PelicanConsole/console.log")
 writeConfig([[return {
     welcome = "",
@@ -152,7 +160,7 @@ check("no Pelican console mirror without PelicanConsole", read(mods .. "/Pelican
 local bob = Player("Bob", Pawn("BP_Prisoner_C"))
 players = { bob, Player("Carol", nil) }
 advance(5)
-check("join announced with count and prefix setting", commands[1] == "Announce Bob joined (2 online)")
+check("join announced with count", hud[1] == "Bob joined (2 online)")
 advance(20)
 check("welcome off", #private == 0)
 
@@ -161,16 +169,23 @@ local logSize = #read(dir .. "/players.log")
 advance(5)
 check("join/leave log off", #read(dir .. "/players.log") == logSize)
 
-local start = #commands
+local start = #hud
 advance(60)
 advance(60)
 advance(60)
-check("rotation wraps", commands[start + 1] == "Announce One" and commands[start + 2] == "Announce Two" and commands[start + 3] == "Announce One")
+check("rotation wraps", hud[start + 1] == "One" and hud[start + 2] == "Two" and hud[start + 3] == "One")
+
+-- Without a game mode, falls back to the admin command with the configured prefix.
+gameModeAvailable = false
+advance(60)
+check("fallback to admin command uses prefix setting", commands[#commands] == "Announce Two")
+gameModeAvailable = true
 
 -- ------------------------------------------------------------------ scenario 3: failures
 players, commands, private, clock, log = {}, {}, {}, 9000, {}
 writeConfig([[return { announcements = {}, joinAnnouncement = "{name} joined" }]])
 processorAvailable = false
+gameModeAvailable = false
 sendFails = true
 dofile(dir .. "/Scripts/main.lua")
 local dave = Player("Dave", Pawn("BP_Prisoner_C"))

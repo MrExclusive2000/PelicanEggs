@@ -68,11 +68,14 @@ SCUM has no official mod support yet, so server-side mods run through UE4SS. The
 SCUM has no RCON and doesn't read admin commands from its console. The [PelicanConsole](../mods/PelicanConsole) UE4SS mod bridges the gap:
 1. Install UE4SS from the **SCUM Mods** page, then upload `mods/dist/PelicanConsole.zip` there.
 2. Restart the server and wait until it is online.
-3. Type an admin command in the Pelican console, with or without the leading `#`, for example `ListPlayers` or `Announce Server restart in 10 minutes`.
+3. Send a command from the **SCUM Admin Console** page of the SCUM Manager plugin, or type it in the Pelican console, with or without the leading `#`. For example: `ListPlayers` or `Announce Server restart in 10 minutes`.
 
-The console then shows `[PelicanConsole] Ran: #ListPlayers` and SCUM's own reply, or the reason the command could not run. Commands typed while the server is starting or stopped are dropped.
+How commands run:
+- **`Announce <message>`** shows the message on every player's screen, and **`ListPlayers`** lists who is online in the console. **`Kick <name>`** kicks an online player by name. These work with no admin in game.
+- **Every other command** (SetTime, SetWeather, Ban, Teleport...) runs through an online admin's chat command channel, exactly as if that admin typed it in chat, and SCUM's reply appears in their chat. So an admin from `AdminUsers.ini` must be online.
+- With no admin online, the mod tries SCUM's internal `MiscStatics.Test_ProcessAdminCommand`, which SCUM ignores for most commands on a dedicated server. The console says so.
 
-The mod calls SCUM's `MiscStatics.Test_ProcessAdminCommand`, an internal function SCUM's developers use for testing. Try a harmless command first, and expect a SCUM update to rename or remove it.
+Commands typed while the server is starting or stopped are dropped.
 
 ## Server mods
 
