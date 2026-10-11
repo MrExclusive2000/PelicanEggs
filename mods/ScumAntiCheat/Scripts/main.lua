@@ -36,6 +36,7 @@ local GAME_MODE_CLASSES = { "BP_ConZGameMode_C", "ConZGameMode" }
 local CM_PER_M = 100
 local FALLING_SPEED = 5       -- m/s downwards; above this the horizontal speed check is skipped
 local HOVER_SPEED = 1         -- m/s; slower vertical movement than this while falling is hovering
+local SETTLE_SECONDS = 5      -- seconds after getting into or out of a vehicle before movement counts
 local MAX_SAMPLE_GAP = 5      -- seconds; older samples are discarded instead of compared
 local REPEAT_COOLDOWN = 5     -- seconds between strikes for the same continuous violation
 local FILE_REFRESH = 60       -- seconds between re-reading AdminUsers.ini and looking for new game logs
@@ -772,7 +773,7 @@ local function exempt(player, controller, pawn)
     return isTrue(controller, "IsTeleportInProgress") or isTrue(pawn, "IsTeleportInProgress")
 end
 
-local function checkMovement(player, controller, pawn, position, previous, elapsed, time)
+local function checkMovement(player, controller, pawn, position, previous, elapsed, time, vehicle)
     local where = string.format("at %.0f, %.0f, %.0f", position.x, position.y, position.z)
     local bounds = config.mapBounds
 
@@ -784,7 +785,6 @@ local function checkMovement(player, controller, pawn, position, previous, elaps
         end
     end
 
-    local vehicle = inVehicle(pawn)
     local mode = not vehicle and movementMode(pawn) or nil
 
     if config.checks.flying then
@@ -860,13 +860,16 @@ local function check(controller, time, seen)
 
     local position = location(pawn)
     local pawnKey = address(pawn)
+    local vehicle = inVehicle(pawn)
     local previous, previousTime = player.position, player.time
-    if player.pawn ~= pawnKey then
-        -- New character, or got into / out of a vehicle: start over.
+    if player.pawn ~= pawnKey or player.vehicle ~= vehicle then
+        -- New character, or got into / out of a vehicle (as driver or passenger): start over,
+        -- and give the game a few seconds to settle where the character really is.
         previous = nil
         player.flyingSince, player.hoverSince = nil, nil
+        if player.pawn ~= nil then player.settleUntil = time + SETTLE_SECONDS end
     end
-    player.pawn, player.position, player.time = pawnKey, position, time
+    player.pawn, player.position, player.time, player.vehicle = pawnKey, position, time, vehicle
 
     if position == nil or exempt(player, controller, pawn) then return end
 
@@ -876,7 +879,13 @@ local function check(controller, time, seen)
         player.flyingSince, player.hoverSince = nil, nil
     end
 
-    checkMovement(player, controller, pawn, position, previous, elapsed, time)
+    -- A passenger's character rides along attached to the vehicle and its position jumps
+    -- about; the driver is checked instead. Map bounds still apply.
+    if (vehicle and isCharacter(pawn)) or (player.settleUntil and time < player.settleUntil) then
+        previous = nil
+    end
+
+    checkMovement(player, controller, pawn, position, previous, elapsed, time, vehicle)
 end
 
 local playerCount = -1

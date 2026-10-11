@@ -236,6 +236,29 @@ check("teleport flagged", has(text, "Jumper: teleported 2000 m in 1.0 s"))
 check("game teleport ignored", not has(text, "Summoned"))
 check("admin in AdminUsers.ini (UTF-16, with permissions) ignored", not has(text, "RealAdmin"))
 
+-- A passenger's character rides attached to the vehicle; its position jumps about while seated
+-- and when getting out. That is not a teleport. Once settled on foot, a real teleport still counts.
+local rider = Player("Rider", Pawn("BP_Prisoner_C", 0, 0, 0))
+local car = Pawn("BPC_Rager_C", 0, 0, 0)
+players = { rider }
+tick()
+rider.pawn.parent = car
+step()
+rider.pawn.x = 2000
+step()
+rider.pawn.x = 4000
+step()
+rider.pawn.parent = nil
+rider.pawn.x = 6000
+step()
+rider.pawn.x = 6015
+step()
+check("passenger not flagged while riding or getting out", not has(acLog(), "Rider"))
+step(5)
+rider.pawn.x = 1000
+step()
+check("teleport on foot after settling still flagged", has(acLog(), "Rider: teleported 5015 m"))
+
 -- Admin rights without being in AdminUsers.ini.
 local rogue = Player("Rogue", Pawn("BP_Prisoner_C", 0, 0, 0))
 rogue.admin = true
