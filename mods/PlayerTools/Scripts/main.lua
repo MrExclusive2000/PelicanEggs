@@ -1206,7 +1206,7 @@ end
 -- c2 and z3) show which way the grid lies on this map.
 -- Sector names are only used once all four bankers land in the right sector.
 
-local GRID_MIN, GRID_SIZE = -954800, 1624000   -- cm: the island's bounds in SCUM's own map
+local GRID_MIN, GRID_SIZE = -904800, 1524000   -- cm: five 3048 m sectors each way
 local ROW_ORDERS = { { "A", "B", "C", "D", "Z" }, { "Z", "A", "B", "C", "D" } }
 local OUTPOST_SECTOR_SET = { A0 = true, B4 = true, C2 = true, Z3 = true }
 local grid = nil

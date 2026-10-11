@@ -493,32 +493,57 @@ end
 local OUTPOST_SECTORS = { "a0", "b4", "c2", "z3" }   -- SCUM's four outposts
 local SAME_OUTPOST = 30000                            -- 300 m
 
--- Names the four outposts by sector when exactly one way of laying SCUM's grid (rows A, B, C
--- then Z; columns 0 to 4) over the map fits their positions. Otherwise nil.
+-- SCUM's grid: five 3048 m sectors each way from -904800 cm.
+local GRID_MIN, CELL = -904800, 304800
+local ROW_INDEX = { { a = 0, b = 1, c = 2, z = 4 }, { z = 0, a = 1, b = 2, c = 3 } }   -- Z after D, or before A
+
+local function cellOf(value, direction)
+    local index = math.floor((value - GRID_MIN) / CELL)
+    return direction > 0 and index or 4 - index
+end
+
+-- Names the four outposts by sector from the way of laying SCUM's grid (rows A, B, C with Z
+-- before A or after C; columns 0 to 4) that fits their positions. Several layouts can fit the
+-- order of the positions; the one that also puts each in its sector on SCUM's grid wins.
+-- Otherwise nil.
 local function sectorNames(points)
     if #points ~= #OUTPOST_SECTORS then return nil end
     local columns = { a0 = 0, b4 = 4, c2 = 2, z3 = 3 }
-    local fits = {}
-    for _, axis in ipairs({ "X", "Y" }) do
-        local other = axis == "X" and "Y" or "X"
-        for _, rowDirection in ipairs({ 1, -1 }) do
-            for _, columnDirection in ipairs({ 1, -1 }) do
-                local order = {}
-                for index in ipairs(points) do order[index] = index end
-                table.sort(order, function(a, b) return points[a][axis] * rowDirection < points[b][axis] * rowDirection end)
-                local names, consistent = {}, true
-                for rank, index in ipairs(order) do names[index] = OUTPOST_SECTORS[rank] end
-                for a in ipairs(points) do
-                    for b in ipairs(points) do
-                        if columns[names[a]] < columns[names[b]] and points[a][other] * columnDirection >= points[b][other] * columnDirection then
-                            consistent = false
+    local fits, exact = {}, {}
+    for orderIndex, sectors in ipairs({ OUTPOST_SECTORS, { "z3", "a0", "b4", "c2" } }) do
+        for _, axis in ipairs({ "X", "Y" }) do
+            local other = axis == "X" and "Y" or "X"
+            for _, rowDirection in ipairs({ 1, -1 }) do
+                for _, columnDirection in ipairs({ 1, -1 }) do
+                    local order = {}
+                    for index in ipairs(points) do order[index] = index end
+                    table.sort(order, function(a, b) return points[a][axis] * rowDirection < points[b][axis] * rowDirection end)
+                    local names, consistent = {}, true
+                    for rank, index in ipairs(order) do names[index] = sectors[rank] end
+                    for a in ipairs(points) do
+                        for b in ipairs(points) do
+                            if columns[names[a]] < columns[names[b]] and points[a][other] * columnDirection >= points[b][other] * columnDirection then
+                                consistent = false
+                            end
                         end
                     end
+                    if consistent then
+                        fits[#fits + 1] = names
+                        local onGrid = true
+                        for index, point in ipairs(points) do
+                            local sector = names[index]
+                            if cellOf(point[axis], rowDirection) ~= ROW_INDEX[orderIndex][string.sub(sector, 1, 1)]
+                                or cellOf(point[other], columnDirection) ~= columns[sector] then
+                                onGrid = false
+                            end
+                        end
+                        if onGrid then exact[#exact + 1] = names end
+                    end
                 end
-                if consistent then fits[#fits + 1] = names end
             end
         end
     end
+    if #exact == 1 then return exact[1] end
     return #fits == 1 and fits[1] or nil
 end
 

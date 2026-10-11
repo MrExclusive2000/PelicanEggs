@@ -315,6 +315,14 @@ check("outposts named by sector, in front of the banker", string.find(consoleLog
     and string.find(consoleLog(), "Outpost b4 at 400250 600000 1020", 1, true) ~= nil
     and string.find(consoleLog(), "Outpost c2 at 200250 300000 1020", 1, true) ~= nil
     and string.find(consoleLog(), "Outpost z3 at 300250 -300000 1020", 1, true) ~= nil)
+-- Traders found on a live server: rows Z, A, B, C along +Y, columns along +X.
+bankers = { Banker(-628501, -564653), Banker(-157342, 289458), Banker(17828, -675066), Banker(571094, -229415) }
+writeCommands("FindOutposts\n")
+loopCallback()
+check("live outposts named with the Z row before A", string.find(consoleLog(), "Outpost a0 at -628251 -564653 1020", 1, true) ~= nil
+    and string.find(consoleLog(), "Outpost c2 at -157092 289458 1020", 1, true) ~= nil
+    and string.find(consoleLog(), "Outpost z3 at 18078 -675066 1020", 1, true) ~= nil
+    and string.find(consoleLog(), "Outpost b4 at 571344 -229415 1020", 1, true) ~= nil)
 -- No bankers loaded: safe zones are used instead, with a warning about the height.
 bankers = {}
 zones = { Banker(0, 0), Banker(500000, 0) }

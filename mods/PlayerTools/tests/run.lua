@@ -606,9 +606,9 @@ players = {}
 
 -- ================================================================== death recap, hotspots, !seen, manhunt, king of the hill
 private, hud, adminCommands, kicks = {}, {}, {}, {}
--- Bankers at the outposts: rows A..Z along +X, columns 0..4 along +Y (cell = 3248 m).
-local CELL = 324800
-local function centre(row, column) return -954800 + (row + 0.5) * CELL, -954800 + (column + 0.5) * CELL end
+-- Bankers at the outposts: rows A..Z along +X, columns 0..4 along +Y (cell = 3048 m).
+local CELL = 304800
+local function centre(row, column) return -904800 + (row + 0.5) * CELL, -904800 + (column + 0.5) * CELL end
 local bankers = {}
 for _, rc in ipairs({ { 0, 0 }, { 1, 4 }, { 2, 2 }, { 4, 3 } }) do
     local x, y = centre(rc[1], rc[2])
@@ -711,10 +711,11 @@ players = {}
 write(dir .. "/config.lua", [[return {
     featureTips = { onJoin = false, announceEveryMinutes = 0 }, playtimeRewards = { enabled = false },
     teleports = { locations = {
-        { name = "a0", x = -792400, y = -792400, z = 0, price = 0 },
-        { name = "b4", x = -467600, y = 506800, z = 0, price = 0 },
-        { name = "c2", x = -142800, y = -142800, z = 0, price = 0 },
-        { name = "z3", x = 506800, y = 182000, z = 0, price = 0 },
+        -- Trader positions found on a live server (rows Z, A, B, C, D along +Y, columns along +X).
+        { name = "a0", x = -628501, y = -564653, z = 123, price = 0 },
+        { name = "b4", x = 571094, y = -229415, z = 284, price = 0 },
+        { name = "c2", x = -157342, y = 289458, z = 69620, price = 0 },
+        { name = "z3", x = 17828, y = -675066, z = 268, price = 0 },
     } },
 }]])
 local function countWorkedOut()
