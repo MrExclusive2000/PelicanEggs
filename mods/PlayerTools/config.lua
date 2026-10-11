@@ -57,14 +57,14 @@ return {
         messages = {
             "Welcome {name}! Type !help in chat for server commands.",
         },
-        -- Starter kit: SCUM admin commands run once per new player, after their character spawns.
-        -- {location} is where the player stands, {steamId} and {name} the player.
-        -- Needs an admin online; the kit waits until one is.
-        starterKit = false,
+        -- Starter kit: SCUM admin commands (without "#") run once per new player, after their
+        -- character spawns. {steamId} and {name} are the player. Needs an admin online; the kit
+        -- waits until one is. Use commands that name the player: SpawnItem has no target, so it
+        -- would drop items in front of the admin instead.
+        starterKit = true,
         starterKitCommands = {
-            -- 'SpawnItem Water_05l 1 Location "{location}"',
-            -- 'ChangeCurrencyBalance Normal 500 {steamId}',
+            "ChangeCurrencyBalance Normal 500 {steamId}",
         },
-        starterKitMessage = "Your starter kit has arrived. Good luck out there!",
+        starterKitMessage = "Welcome gift: 500 cash has been added to your account. Spend it at a trader.",
     },
 }

@@ -70,10 +70,10 @@ final class ModSettings
                     ],
                 ],
                 'New players' => [
-                    'description' => 'For a player\'s first join. Placeholders: {name} {steamId}. Starter kit commands are SCUM admin commands (without #) run once per new player as an online admin; {location} is where the player stands, e.g. SpawnItem Water_05l 1 Location "{location}". The kit waits until an admin is online.',
+                    'description' => 'For a player\'s first join. Placeholders: {name} {steamId}. Starter kit commands are SCUM admin commands (without #) run once per new player as an online admin, e.g. ChangeCurrencyBalance Normal 500 {steamId}. Only use commands that name the player: SpawnItem has no target and would drop items in front of the admin. The kit waits until an admin is online.',
                     'fields' => [
                         'newPlayers.messages' => ['lines', 'Welcome messages (one per line)', []],
-                        'newPlayers.starterKit' => ['toggle', 'Starter kit on', false],
+                        'newPlayers.starterKit' => ['toggle', 'Starter kit on', true],
                         'newPlayers.starterKitCommands' => ['lines', 'Starter kit commands (one per line)', []],
                         'newPlayers.starterKitMessage' => ['text', 'Message when the kit is given', ''],
                     ],

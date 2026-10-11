@@ -90,7 +90,7 @@ Our own UE4SS mods ship with the SCUM Manager plugin and are installed together 
 
 Change their settings on the **SCUM Mod Settings** page, or in `config.lua` in `SCUM/Binaries/Win64/ue4ss/Mods/<Mod>/`. The mods pick up changes within 30 seconds. They report in the Pelican console and on the Admin Console page.
 
-Votes and starter kits run SCUM admin commands (SetTime, SpawnItem...) as an online admin, so an admin from `AdminUsers.ini` must be online for them to take effect. Restart warnings only announce: add a Pelican schedule (**Schedules**) with a **Restart** power action at the same times.
+Votes and starter kits run SCUM admin commands (SetTime, ChangeCurrencyBalance...) as an online admin, so an admin from `AdminUsers.ini` must be online for them to take effect. Restart warnings only announce: add a Pelican schedule (**Schedules**) with a **Restart** power action at the same times.
 
 ## Troubleshooting
 

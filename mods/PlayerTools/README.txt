@@ -18,11 +18,13 @@ plugin. Changes are picked up within 30 seconds.
 Good to know:
  - Chat commands and the kill feed read SCUM's own logs in SCUM/Saved/SaveFiles/Logs
    (chat_*.log and kill_*.log). Only chat written after the server started is read.
- - Votes and starter kits run SCUM admin commands (SetTime, SpawnItem, ...) through an
+ - Votes and starter kits run SCUM admin commands (SetTime, SetWeather, ChangeCurrencyBalance...) through an
    online admin's chat command channel, exactly as if that admin typed them. So an admin
    from AdminUsers.ini must be online: a passed vote with no admin online is announced as
    "cannot be applied right now", and starter kits wait until an admin is online.
- - Starter kit commands are SCUM admin commands without the "#". {location} is replaced
-   with where the player stands (X=... Y=... Z=...), {steamId} and {name} with the player.
-   Example: SpawnItem Water_05l 1 Location "{location}"
+ - Starter kit commands are SCUM admin commands without the "#", with {steamId} and {name}
+   replaced by the new player. The default gives 500 cash:
+       ChangeCurrencyBalance Normal 500 {steamId}
+   Only use commands that name the player. SpawnItem has no target: it drops the items in
+   front of the admin the command runs as, not the new player.
  - The first time the mod runs, every player who joins counts as new once.
