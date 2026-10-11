@@ -33,6 +33,7 @@ Every port above needs an allocation on the server, and the **Query Port** varia
 - **Install:** steamcmd downloads app `3792580` with the Windows platform forced, then checks that `SCUM/Binaries/Win64/SCUMServer.exe` exists.
 - **Auto update:** with **Auto Update** on, the Wine image runs steamcmd before every start.
 - **Startup:** `wine SCUMServer.exe -log -port=… -QueryPort=… -MaxPlayers=…`. The console follows `SCUM/Saved/Logs/SCUM.log` because Wine doesn't print the server's output.
+- **Console commands:** lines you type in the Pelican console are appended to `SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole/commands.txt`, and the console also shows that mod's `console.log`. This needs UE4SS and the [PelicanConsole mod](../mods/PelicanConsole); see [Console commands](#console-commands).
 - **Stopping:** the panel sends `^C` (SIGINT). The startup command traps it and passes it to the server process, so the server can shut down cleanly instead of being killed when the stop timeout runs out.
 - **Config:** on every start the panel writes the name, description, password and playstyle into `SCUM/Saved/Config/WindowsServer/ServerSettings.ini` (section `[General]`, keys `scum.ServerName` and so on). SCUM creates this file on its first start, so these values take effect from the **second** start.
 
@@ -62,6 +63,17 @@ This egg has the `scum_manager` feature, so the pages appear automatically once 
 
 SCUM has no official mod support yet, so server-side mods run through UE4SS. The **Wine DLL Overrides** variable (`WINEDLLOVERRIDES`, default `mscoree,mshtml=;dwmapi=n,b`) makes Wine load UE4SS's `dwmapi.dll` from the server folder. It does nothing when UE4SS isn't installed.
 
+## Console commands
+
+SCUM has no RCON and doesn't read admin commands from its console. The [PelicanConsole](../mods/PelicanConsole) UE4SS mod bridges the gap:
+1. Install UE4SS from the **SCUM Mods** page, then upload `mods/dist/PelicanConsole.zip` there.
+2. Restart the server and wait until it is online.
+3. Type an admin command in the Pelican console, with or without the leading `#`, for example `ListPlayers` or `Announce Server restart in 10 minutes`.
+
+The console then shows `[PelicanConsole] Ran: #ListPlayers` and SCUM's own reply, or the reason the command could not run. Commands typed while the server is starting or stopped are dropped.
+
+The mod calls SCUM's `MiscStatics.Test_ProcessAdminCommand`, an internal function SCUM's developers use for testing. Try a harmless command first, and expect a SCUM update to rename or remove it.
+
 ## Troubleshooting
 
 - **The server runs but doesn't show in the server browser:**
@@ -75,3 +87,6 @@ SCUM has no official mod support yet, so server-side mods run through UE4SS. The
 - **The server crashes at start with missing DLL errors:** set **Winetricks** to `vcrun2022` and restart. It installs on every start, so the first boot takes longer.
 - **"App '3792580' state is 0x6 after update job":** steamcmd failed the update. Restart again, or delete `steamapps/appmanifest_3792580.acf` and restart.
 - **Version mismatch when joining:** the server is behind the client. Make sure Auto Update is on and restart.
+- **Typed console commands do nothing:**
+  - Check that the console shows `[PelicanConsole] Ready.` after a start. If it doesn't, check that UE4SS is installed and the mod is enabled on the Mods page.
+  - If you see `Ran: #…` but nothing happens in game, change `COMMAND_PREFIX` near the top of `ue4ss/Mods/PelicanConsole/Scripts/main.lua` from `"#"` to `""` and restart.

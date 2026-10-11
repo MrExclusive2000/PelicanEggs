@@ -45,6 +45,10 @@ SCUM has no official mod support yet. Server-side mods run through [UE4SS](https
 
 Changes apply on the next server start.
 
+### Console commands
+
+To run admin commands from the Pelican console, upload the [PelicanConsole](../../mods/PelicanConsole) mod (`mods/dist/PelicanConsole.zip`) on this page. The SCUM egg forwards console input to it. See the [egg README](../../scum/README.md#console-commands).
+
 ### Wine
 
 UE4SS loads through a `dwmapi.dll` file next to `SCUMServer.exe`. Wine prefers its own built-in `dwmapi`, so the server needs `WINEDLLOVERRIDES` to include `dwmapi=n,b`. The updated egg sets this by default, and the Mods page shows whether it is set.
