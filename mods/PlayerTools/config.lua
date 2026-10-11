@@ -62,6 +62,10 @@ return {
         -- waits until one is. Use commands that name the player: SpawnItem has no target, so it
         -- would drop items in front of the admin instead.
         starterKit = true,
+        -- EXPERIMENTAL: items given straight into the new player's inventory, no admin needed.
+        -- Item names as in SpawnItem (find them with "Find an item name" on the Admin Console),
+        -- e.g. { item = "Water_05l", amount = 1 }.
+        starterKitItems = {},
         starterKitCommands = {
             "ChangeCurrencyBalance Normal 500 {steamId}",
         },
@@ -83,6 +87,9 @@ return {
         -- Once per day (UTC), the first time the player is online.
         dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" },
         dailyMessage = "Daily login bonus: +200 cash.",
+        -- EXPERIMENTAL: items given with each reward, e.g. { item = "Water_05l", amount = 1 }.
+        items = {},
+        dailyItems = {},
     },
 
     -- {name} {count} / {killer} {victim} {count}
@@ -109,6 +116,9 @@ return {
         maxAmount = 5000,
         payCommand = "ChangeCurrencyBalance Normal {amount} {steamId}",
         chargeCommand = "ChangeCurrencyBalance Normal -{amount} {steamId}",
+        -- EXPERIMENTAL: read the player's balance first and refuse bounties they cannot pay.
+        -- Turn this on before playerBounties.
+        checkBalance = false,
     },
 
     -- !tp <name>: the player stands still for standStillSeconds, pays the price and is teleported.
@@ -117,7 +127,12 @@ return {
         enabled = true,
         cooldownMinutes = 30,
         standStillSeconds = 10,
-        command = "Teleport {x} {y} {z} {steamId}",
+        -- "admin": SCUM's Teleport command (needs an admin online).
+        -- "direct": EXPERIMENTAL, moves the player directly, no admin needed.
+        method = "admin",
+        -- EXPERIMENTAL: read the player's balance first and refuse teleports they cannot pay.
+        checkBalance = false,
+        command = "Teleport {steamId} {x} {y} {z}",
         chargeCommand = "ChangeCurrencyBalance Normal -{price} {steamId}",
         locations = {
             -- { name = "trader", x = 0, y = 0, z = 0, price = 500 },
@@ -134,5 +149,13 @@ return {
     reports = {
         enabled = true,
         cooldownSeconds = 60,
+    },
+
+    -- Tell players what the server offers. The tips are built from the settings above, so they
+    -- only mention what is switched on.
+    featureTips = {
+        onJoin = true,                 -- "This server has: ..." to each player when they spawn
+        announceEveryMinutes = 20,     -- a rotating tip to everyone (0 = never)
+        extraTips = {},                -- your own tips, added to the rotation
     },
 }

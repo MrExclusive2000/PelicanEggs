@@ -142,6 +142,7 @@ write(dir .. "/players.tsv", "76561198000000005\tVeteran\t10\t2\t7200\t350\t\t1\
 -- ------------------------------------------------------------------ start with a test config
 write(dir .. "/config.lua", [[return {
     playtimeRewards = { enabled = false }, bounties = { enabled = false }, teleports = { enabled = false },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 },
     chatCommands = { rules = { "Be nice." }, discord = "discord.gg/test" },
     afk = { enabled = true, minutes = 3, warnMinutesBefore = 1 },
     voting = { minVotes = 1, percentNeeded = 50, durationSeconds = 30, cooldownMinutes = 5,
@@ -332,6 +333,7 @@ write(dir .. "/config.lua", [[return {
         locations = { { name = "trader", x = 100, y = 200, z = 300, price = 50 }, { name = "bad" } } },
     info = { lines = { "Have fun" } },
     reports = { cooldownSeconds = 60 },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 },
 }]])
 dofile(dir .. "/Scripts/main.lua")
 check("new features in startup summary", has(read(dir .. "/playertools.log"), "playtime rewards, kill streaks, bounties, teleports."))
@@ -406,10 +408,10 @@ step()
 check("teleport list skips incomplete places", lastPrivate("Dave") == "Teleports (!tp <name>):\ntrader - 50")
 chat("76561198000000010", "Dave", "!tp trader")
 step()
-check("teleport waits", lastPrivate("Dave") == "Teleporting to trader in 5 s. Do not move." and ran("#Teleport 100 200 300 76561198000000010") == nil)
+check("teleport waits", lastPrivate("Dave") == "Teleporting to trader in 5 s. Do not move." and ran("#Teleport 76561198000000010 100 200 300") == nil)
 step(5)
 check("teleport charged", ran("#ChangeCurrencyBalance Normal -50 76561198000000010") ~= nil)
-check("teleported", ran("#Teleport 100 200 300 76561198000000010") ~= nil and lastPrivate("Dave") == "Teleported to trader (50 paid).")
+check("teleported", ran("#Teleport 76561198000000010 100 200 300") ~= nil and lastPrivate("Dave") == "Teleported to trader (50 paid).")
 chat("76561198000000010", "Dave", "!tp trader")
 step()
 check("teleport cooldown", has(lastPrivate("Dave"), "You can teleport again in"))
@@ -456,6 +458,118 @@ check("daily date saved", fields[10] == "1970-01-01")
 check("best streak saved", fields[11] == "3")
 check("bounty on Dave cleared", fields[12] == "0")
 check("no errors", not has(read(dir .. "/playertools.log"), "failed"))
+
+
+-- ================================================================== feature tips
+private, hud = {}, {}
+write(dir .. "/config.lua", [[return {
+    voting = { options = { { name = "day", label = "make it day", command = "SetTime 10" } } },
+    teleports = { locations = { { name = "trader", x = 1, y = 2, z = 3, price = 10 } } },
+    chatCommands = { discord = "discord.gg/x" },
+    featureTips = { onJoin = true, announceEveryMinutes = 1, extraTips = { "Be nice." } },
+}]])
+dofile(dir .. "/Scripts/main.lua")
+local fay = Player("Fay")
+login("76561198000000030", "Fay")
+players = { fay }
+step(12)
+check("feature summary on join", has(table.concat((function() local t = {} for _, m in ipairs(private) do t[#t + 1] = m.text end return t end)(), "|"),
+    "This server has: kill feed, stats (!stats, !top), kill streaks, bounties, playtime rewards, votes (!vote), teleports (!tp), reports (!report). Type !help for all commands."))
+local told = #private
+step(20)
+check("summary sent once", #private == told)
+hud = {}
+step(60)
+check("rotating tip", hud[1] == "Tip: Type !help in chat to see all server commands.")
+step(60)
+check("tips rotate", hud[2] and has(hud[2], "!stats"))
+local all = {}
+for _ = 1, 12 do step(60) end
+for _, message in ipairs(hud) do all[#all + 1] = message end
+local text = table.concat(all, "|")
+check("tips cover the features", has(text, "Get a 5 kill streak and the server puts a 500 bounty") and has(text, "!vote day")
+    and has(text, "!tp trader") and has(text, "discord.gg/x") and has(text, "Tip: Be nice."))
+check("no tip for switched-off features", not has(text, "AFK"))
+players = {}
+local quiet = #hud
+step(120)
+check("no tips to an empty server", #hud == quiet)
+
+
+-- ================================================================== experimental: items, direct teleports, balance checks
+private, hud, adminCommands = {}, {}, {}
+local waterClass = object()
+function FindObject(className, name)
+    if className == "BlueprintGeneratedClass" and name == "BP_Water_05l_C" then return waterClass end
+    return nil
+end
+local spawned = {}
+local statics = object()
+function statics:BeginDeferredActorSpawnFromClass(w, class, transform)
+    local actor = object({ class = class, at = transform.Translation })
+    spawned[#spawned + 1] = actor
+    return actor
+end
+function statics:FinishSpawningActor() end
+function StaticFindObject(path)
+    if path == "/Script/Engine.Default__GameplayStatics" then return statics end
+    return nil
+end
+local oldFindFirst = FindFirstOf
+local world = object()
+function FindFirstOf(className)
+    if className == "World" then return world end
+    return oldFindFirst(className)
+end
+write(dir .. "/config.lua", [[return {
+    newPlayers = { starterKit = true, starterKitItems = { { item = "Water_05l", amount = 2 }, { item = "Nope", amount = 1 } },
+        starterKitCommands = {}, starterKitMessage = "Kit!" },
+    playtimeRewards = { enabled = false },
+    teleports = { method = "direct", checkBalance = true, standStillSeconds = 1, cooldownMinutes = 0,
+        locations = { { name = "b4", x = 10, y = 20, z = 30, price = 300 } } },
+    bounties = { checkBalance = true, playerBounties = true, minAmount = 100, maxAmount = 1000 },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 },
+}]])
+dofile(dir .. "/Scripts/main.lua")
+local gus = Player("Gus")
+local inventory = {}
+function gus.pawn:PlaceItemInInventoryOrHolster(item) inventory[#inventory + 1] = item end
+local teleported = nil
+function gus.pawn:K2_TeleportTo(location) teleported = location return true end
+local money = "250"
+function gus:GetCurrencyBalanceText() return { ToString = function() return money end } end
+login("76561198000000040", "Gus")
+players = { gus }
+step(12)
+check("kit items without an admin", #spawned == 2 and #inventory == 2 and spawned[1].class == waterClass and #adminCommands == 0)
+check("kit message", lastPrivate("Gus") == "Kit!")
+check("unknown kit item reported", has(read(dir .. "/playertools.log"), "Item Nope is not loaded; skipped."))
+step(20)
+check("kit items given once", #spawned == 2)
+
+chat("76561198000000040", "Gus", "!tp b4")
+step(3)
+check("teleport refused when broke", lastPrivate("Gus") == "Teleport cancelled: you need 300 and have 250." and teleported == nil)
+money = "1,250"
+login("76561198000000041", "Hal")
+local admin = Player("Hal", true)
+players = { gus, admin }
+chat("76561198000000040", "Gus", "!tp b4")
+step(3)
+check("direct teleport", teleported and teleported.X == 10 and teleported.Z == 30)
+check("teleport charged through the admin", ran("#ChangeCurrencyBalance Normal -300 76561198000000040") ~= nil)
+check("no Teleport admin command with the direct method", ran("#Teleport 76561198000000040 10 20 30") == nil)
+
+money = "50"
+chat("76561198000000040", "Gus", "!bounty Hal 200")
+step()
+check("bounty refused when broke", lastPrivate("Gus") == "You cannot place that bounty: you need 200 and have 50.")
+money = "?"
+chat("76561198000000040", "Gus", "!bounty Hal 200")
+step()
+check("unreadable balance refuses", lastPrivate("Gus") == "You cannot place that bounty: your balance could not be read.")
+FindFirstOf = oldFindFirst
+players = {}
 
 os.execute("rm -rf '" .. tmp .. "'")
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))

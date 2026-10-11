@@ -216,16 +216,22 @@ check("bounds strike repeats after 5 s", has(acLog(), "Outside: outside the map 
 local jumper = Player("Jumper", Pawn("BP_Prisoner_C", 0, 0, 0))
 local summoned = Player("Summoned", Pawn("BP_Prisoner_C", 0, 0, 0))
 local admin = Player("RealAdmin", Pawn("BP_Prisoner_C", 0, 0, 0))
+local paid = Player("Paid Traveller", Pawn("BP_Prisoner_C", 0, 0, 0))
 admin.admin = true
 login("76561198000000001", "RealAdmin")
-players = { jumper, summoned, admin }
+players = { jumper, summoned, admin, paid }
 tick()
 jumper.pawn.x = 2000
 summoned.teleporting = true
 summoned.pawn.x = 5000
 admin.pawn.x = 5000
+-- A teleport made by PlayerTools or PelicanConsole is announced in allowed_teleports.txt.
+write(dir .. "/allowed_teleports.txt", clock .. " Paid Traveller\n", "a")
+paid.pawn.x = 5000
 step()
 text = acLog()
+check("teleport by our own mods ignored", not has(text, "Paid Traveller"))
+check("allowed teleports file consumed", read(dir .. "/allowed_teleports.txt") == "")
 check("teleport flagged", has(text, "Jumper: teleported 2000 m in 1.0 s"))
 check("game teleport ignored", not has(text, "Summoned"))
 check("admin in AdminUsers.ini (UTF-16, with permissions) ignored", not has(text, "RealAdmin"))

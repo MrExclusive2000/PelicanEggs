@@ -4,7 +4,7 @@ Adds five pages to SCUM servers in the Pelican client area:
 
 | Page | What it does |
 |------|--------------|
-| **SCUM Admin Console** | Pick a command (announce, kick, set time, give money, teleport, ban...) and run it through the PelicanConsole mod; shows the results and player reports |
+| **SCUM Admin Console** | Pick a command (announce, kick, set time, give money or items, teleport, ban...) and run it through the PelicanConsole mod; adds the outposts (or any spot) as `!tp` destinations; shows the results and player reports |
 | **SCUM Settings** | Form editor for `ServerSettings.ini`, with a tab per section and search |
 | **SCUM Player Lists** | Admins, settings admins, whitelist, exclusive, banned and silenced players |
 | **SCUM Mods** | Installs or updates UE4SS and our mods, uploads mods, and turns them on/off or deletes them |

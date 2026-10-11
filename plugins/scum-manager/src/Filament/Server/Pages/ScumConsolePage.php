@@ -22,6 +22,7 @@ use Illuminate\Support\HtmlString;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\AdminCommands;
+use MrExclusive\ScumManager\Support\TeleportDestinations;
 
 class ScumConsolePage extends Page
 {
@@ -119,7 +120,7 @@ class ScumConsolePage extends Page
         foreach (AdminCommands::COMMANDS as $key => $command) {
             $visible = fn (Get $get) => $get('command') === $key;
 
-            $components[] = Text::make(($command['anytime'] === false ? 'Needs an admin in game. ' : '') . $command['help'])
+            $components[] = Text::make(($command['anytime'] === false ? 'Needs an admin in game. ' : '') . (($command['experimental'] ?? false) ? 'Experimental. ' : '') . $command['help'])
                 ->color($command['anytime'] === false ? 'warning' : 'gray')
                 ->visible($visible);
 
@@ -179,6 +180,79 @@ class ScumConsolePage extends Page
 
                     // Give the mod a moment to write its result.
                     usleep(1_000_000);
+                    $this->refreshOutput();
+                }),
+            Action::make('outposts')
+                ->label('Add outposts as teleports')
+                ->icon('tabler-map-pin')
+                ->color('gray')
+                ->visible(fn () => $this->modInstalled)
+                ->authorize(fn () => user()?->can(SubuserPermission::ControlConsole, $this->getServer())
+                    && user()?->can(SubuserPermission::FileUpdate, $this->getServer()))
+                ->modalHeading('Add the outposts as teleport destinations')
+                ->modalDescription('Finds the trader outposts on your map (from where the bankers stand) and adds them to PlayerTools, so players can type !tp a0, !tp b4 and so on. Existing destinations with the same names are replaced. The server must be running. Teleport there once yourself to check the spot.')
+                ->modalSubmitActionLabel('Find and add')
+                ->schema([
+                    TextInput::make('price')->label('Price per teleport')->integer()->minValue(0)->default(500)->required(),
+                ])
+                ->action(function (array $data, ScumServerService $service) {
+                    try {
+                        $output = $service->runConsoleCommandAndRead($this->getServer(), 'FindOutposts', '/Outpost \S+ at |No outposts found/');
+                        $outposts = TeleportDestinations::parseOutposts($output);
+                        if ($outposts === []) {
+                            throw new \RuntimeException(trim($output) !== '' ? trim(preg_replace('/^.*\] /m', '', $output)) : 'The mod did not answer in time.');
+                        }
+                        $service->addTeleportDestinations($this->getServer(), $outposts, (int) $data['price']);
+
+                        Notification::make()
+                            ->title('Added ' . count($outposts) . ' teleport destination(s): ' . implode(', ', array_column($outposts, 'name')))
+                            ->body('Players can now type !tp ' . $outposts[0]['name'] . '. Change names and prices on SCUM Mod Settings > Player tools > Teleports.')
+                            ->success()
+                            ->persistent()
+                            ->send();
+                    } catch (Exception $exception) {
+                        Notification::make()->title('Could not add the outposts')->body($exception->getMessage())->danger()->persistent()->send();
+                    }
+                    $this->refreshOutput();
+                }),
+            Action::make('destination_here')
+                ->label('Add a teleport where a player stands')
+                ->icon('tabler-map-pin-plus')
+                ->color('gray')
+                ->visible(fn () => $this->modInstalled)
+                ->authorize(fn () => user()?->can(SubuserPermission::ControlConsole, $this->getServer())
+                    && user()?->can(SubuserPermission::FileUpdate, $this->getServer()))
+                ->modalHeading('Add a teleport destination')
+                ->modalDescription('Stand where you want the destination in game, then pick yourself here. The spot is added to PlayerTools as !tp <name>.')
+                ->schema(function () {
+                    $players = app(ScumServerService::class)->knownPlayers($this->getServer());
+                    $names = [];
+                    foreach ($players as $label) {
+                        $name = preg_replace('/ \(\d+\)$/', '', $label);
+                        $names[$name] = $name;
+                    }
+
+                    return [
+                        $names === []
+                            ? TextInput::make('player')->label('Player (exact in-game name)')->required()
+                            : Select::make('player')->label('Player')->options($names)->searchable()->required(),
+                        TextInput::make('name')->label('Destination name (what players type after !tp)')->required()->maxLength(24),
+                        TextInput::make('price')->label('Price')->integer()->minValue(0)->default(500)->required(),
+                    ];
+                })
+                ->action(function (array $data, ScumServerService $service) {
+                    try {
+                        $name = TeleportDestinations::name((string) $data['name']);
+                        $player = trim((string) $data['player']);
+                        $output = $service->runConsoleCommandAndRead($this->getServer(), 'WhereIs ' . $player, '/ is at |No online player|has no character/');
+                        $at = TeleportDestinations::parseWhereIs($output, $player)
+                            ?? throw new \RuntimeException(trim($output) !== '' ? trim(preg_replace('/^.*\] /m', '', $output)) : 'The mod did not answer in time.');
+                        $service->addTeleportDestinations($this->getServer(), [['name' => $name] + $at], (int) $data['price']);
+
+                        Notification::make()->title("Added !tp $name")->body("At {$at['x']} {$at['y']} {$at['z']}.")->success()->send();
+                    } catch (Exception $exception) {
+                        Notification::make()->title('Could not add the destination')->body($exception->getMessage())->danger()->persistent()->send();
+                    }
                     $this->refreshOutput();
                 }),
             Action::make('refresh')

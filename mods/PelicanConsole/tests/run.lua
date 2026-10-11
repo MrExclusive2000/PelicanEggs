@@ -206,6 +206,113 @@ loopCallback()
 check("no call without a processor", #calls == 4)
 processorValid = true
 
+
+-- ------------------------------------------------------------------ experimental commands
+local spawned, teleports = {}, {}
+local function ExpPlayer(name)
+    local controller = Player(name, false)
+    local pawn = object({ x = 100, y = 200, z = 300, items = {} })
+    function pawn:K2_GetActorLocation() return { X = self.x, Y = self.y, Z = self.z } end
+    function pawn:K2_TeleportTo(location, rotation) teleports[#teleports + 1] = { who = name, at = location } return true end
+    function pawn:PlaceItemInInventoryOrHolster(item) if item.fits then self.items[item] = true end end
+    function pawn:HasItem(item) return self.items[item] == true end
+    controller.pawn = pawn
+    function controller:K2_GetPawn() return self.pawn end
+    function controller:GetCurrencyBalanceText(kind) return { ToString = function() return kind == 0 and "1,250" or "3" end } end
+    function controller:GetFamePointsRounded() return 42 end
+    return controller
+end
+local waterClass = object({ name = "BP_Water_05l_C" })
+function waterClass:GetFName() return { ToString = function() return "BP_Water_05l_C" end } end
+local otherClass = object()
+function otherClass:GetFName() return { ToString = function() return "BP_Weapon_AK47_C" end } end
+function FindObject(className, name)
+    assert(className == "BlueprintGeneratedClass")
+    if name == "BP_Water_05l_C" then return waterClass end
+    return nil
+end
+function FindObjects(count, className) return { waterClass, otherClass } end
+local statics = object()
+local fits = true
+function statics:BeginDeferredActorSpawnFromClass(w, class, transform, collision)
+    assert(class == waterClass and collision == 1)
+    local actor = object({ fits = fits })
+    spawned[#spawned + 1] = { actor = actor, at = transform.Translation }
+    return actor
+end
+function statics:FinishSpawningActor(actor) actor.finished = true end
+local oldStatic = StaticFindObject
+function StaticFindObject(path)
+    if path == "/Script/Engine.Default__GameplayStatics" then return statics end
+    return oldStatic(path)
+end
+local function lastLine() local lines = {} for line in consoleLog():gmatch("[^\n]+") do lines[#lines + 1] = line end return lines[#lines] or "" end
+
+local mr = ExpPlayer("Mr Exclusive")
+online = { mr, ExpPlayer("Bob") }
+writeCommands("WhereIs mr exclusive\n")
+loopCallback()
+check("whereis", string.find(consoleLog(), "Mr Exclusive is at 100 200 300", 1, true) ~= nil)
+writeCommands("Balance Bob\n")
+loopCallback()
+check("balance", string.find(consoleLog(), "Bob: money 1,250, gold 3, fame 42", 1, true) ~= nil)
+writeCommands("TeleportPlayer Mr Exclusive 1 -2 3.5\n")
+loopCallback()
+check("teleport", teleports[1] and teleports[1].who == "Mr Exclusive" and teleports[1].at.Y == -2 and teleports[1].at.Z == 3.5)
+writeCommands("TeleportPlayer Bob\n")
+loopCallback()
+check("teleport usage", string.find(lastLine(), "Usage: TeleportPlayer", 1, true) ~= nil and #teleports == 1)
+writeCommands("FindItem water\n")
+loopCallback()
+check("find item", string.find(consoleLog(), "1 loaded class(es) match \"water\":", 1, true) ~= nil and string.find(consoleLog(), "  BP_Water_05l_C", 1, true) ~= nil)
+writeCommands("GiveItem Mr Exclusive Water_05l 2\n")
+loopCallback()
+check("give item spawned at the player", #spawned == 2 and spawned[1].at.Z == 350 and spawned[1].actor.finished)
+check("give item into the inventory", string.find(consoleLog(), "Gave Mr Exclusive 2 x BP_Water_05l_C (experimental): 2 in their inventory, 0 at their feet.", 1, true) ~= nil)
+fits = false
+writeCommands("GiveItem Bob Water_05l\n")
+loopCallback()
+check("give item falls back to the ground", string.find(consoleLog(), "Gave Bob 1 x BP_Water_05l_C (experimental): 0 in their inventory, 1 at their feet.", 1, true) ~= nil)
+writeCommands("GiveItem Bob Nothing\n")
+loopCallback()
+check("unknown item", string.find(lastLine(), "Item Nothing is not loaded. Try FindItem Nothing", 1, true) ~= nil)
+writeCommands("Balance Nobody\n")
+loopCallback()
+check("unknown player", string.find(lastLine(), "No online player matches \"Nobody\"", 1, true) ~= nil)
+online = {}
+
+
+-- Outposts from the bankers' positions.
+local function Banker(x, y)
+    local banker = object({ x = x, y = y })
+    function banker:K2_GetActorLocation() return { X = self.x, Y = self.y, Z = 1000 } end
+    function banker:GetActorForwardVector() return { X = 1, Y = 0, Z = 0 } end
+    return banker
+end
+-- Rows along -Y (A at the top), columns along +X: A0 (0, 900), B4 (4, 600), C2 (2, 300), Z3 (3, -300), in km-ish units.
+local bankers = { Banker(0, 900000), Banker(400000, 600000), Banker(200000, 300000), Banker(300000, -300000), Banker(300100, -300100) }
+local oldFindAll = FindAllOf
+function FindAllOf(className)
+    if className == "Banker" then return bankers end
+    return oldFindAll(className)
+end
+writeCommands("FindOutposts\n")
+loopCallback()
+check("outposts found and de-duplicated", string.find(consoleLog(), "4 outpost(s) found, named by sector:", 1, true) ~= nil)
+check("outposts named by sector, in front of the banker", string.find(consoleLog(), "Outpost a0 at 250 900000 1020", 1, true) ~= nil
+    and string.find(consoleLog(), "Outpost b4 at 400250 600000 1020", 1, true) ~= nil
+    and string.find(consoleLog(), "Outpost c2 at 200250 300000 1020", 1, true) ~= nil
+    and string.find(consoleLog(), "Outpost z3 at 300250 -300000 1020", 1, true) ~= nil)
+bankers = { Banker(0, 0), Banker(500000, 0) }
+writeCommands("FindOutposts\n")
+loopCallback()
+check("unmatched layouts get plain names", string.find(consoleLog(), "Outpost outpost2 at 500250 0 1020", 1, true) ~= nil)
+bankers = {}
+writeCommands("FindOutposts\n")
+loopCallback()
+check("no bankers", string.find(consoleLog(), "No outposts found", 1, true) ~= nil)
+FindAllOf = oldFindAll
+
 -- Started from an unexpected path: disabled with a message instead of erroring.
 log, loopCallback = {}, nil
 local strayPath = tmp .. "/stray.lua"

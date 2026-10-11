@@ -104,6 +104,10 @@ local CONFIG_DIR = SCUM_DIR .. "/Saved/Config/WindowsServer"
 local SERVER_LOG = SCUM_DIR .. "/Saved/Logs/SCUM.log"
 local GAME_LOG_DIR = SCUM_DIR .. "/Saved/SaveFiles/Logs"
 local OFFENSES_FILE = DIR .. "/offenses.txt"
+-- Our other mods (PlayerTools !tp, PelicanConsole TeleportPlayer) write "<os.time> <name>" here
+-- when they teleport a player, so the teleport check does not flag it.
+local ALLOWED_TELEPORTS_FILE = DIR .. "/allowed_teleports.txt"
+local ALLOWED_TELEPORT_SECONDS = 15
 local LOG_FILES = { DIR .. "/anticheat.log", DIR .. "/../PelicanConsole/console.log" }
 
 -- ------------------------------------------------------------------ output and config
@@ -372,7 +376,20 @@ local function gameLogEnabled(prefix)
     return config.checks.gameLogs
 end
 
+local allowedTeleports = {}   -- name -> os.time of a teleport made by our own mods
+
+local function readAllowedTeleports()
+    local text = readFile(ALLOWED_TELEPORTS_FILE)
+    if text == nil or text == "" then return end
+    for time, name in string.gmatch(text, "(%d+) ([^\r\n]+)") do
+        allowedTeleports[name] = tonumber(time)
+    end
+    local file = io.open(ALLOWED_TELEPORTS_FILE, "w")
+    if file then file:close() end
+end
+
 local function refreshFiles(now)
+    readAllowedTeleports()
     for _, line in ipairs(readTail(serverLog)) do
         handleServerLogLine(line)
     end
@@ -751,6 +768,8 @@ local function exempt(player, controller, pawn)
     if config.ignored[string.lower(player.name)] then return true end
     if player.steamId and config.ignoredIds[player.steamId] then return true end
     if config.ignoreAdmins and player.verifiedAdmin then return true end
+    local allowed = allowedTeleports[player.name]
+    if allowed and os.time() - allowed <= ALLOWED_TELEPORT_SECONDS then return true end
     return isTrue(controller, "IsTeleportInProgress") or isTrue(pawn, "IsTeleportInProgress")
 end
 

@@ -21,6 +21,7 @@ use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
 use MrExclusive\ScumManager\Support\SettingLabel;
 use MrExclusive\ScumManager\Support\SettingType;
+use MrExclusive\ScumManager\Support\TeleportDestinations;
 
 $failures = 0;
 $count = 0;
@@ -315,7 +316,10 @@ check('settings: missing config gets every field', $updated['restartTimes'], ['0
 
 // ---------------------------------------------------------------- AdminCommands
 $options = AdminCommands::options();
-check('commands: grouped', array_keys($options), ['Works any time', 'Needs an admin in game', 'Other']);
+check('commands: grouped', array_keys($options), ['Works any time', 'Works any time (experimental)', 'Needs an admin in game', 'Other']);
+check('commands: experimental group', array_keys($options['Works any time (experimental)']), ['whereis', 'balance', 'teleportplayer', 'findoutposts', 'finditem', 'giveitem']);
+check('commands: give item', AdminCommands::build('giveitem', ['giveitem__name' => 'Mr Exclusive', 'giveitem__item' => 'Water_05l', 'giveitem__amount' => '2']), 'GiveItem Mr Exclusive Water_05l 2');
+check('commands: teleport player', AdminCommands::build('teleportplayer', ['teleportplayer__name' => 'Bob', 'teleportplayer__x' => '-100', 'teleportplayer__y' => '5', 'teleportplayer__z' => '300']), 'TeleportPlayer Bob -100 5 300');
 check('commands: any-time ones are the ones the mod handles itself', array_keys($options['Works any time']), ['announce', 'listplayers', 'kick']);
 check('commands: announce', AdminCommands::build('announce', ['announce__message' => '  Restart in 5 min ']), 'Announce Restart in 5 min');
 check('commands: no fields', AdminCommands::build('listplayers', []), 'ListPlayers');
@@ -343,9 +347,28 @@ check('settings: teleport numbers saved as numbers', ModSettings::apply('PlayerT
 // The page's defaults for a missing setting must match what the mod does without it.
 $shipped = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/PlayerTools/config.lua'));
 $fromDefaults = ModSettings::apply('PlayerTools', [], ModSettings::toState('PlayerTools', []));
-foreach (['welcomeBack', 'playtimeRewards', 'killStreaks', 'bounties', 'info', 'reports'] as $section) {
-    check("settings: page defaults match shipped PlayerTools $section", $fromDefaults[$section], $shipped[$section]);
+foreach (['welcomeBack', 'playtimeRewards', 'killStreaks', 'bounties', 'teleports', 'info', 'reports', 'featureTips'] as $section) {
+    // Same keys and values; the order of keys does not matter to Lua.
+    check("settings: page defaults match shipped PlayerTools $section", $fromDefaults[$section] == $shipped[$section], true);
 }
+
+$state = ModSettings::toState('PlayerTools', []);
+$state['PlayerTools__newPlayers__starterKitItems'] = [['item' => ' Water_05l ', 'amount' => '2'], ['item' => '', 'amount' => '']];
+check('settings: starter kit items', ModSettings::apply('PlayerTools', [], $state)['newPlayers']['starterKitItems'], [['item' => 'Water_05l', 'amount' => 2]]);
+
+// ---------------------------------------------------------------- TeleportDestinations
+$output = "14:00:00 [PelicanConsole] 4 outpost(s) found, named by sector:\n14:00:00 [PelicanConsole] Outpost a0 at 250 900000 1020\n14:00:00 [PelicanConsole] Outpost b4 at -400250 600000 1020\n";
+check('teleports: outposts parsed', TeleportDestinations::parseOutposts($output), [['name' => 'a0', 'x' => 250, 'y' => 900000, 'z' => 1020], ['name' => 'b4', 'x' => -400250, 'y' => 600000, 'z' => 1020]]);
+check('teleports: where is', TeleportDestinations::parseWhereIs("x [PelicanConsole] Mr Exclusive is at -1 2 3\n", 'mr exclusive'), ['x' => -1, 'y' => 2, 'z' => 3]);
+check('teleports: where is, unknown', TeleportDestinations::parseWhereIs('No online player matches', 'Bob'), null);
+$config = ['teleports' => ['enabled' => true, 'locations' => [['name' => 'b4', 'x' => 0, 'y' => 0, 'z' => 0, 'price' => 1], ['name' => 'home', 'x' => 5, 'y' => 5, 'z' => 5, 'price' => 0]]]];
+$updated = TeleportDestinations::add($config, TeleportDestinations::parseOutposts($output), 500);
+check('teleports: same name replaced, others kept and added', array_column($updated['teleports']['locations'], 'name'), ['b4', 'home', 'a0']);
+check('teleports: price and position', $updated['teleports']['locations'][0], ['name' => 'b4', 'x' => -400250, 'y' => 600000, 'z' => 1020, 'price' => 500]);
+check('teleports: other settings kept', $updated['teleports']['enabled'], true);
+check('teleports: works on an empty config', TeleportDestinations::add([], [['name' => 'Trader', 'x' => 1, 'y' => 2, 'z' => 3]], 0)['teleports']['locations'], [['name' => 'trader', 'x' => 1, 'y' => 2, 'z' => 3, 'price' => 0]]);
+throws('teleports: one-word names', fn () => TeleportDestinations::name('my base'), 'one word');
+check('teleports: written config loads back', LuaTable::parse(LuaTable::render($updated))['teleports']['locations'][2]['name'], 'a0');
 
 // ---------------------------------------------------------------- bundled mods
 $bundled = MrExclusive\ScumManager\Services\ScumServerService::bundledMods();

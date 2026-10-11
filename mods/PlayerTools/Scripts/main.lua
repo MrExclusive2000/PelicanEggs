@@ -15,6 +15,7 @@
       - Teleports:     !tp <place> for a price, after standing still for a few seconds
       - Info:          !info with uptime, players online and the next restart
       - Reports:       !report <name> <reason>, logged to reports.log and sent to online admins
+      - Feature tips:  what the server offers, to each player on joining and as rotating tips
 
     Chat and kills come from SCUM's own logs (SCUM/Saved/SaveFiles/Logs/chat_*.log and
     kill_*.log). Messages to one player use Prisoner.SendMessageToClient, announcements use
@@ -45,7 +46,7 @@ local DEFAULTS = {
     stats = { enabled = true, topCount = 3, announceTopEveryMinutes = 0 },
     afk = { enabled = false, minutes = 20, warnMinutesBefore = 2, onlyWhenPlayersAtLeast = 0, ignoreAdmins = true, kickReason = "Kicked for being AFK." },
     voting = { enabled = true, durationSeconds = 60, cooldownMinutes = 15, percentNeeded = 50, minVotes = 2, options = {} },
-    newPlayers = { messages = {}, starterKit = false, starterKitCommands = {}, starterKitMessage = "" },
+    newPlayers = { messages = {}, starterKit = false, starterKitItems = {}, starterKitCommands = {}, starterKitMessage = "" },
     welcomeBack = { enabled = true, message = "Welcome back {name}! {hours} played, {kills} kills, {deaths} deaths." },
     playtimeRewards = {
         enabled = true, everyMinutes = 60,
@@ -53,6 +54,7 @@ local DEFAULTS = {
         message = "+100 cash for an hour on the server. Thanks for playing!",
         dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" },
         dailyMessage = "Daily login bonus: +200 cash.",
+        items = {}, dailyItems = {},
     },
     killStreaks = {
         enabled = true, announceAt = { 3, 5, 10, 15, 20 }, message = "{name} is on a {count} kill streak!",
@@ -64,15 +66,17 @@ local DEFAULTS = {
         playerBounties = false, minAmount = 100, maxAmount = 5000,
         payCommand = "ChangeCurrencyBalance Normal {amount} {steamId}",
         chargeCommand = "ChangeCurrencyBalance Normal -{amount} {steamId}",
+        checkBalance = false,
     },
     teleports = {
-        enabled = true, cooldownMinutes = 30, standStillSeconds = 10,
-        command = "Teleport {x} {y} {z} {steamId}",
+        enabled = true, cooldownMinutes = 30, standStillSeconds = 10, method = "admin", checkBalance = false,
+        command = "Teleport {steamId} {x} {y} {z}",
         chargeCommand = "ChangeCurrencyBalance Normal -{price} {steamId}",
         locations = {},
     },
     info = { enabled = true, lines = {} },
     reports = { enabled = true, cooldownSeconds = 60 },
+    featureTips = { onJoin = true, announceEveryMinutes = 20, extraTips = {} },
 }
 
 local function safe(fn, ...)
@@ -719,6 +723,110 @@ local function finishVote(time)
     end
 end
 
+-- ------------------------------------------------------------------ experimental direct routes
+-- Found by the probe and not yet confirmed on a live server: giving items straight into a
+-- player's inventory, reading their balance, and teleporting without an admin. They are only
+-- used where the settings switch them on (item lists, method = "direct", checkBalance).
+
+-- Money the player has, read from the game (nil when it cannot be read).
+local function balanceOf(session)
+    local text = safe(function() return session.controller:GetCurrencyBalanceText(0):ToString() end)
+    local digits = text and string.gsub(text, "[^%d]", "")
+    return digits and digits ~= "" and tonumber(digits) or nil
+end
+
+local function canAfford(session, price, check)
+    if not check or price <= 0 then return true end
+    local money = balanceOf(session)
+    if money == nil then return false, "your balance could not be read" end
+    if money < price then return false, string.format("you need %d and have %d", price, money) end
+    return true
+end
+
+local function findItemClass(name)
+    for _, candidate in ipairs({ name, name .. "_C", "BP_" .. name .. "_C", "BP_" .. name }) do
+        local found = safe(function() return FindObject("BlueprintGeneratedClass", candidate) end)
+        if isValid(found) then return found, candidate end
+    end
+    return nil
+end
+
+-- Gives { { item = "Water_05l", amount = 2 }, ... } to the player. Items go into the inventory,
+-- or at the player's feet when there is no room. Returns the number given, or nil and why.
+local function giveItems(session, items)
+    if items == nil or #items == 0 then return 0 end
+    local pawn = characterOf(session.controller)
+    local at = pawn and location(pawn)
+    if at == nil then return nil, "the player has no character" end
+    local statics = safe(function() return StaticFindObject("/Script/Engine.Default__GameplayStatics") end)
+    local world = findFirst({ "World" })
+    if not isValid(statics) or world == nil then return nil, "the game world is not ready" end
+
+    local given = 0
+    for _, entry in ipairs(items) do
+        local name = type(entry) == "table" and (entry.item or entry[1]) or entry
+        local amount = math.max(1, math.min(tonumber(type(entry) == "table" and (entry.amount or entry[2]) or 1) or 1, 20))
+        local class = name and findItemClass(tostring(name))
+        if class == nil then
+            output("Item " .. tostring(name) .. " is not loaded; skipped. Check the name with FindItem on the Admin Console.")
+        else
+            for _ = 1, amount do
+                local transform = {
+                    Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
+                    Translation = { X = at.x, Y = at.y, Z = at.z + 50 },
+                    Scale3D = { X = 1, Y = 1, Z = 1 },
+                }
+                local ok, err = pcall(function()
+                    local actor = statics:BeginDeferredActorSpawnFromClass(world, class, transform, 1, nil)
+                    if not isValid(actor) then error("the game did not create it") end
+                    statics:FinishSpawningActor(actor, transform)
+                    pcall(function() pawn:PlaceItemInInventoryOrHolster(actor, true) end)
+                end)
+                if ok then given = given + 1 else output("Giving " .. tostring(name) .. " failed: " .. tostring(err)) end
+            end
+        end
+    end
+    return given
+end
+
+-- Commands (need an admin) first, then items (direct). Items are only given once the commands
+-- went through, so nothing is handed out twice while waiting for an admin.
+local function giveReward(session, commands, items, values)
+    for _, command in ipairs(commands or {}) do
+        local ok, detail = runAdminCommand(fill(command, values))
+        if not ok then return false, detail end
+    end
+    local given, why = giveItems(session, items)
+    if given == nil then return false, why end
+    return true
+end
+
+
+-- Tell ScumAntiCheat (if installed) that this teleport is ours, so it is not flagged.
+local function allowTeleport(name)
+    local folder = DIR .. "/../ScumAntiCheat"
+    local probe = io.open(folder .. "/config.lua", "r")
+    if probe == nil then return end
+    probe:close()
+    local file = io.open(folder .. "/allowed_teleports.txt", "a")
+    if file then
+        file:write(os.time() .. " " .. name .. "\n")
+        file:close()
+    end
+end
+
+local function teleportDirect(session, x, y, z)
+    local pawn = characterOf(session.controller)
+    if pawn == nil then return false, "no character" end
+    allowTeleport(session.name)
+    local ok, result = pcall(function()
+        return pawn:K2_TeleportTo({ X = x, Y = y, Z = z }, { Pitch = 0, Yaw = 0, Roll = 0 })
+    end)
+    if not ok then return false, tostring(result) end
+    if result == false then return false, "the game refused" end
+    return true
+end
+
 -- ------------------------------------------------------------------ info, reports, bounties, teleports
 
 local lastReport = {}   -- SteamID -> time
@@ -832,6 +940,8 @@ local function bountyCommand(session, rest)
     if targetId == nil or target == nil then return tell(session, "No player called " .. name .. ".") end
     if targetId == session.steamId then return tell(session, "You cannot put a bounty on yourself.") end
 
+    local affordable, why = canAfford(session, amount, bounties.checkBalance)
+    if not affordable then return tell(session, "You cannot place that bounty: " .. why .. ".") end
     local ok, detail = runAdminCommand(fill(bounties.chargeCommand, { amount = amount, steamId = session.steamId, name = session.name }))
     if not ok then return tell(session, "Bounties cannot be placed right now (" .. detail .. ").") end
     target.bounty = (target.bounty or 0) + amount
@@ -895,16 +1005,96 @@ local function teleportCheck(session, time)
     local place, values = pending.place, nil
     local price = tonumber(place.price) or 0
     values = { x = place.x, y = place.y, z = place.z, price = price, steamId = session.steamId, name = session.name }
+    local affordable, why = canAfford(session, price, config.teleports.checkBalance)
+    if not affordable then return tell(session, "Teleport cancelled: " .. why .. ".") end
     if price > 0 then
         local ok, detail = runAdminCommand(fill(config.teleports.chargeCommand, values))
         if not ok then return tell(session, "Teleports are not available right now (" .. detail .. ").") end
     end
-    local ok, detail = runAdminCommand(fill(config.teleports.command, values))
+    local ok, detail
+    if config.teleports.method == "direct" then
+        ok, detail = teleportDirect(session, tonumber(place.x), tonumber(place.y), tonumber(place.z))
+    else
+        ok, detail = runAdminCommand(fill(config.teleports.command, values))
+    end
     if not ok then return tell(session, "Teleports are not available right now (" .. detail .. ").") end
     local entry = record(session.steamId, session.name, true)
     entry.lastTeleport = time
     output(string.format("Teleported %s to %s%s.", session.name, place.name, price > 0 and (" for " .. price) or ""))
     tell(session, "Teleported to " .. place.name .. (price > 0 and (" (" .. price .. " paid)") or "") .. ".")
+end
+
+-- ------------------------------------------------------------------ feature tips
+
+-- Built from the current settings, so the tips always match what is switched on.
+local function featureTips()
+    local p = config.chatCommands.prefix
+    local tips, features = {}, {}
+    local commands = config.chatCommands.enabled
+
+    if commands then tips[#tips + 1] = "Type " .. p .. "help in chat to see all server commands." end
+    if config.killFeed.enabled then features[#features + 1] = "kill feed" end
+    if config.stats.enabled then
+        features[#features + 1] = commands and ("stats (" .. p .. "stats, " .. p .. "top)") or "stats"
+        if commands then tips[#tips + 1] = "Type " .. p .. "stats for your kills, deaths and playtime, " .. p .. "top for the leaderboard." end
+    end
+    if config.killStreaks.enabled then features[#features + 1] = "kill streaks" end
+    local bounties = config.bounties
+    if bounties.enabled and (tonumber(bounties.streakBountyAt) or 0) > 0 then
+        features[#features + 1] = "bounties"
+        tips[#tips + 1] = string.format("Get a %d kill streak and the server puts a %d bounty on your head. Whoever kills you collects it.",
+            tonumber(bounties.streakBountyAt), tonumber(bounties.streakBountyAmount) or 0)
+    end
+    local rewards = config.playtimeRewards
+    if rewards.enabled and (#(rewards.commands or {}) > 0 or #(rewards.items or {}) > 0) then
+        features[#features + 1] = "playtime rewards"
+        tips[#tips + 1] = string.format("You earn a reward for every %d minutes played%s.", tonumber(rewards.everyMinutes) or 60,
+            (#(rewards.dailyCommands or {}) > 0 or #(rewards.dailyItems or {}) > 0) and ", plus a daily login bonus" or "")
+    end
+    if config.voting.enabled and commands then
+        local names = {}
+        for _, option in ipairs(voteOptions()) do names[#names + 1] = option.name end
+        if #names > 0 then
+            features[#features + 1] = "votes (" .. p .. "vote)"
+            tips[#tips + 1] = "Vote to change the server: " .. p .. "vote " .. table.concat(names, " / ") .. "."
+        end
+    end
+    if config.teleports.enabled and commands then
+        local names = {}
+        for _, place in ipairs(teleportLocations()) do names[#names + 1] = place.name end
+        if #names > 0 then
+            features[#features + 1] = "teleports (" .. p .. "tp)"
+            tips[#tips + 1] = "Teleport for a fee: " .. p .. "tp " .. table.concat(names, " / ") .. ". Type " .. p .. "tp for prices."
+        end
+    end
+    if config.info.enabled and commands then tips[#tips + 1] = "Type " .. p .. "info for the next restart and who is online." end
+    if config.reports.enabled and commands then
+        features[#features + 1] = "reports (" .. p .. "report)"
+        tips[#tips + 1] = "See a cheater or a problem? Type " .. p .. "report <name> <what happened> and the admins are told."
+    end
+    if config.afk.enabled then tips[#tips + 1] = "Players who are AFK for " .. config.afk.minutes .. " minutes are kicked." end
+    if commands and (config.chatCommands.discord or "") ~= "" then tips[#tips + 1] = "Join our Discord: " .. config.chatCommands.discord end
+    for _, tip in ipairs(config.featureTips.extraTips or {}) do tips[#tips + 1] = tostring(tip) end
+
+    local summary = nil
+    if #features > 0 then
+        summary = "This server has: " .. table.concat(features, ", ") .. "." .. (commands and (" Type " .. p .. "help for all commands.") or "")
+    end
+    return summary, tips
+end
+
+local tipIndex, lastTip = 0, nil
+
+local function announceTip(time, online)
+    local every = (tonumber(config.featureTips.announceEveryMinutes) or 0) * 60
+    if every <= 0 or online == 0 then return end
+    lastTip = lastTip or time
+    if time - lastTip < every then return end
+    lastTip = time
+    local _, tips = featureTips()
+    if #tips == 0 then return end
+    tipIndex = tipIndex % #tips + 1
+    announce("Tip: " .. tips[tipIndex])
 end
 
 -- ------------------------------------------------------------------ chat commands
@@ -1003,18 +1193,24 @@ local function newPlayerCheck(session, time)
         end
     end
 
+    if not session.toldFeatures then
+        session.toldFeatures = true
+        local summary = featureTips()
+        if config.featureTips.onJoin and summary then tell(session, summary) end
+    end
+
     if config.newPlayers.starterKit and entry.kit == "pending" then
-        local commands = config.newPlayers.starterKitCommands or {}
-        if #commands == 0 then
-            session.newChecked = true
-            return
-        end
+        local kit = config.newPlayers
         local position = location(pawn)
         local values = {
             name = session.name, steamId = session.steamId,
             location = position and string.format("X=%.0f Y=%.0f Z=%.0f", position.x, position.y, position.z + 50) or "",
         }
-        local ok, detail = runAdminCommand(fill(commands[1], values))
+        if #(kit.starterKitCommands or {}) == 0 and #(kit.starterKitItems or {}) == 0 then
+            session.newChecked = true
+            return
+        end
+        local ok, detail = giveReward(session, kit.starterKitCommands, kit.starterKitItems, values)
         if not ok then
             -- Try again later (for example when an admin comes online).
             if not session.kitWaitReported then
@@ -1023,27 +1219,18 @@ local function newPlayerCheck(session, time)
             end
             return
         end
-        for index = 2, #commands do runAdminCommand(fill(commands[index], values)) end
         entry.kit = "given"
         recordsDirty = true
-        if (config.newPlayers.starterKitMessage or "") ~= "" then
-            tell(session, fill(config.newPlayers.starterKitMessage, values))
+        if (kit.starterKitMessage or "") ~= "" then
+            tell(session, fill(kit.starterKitMessage, values))
         end
-        output("Gave a starter kit to " .. session.name .. " (run as " .. detail .. ").")
+        output("Gave a starter kit to " .. session.name .. ".")
     end
     session.newChecked = true
 end
 
 local function today(time)
     return os.date("!%Y-%m-%d", time)
-end
-
-local function runAll(commands, values)
-    for _, command in ipairs(commands or {}) do
-        local ok, detail = runAdminCommand(fill(command, values))
-        if not ok then return false, detail end
-    end
-    return true
 end
 
 -- Playtime rewards, the daily bonus and bounty payouts. All need an admin online; until then
@@ -1056,14 +1243,16 @@ local function rewardCheck(session, time)
 
     local rewards = config.playtimeRewards
     if rewards.enabled then
-        if #(rewards.dailyCommands or {}) > 0 and entry.daily ~= today(time) and runAll(rewards.dailyCommands, values) then
+        local hasDaily = #(rewards.dailyCommands or {}) > 0 or #(rewards.dailyItems or {}) > 0
+        if hasDaily and entry.daily ~= today(time) and giveReward(session, rewards.dailyCommands, rewards.dailyItems, values) then
             entry.daily = today(time)
             recordsDirty = true
             if (rewards.dailyMessage or "") ~= "" then tell(session, fill(rewards.dailyMessage, values)) end
         end
         local every = (tonumber(rewards.everyMinutes) or 0) * 60
-        if every > 0 and #(rewards.commands or {}) > 0 and entry.playtime - (entry.rewarded or 0) >= every
-            and runAll(rewards.commands, values) then
+        local hasReward = #(rewards.commands or {}) > 0 or #(rewards.items or {}) > 0
+        if every > 0 and hasReward and entry.playtime - (entry.rewarded or 0) >= every
+            and giveReward(session, rewards.commands, rewards.items, values) then
             entry.rewarded = (entry.rewarded or 0) + every
             recordsDirty = true
             if (rewards.message or "") ~= "" then tell(session, fill(rewards.message, values)) end
@@ -1178,6 +1367,7 @@ local function tick()
     end
 
     finishVote(time)
+    announceTip(time, online)
 
     local every = (tonumber(config.stats.announceTopEveryMinutes) or 0) * 60
     if config.stats.enabled and every > 0 and online > 0 then

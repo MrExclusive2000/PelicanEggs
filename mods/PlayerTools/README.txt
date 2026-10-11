@@ -23,6 +23,16 @@ Quality-of-life features for SCUM players:
   Info           !info: server time, uptime, players online, next restart.
   Reports        !report <name> <what happened>: reports.log, the Admin Console page and
                  every online admin.
+  Feature tips   "This server has: ..." to each player on joining, and a rotating tip to
+                 everyone every 20 minutes. Built from the settings, so they only mention
+                 what is switched on.
+
+Experimental (found by the probe, not yet confirmed on a live server; off unless set):
+ - Item lists for the starter kit, hourly rewards and the daily bonus: items go straight
+   into the player's inventory (or at their feet when it is full), no admin needed.
+ - teleports.method = "direct": moves the player without an admin.
+ - checkBalance (bounties, teleports): reads the player's money first and refuses what they
+   cannot pay. Turn it on for bounties before allowing player bounties.
 
 Settings: config.lua in this folder, or the "SCUM Mod Settings" page of the SCUM Manager
 plugin. Changes are picked up within 30 seconds.
@@ -31,7 +41,7 @@ Good to know:
  - Chat commands and the kill feed read SCUM's own logs in SCUM/Saved/SaveFiles/Logs
    (chat_*.log and kill_*.log). Only chat written after the server started is read.
  - Votes, starter kits, rewards, bounty payouts and teleports run SCUM admin commands
-   (SetTime, ChangeCurrencyBalance, Teleport...) through an online admin's chat command
+   (SetTime, ChangeCurrencyBalance, Teleport <player> <x> <y> <z>...) through an online admin's chat command
    channel, exactly as if that admin typed them. So an admin from AdminUsers.ini must be
    online. Rewards, kits and payouts wait until one is; votes, bounties and teleports say
    they cannot be done right now.

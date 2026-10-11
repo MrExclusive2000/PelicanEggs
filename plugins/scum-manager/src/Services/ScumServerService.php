@@ -12,6 +12,8 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\ConsoleCommand;
+use MrExclusive\ScumManager\Support\LuaTable;
+use MrExclusive\ScumManager\Support\TeleportDestinations;
 use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
 use MrExclusive\ScumManager\Support\Ue4ssSettings;
@@ -626,6 +628,51 @@ class ScumServerService
         }
 
         return false;
+    }
+
+    /**
+     * Run a PelicanConsole command and return what it wrote to console.log, waiting up to
+     * $waitSeconds for a line matching $until.
+     */
+    public function runConsoleCommandAndRead(Server $server, string $command, string $until, int $waitSeconds = 8): string
+    {
+        $dir = $this->consoleModDir($server) ?? throw new RuntimeException('The PelicanConsole mod is not installed.');
+        $before = strlen($this->read($server, "$dir/console.log") ?? '');
+
+        if (!$this->sendConsoleCommand($server, $command)) {
+            throw new RuntimeException('SCUM did not pick up the command. Is the server running with PelicanConsole enabled?');
+        }
+
+        $new = '';
+        for ($i = 0; $i < $waitSeconds * 2; $i++) {
+            $log = $this->read($server, "$dir/console.log") ?? '';
+            $new = strlen($log) >= $before ? substr($log, $before) : $log;
+            if (preg_match($until, $new)) {
+                break;
+            }
+            usleep(500_000);
+        }
+
+        return $new;
+    }
+
+    /**
+     * Add teleport destinations to PlayerTools' config.lua.
+     *
+     * @param  list<array{name: string, x: int, y: int, z: int}>  $destinations
+     */
+    public function addTeleportDestinations(Server $server, array $destinations, int $price): void
+    {
+        if ($this->installedModsOf($server, ['PlayerTools']) === []) {
+            throw new RuntimeException('The PlayerTools mod is not installed.');
+        }
+
+        $raw = $this->modConfig($server, 'PlayerTools');
+        $config = $raw === null ? [] : LuaTable::parse($raw);
+        $this->writeModConfig($server, 'PlayerTools', LuaTable::render(
+            TeleportDestinations::add($config, $destinations, $price),
+            "PlayerTools settings, written by SCUM Manager (SCUM Mod Settings page).\nYou can edit this file by hand; comments are not kept when the page saves it.",
+        ));
     }
 
     /** @return array<string, string> SteamID => "Name (SteamID)" for players PlayerTools has seen */

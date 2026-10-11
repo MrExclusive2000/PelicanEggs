@@ -21,3 +21,11 @@ How commands run:
    must be online.
  - With no admin online the mod falls back to SCUM's internal
    MiscStatics.Test_ProcessAdminCommand, which SCUM ignores for most commands.
+
+Experimental commands (no admin needed; new, try them on yourself first):
+ - WhereIs <player>                      a player's coordinates
+ - Balance <player>                      money, gold and fame
+ - TeleportPlayer <player> <x> <y> <z>   move a player
+ - FindOutposts                          the trader outposts on this map (from the bankers)
+ - FindItem <text>                       loaded item class names containing the text
+ - GiveItem <player> <item> [amount]     put an item in a player's inventory

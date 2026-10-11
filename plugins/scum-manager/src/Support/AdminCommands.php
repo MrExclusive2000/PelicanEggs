@@ -31,6 +31,36 @@ final class AdminCommands
             'help' => 'Kicks an online player by name.',
             'fields' => ['name' => ['playerName', 'Player']],
         ],
+        'whereis' => [
+            'label' => 'Where is a player?', 'anytime' => true, 'experimental' => true, 'template' => 'WhereIs {name}',
+            'help' => 'Shows the player\'s coordinates, for teleports.',
+            'fields' => ['name' => ['playerName', 'Player']],
+        ],
+        'balance' => [
+            'label' => 'Check a player\'s money and fame', 'anytime' => true, 'experimental' => true, 'template' => 'Balance {name}',
+            'help' => 'Reads the player\'s money, gold and fame.',
+            'fields' => ['name' => ['playerName', 'Player']],
+        ],
+        'teleportplayer' => [
+            'label' => 'Teleport a player to coordinates', 'anytime' => true, 'experimental' => true, 'template' => 'TeleportPlayer {name} {x} {y} {z}',
+            'help' => 'Moves the player there directly. Get coordinates with "Where is a player?".',
+            'fields' => ['name' => ['playerName', 'Player'], 'x' => ['int', 'X', -10000000, 10000000], 'y' => ['int', 'Y', -10000000, 10000000], 'z' => ['int', 'Z', -1000000, 1000000]],
+        ],
+        'findoutposts' => [
+            'label' => 'List the outposts', 'anytime' => true, 'experimental' => true, 'template' => 'FindOutposts',
+            'help' => 'Finds the trader outposts on the map. Use "Add outposts as teleports" to make them !tp destinations.',
+            'fields' => [],
+        ],
+        'finditem' => [
+            'label' => 'Find an item name', 'anytime' => true, 'experimental' => true, 'template' => 'FindItem {text}',
+            'help' => 'Lists loaded item classes whose name contains the text, e.g. water or bandage.',
+            'fields' => ['text' => ['text', 'Part of the name']],
+        ],
+        'giveitem' => [
+            'label' => 'Give an item to a player', 'anytime' => true, 'experimental' => true, 'template' => 'GiveItem {name} {item} {amount}',
+            'help' => 'Puts the item in the player\'s inventory (or at their feet if it is full). Use a name from "Find an item name". New: try it on yourself first.',
+            'fields' => ['name' => ['playerName', 'Player'], 'item' => ['text', 'Item'], 'amount' => ['int', 'Amount', 1, 10]],
+        ],
         'settime' => [
             'label' => 'Set the time of day', 'anytime' => false, 'template' => 'SetTime {hour}',
             'help' => 'Hour from 0 to 23.',
@@ -86,9 +116,14 @@ final class AdminCommands
     /** @return array<string, array<string, string>> grouped options for a select */
     public static function options(): array
     {
-        $groups = ['Works any time' => [], 'Needs an admin in game' => [], 'Other' => []];
+        $groups = ['Works any time' => [], 'Works any time (experimental)' => [], 'Needs an admin in game' => [], 'Other' => []];
         foreach (self::COMMANDS as $key => $command) {
-            $group = $command['anytime'] === true ? 'Works any time' : ($command['anytime'] === false ? 'Needs an admin in game' : 'Other');
+            $group = match (true) {
+                ($command['experimental'] ?? false) => 'Works any time (experimental)',
+                $command['anytime'] === true => 'Works any time',
+                $command['anytime'] === false => 'Needs an admin in game',
+                default => 'Other',
+            };
             $groups[$group][$key] = $command['label'];
         }
 
@@ -138,7 +173,7 @@ final class AdminCommands
                     }
                     break;
                 case 'text':
-                    if ($field === 'item' && preg_match('/\s/', $value)) {
+                    if (in_array($field, ['item', 'text'], true) && preg_match('/\s/', $value)) {
                         throw new InvalidArgumentException("$label cannot contain spaces.");
                     }
                     break;
