@@ -317,7 +317,7 @@ check('settings: missing config gets every field', $updated['restartTimes'], ['0
 // ---------------------------------------------------------------- AdminCommands
 $options = AdminCommands::options();
 check('commands: grouped', array_keys($options), ['Works any time', 'Works any time (experimental)', 'Needs an admin in game', 'Other']);
-check('commands: experimental group', array_keys($options['Works any time (experimental)']), ['whereis', 'balance', 'teleportplayer', 'findoutposts', 'finditem', 'giveitem']);
+check('commands: experimental group', array_keys($options['Works any time (experimental)']), ['whereis', 'balance', 'teleportplayer', 'giveitem']);
 check('commands: give item', AdminCommands::build('giveitem', ['giveitem__name' => 'Mr Exclusive', 'giveitem__item' => 'Water_05l', 'giveitem__amount' => '2']), 'GiveItem Mr Exclusive Water_05l 2');
 check('commands: teleport player', AdminCommands::build('teleportplayer', ['teleportplayer__name' => 'Bob', 'teleportplayer__x' => '-100', 'teleportplayer__y' => '5', 'teleportplayer__z' => '300']), 'TeleportPlayer Bob -100 5 300');
 check('commands: any-time ones are the ones the mod handles itself', array_keys($options['Works any time']), ['announce', 'listplayers', 'kick']);
@@ -342,6 +342,11 @@ check('commands: no players file', AdminCommands::knownPlayers(null), []);
 check('commands: item catalog with paths', AdminCommands::itemCatalog("BP_Water_05l_C\t/Game/ConZ_Files/Items/W/BP_Water_05l.BP_Water_05l_C\nBP_Apple_C\t\n"), ['BP_Apple_C' => 'Apple (BP_Apple_C)', 'BP_Water_05l_C' => 'Water 05l (BP_Water_05l_C)']);
 check('commands: item catalog', AdminCommands::itemCatalog("BP_Water_05l_C\r\nBP_Apple_C\nbad name!\n\n"), ['BP_Apple_C' => 'Apple (BP_Apple_C)', 'BP_Water_05l_C' => 'Water 05l (BP_Water_05l_C)']);
 check('commands: no item list yet', AdminCommands::itemCatalog(null), []);
+$bundledItems = AdminCommands::bundledItems();
+check('items: bundled list is complete', count($bundledItems) > 1400, true);
+check('items: water bottle', $bundledItems['Water_05l'] ?? null, 'Water Bottle (Water_05l)');
+check('items: bundled list parsing', AdminCommands::bundledItems('{"items":{"B_1":"Bee","bad id!":"x","A_1":"Ant"}}'), ['A_1' => 'Ant (A_1)', 'B_1' => 'Bee (B_1)']);
+check('commands: spawn item with an ID', AdminCommands::build('spawnitem', ['spawnitem__item' => 'Water_05l', 'spawnitem__amount' => '2']), 'SpawnItem Water_05l 2');
 $catalog = AdminCommands::itemCatalog("BP_Water_05l_C\nBP_Water_1l_C\nBP_Apple_C\nBP_Canned_Water_C\n");
 check('items: search every word', MrExclusive\ScumManager\Support\ItemSelect::search($catalog, 'water 05'), ['BP_Water_05l_C' => 'Water 05l (BP_Water_05l_C)']);
 check('items: search is case-insensitive', array_keys(MrExclusive\ScumManager\Support\ItemSelect::search($catalog, 'WATER')), ['BP_Canned_Water_C', 'BP_Water_05l_C', 'BP_Water_1l_C']);

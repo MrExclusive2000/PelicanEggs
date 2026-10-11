@@ -545,7 +545,7 @@ players = { gus }
 step(12)
 check("kit items without an admin", #spawned == 2 and #inventory == 2 and spawned[1].class == waterClass and #adminCommands == 0)
 check("kit message", lastPrivate("Gus") == "Kit!")
-check("unknown kit item reported", has(read(dir .. "/playertools.log"), "Item Nope is not loaded; skipped."))
+check("unknown kit item reported", has(read(dir .. "/playertools.log"), "Item Nope has not been loaded on this server yet; skipped."))
 step(20)
 check("kit items given once", #spawned == 2)
 

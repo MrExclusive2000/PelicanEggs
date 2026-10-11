@@ -836,7 +836,8 @@ local function giveItems(session, items)
         local amount = math.max(1, math.min(tonumber(type(entry) == "table" and (entry.amount or entry[2]) or 1) or 1, 20))
         local class = name and findItemClass(tostring(name))
         if class == nil then
-            output("Item " .. tostring(name) .. " is not loaded; skipped. Check the name with FindItem on the Admin Console.")
+            output("Item " .. tostring(name) .. " has not been loaded on this server yet; skipped. Spawn one once with SpawnItem "
+                .. tostring(name) .. " (as an admin) so it can be given.")
         else
             for _ = 1, amount do
                 local transform = {

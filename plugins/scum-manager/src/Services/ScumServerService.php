@@ -695,16 +695,24 @@ class ScumServerService
         return $ue4ss['installed'] ? AdminCommands::knownPlayers($this->read($server, $ue4ss['mods'] . '/PlayerTools/players.tsv')) : [];
     }
 
-    /** @return array<string, string> item class => label, from PelicanConsole's items.txt */
+    /**
+     * Items for the dropdowns: the full list bundled with the plugin, or (if that file is
+     * missing) the item types PelicanConsole has seen on this server.
+     *
+     * @return array<string, string> item => label
+     */
     public function itemCatalog(Server $server): array
     {
-        $ue4ss = $this->ue4ss($server);
+        $bundled = AdminCommands::bundledItems();
+        if ($bundled !== []) {
+            return $bundled;
+        }
 
+        $ue4ss = $this->ue4ss($server);
         if (!$ue4ss['installed']) {
             return [];
         }
 
-        // The list has thousands of entries and only changes when the server restarts.
         return cache()->remember("scum-manager.items.$server->uuid", 120, fn () => AdminCommands::itemCatalog(
             $this->read($server, $ue4ss['mods'] . '/PelicanConsole/items.txt'),
         ));

@@ -46,19 +46,9 @@ final class AdminCommands
             'help' => 'Moves the player there directly. Get coordinates with "Where is a player?".',
             'fields' => ['name' => ['playerName', 'Player'], 'x' => ['int', 'X', -10000000, 10000000], 'y' => ['int', 'Y', -10000000, 10000000], 'z' => ['int', 'Z', -1000000, 1000000]],
         ],
-        'findoutposts' => [
-            'label' => 'List the outposts', 'anytime' => true, 'experimental' => true, 'template' => 'FindOutposts',
-            'help' => 'Finds the trader outposts on the map. Use "Add outposts as teleports" to make them !tp destinations.',
-            'fields' => [],
-        ],
-        'finditem' => [
-            'label' => 'Find an item name', 'anytime' => true, 'experimental' => true, 'template' => 'FindItem {text}',
-            'help' => 'Lists loaded item classes whose name contains the text, e.g. water or bandage.',
-            'fields' => ['text' => ['text', 'Part of the name']],
-        ],
         'giveitem' => [
             'label' => 'Give an item to a player', 'anytime' => true, 'experimental' => true, 'template' => 'GiveItem {name} {item} {amount}',
-            'help' => 'Puts the item in the player\'s inventory (or at their feet if it is full). Use a name from "Find an item name". New: try it on yourself first.',
+            'help' => 'Puts the item in the player\'s inventory (or at their feet if it is full). New: try it on yourself first.',
             'fields' => ['name' => ['playerName', 'Player'], 'item' => ['item', 'Item'], 'amount' => ['int', 'Amount', 1, 10]],
         ],
         'settime' => [
@@ -93,8 +83,8 @@ final class AdminCommands
         ],
         'spawnitem' => [
             'label' => 'Spawn an item at the admin', 'anytime' => false, 'template' => 'SpawnItem {item} {amount}',
-            'help' => 'Drops the item in front of the admin the command runs as. Item IDs are like Emergency_Bandage_Big or 12_Gauge.',
-            'fields' => ['item' => ['text', 'Item ID'], 'amount' => ['int', 'Amount', 1, 100]],
+            'help' => 'Drops the item in front of the admin the command runs as.',
+            'fields' => ['item' => ['item', 'Item'], 'amount' => ['int', 'Amount', 1, 100]],
         ],
         'ban' => [
             'label' => 'Ban a player', 'anytime' => false, 'template' => 'Ban {steamId}',
@@ -184,6 +174,27 @@ final class AdminCommands
         }
 
         return ConsoleCommand::normalize(strtr($command['template'], $replacements));
+    }
+
+    /**
+     * Every SCUM item with its spawn ID, from the list bundled with the plugin
+     * (resources/items.json, from commands.gg).
+     *
+     * @return array<string, string> spawn ID => "Name (ID)", sorted by name
+     */
+    public static function bundledItems(?string $json = null): array
+    {
+        $json ??= @file_get_contents(dirname(__DIR__, 2) . '/resources/items.json') ?: '';
+        $data = json_decode($json, true);
+        $items = [];
+        foreach (is_array($data['items'] ?? null) ? $data['items'] : [] as $id => $name) {
+            if (is_string($name) && preg_match('/^[A-Za-z0-9_-]+$/', (string) $id)) {
+                $items[(string) $id] = trim($name) . " ($id)";
+            }
+        }
+        asort($items, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $items;
     }
 
     /**

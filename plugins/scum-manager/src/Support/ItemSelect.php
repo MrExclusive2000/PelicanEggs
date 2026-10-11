@@ -7,9 +7,9 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 
 /**
- * A searchable dropdown of the server's items (from PelicanConsole's items.txt). The list is
- * searched on the server, so thousands of items are not sent to the browser. Before the list
- * exists (the mod writes it a minute after the server is online) it is a plain text field.
+ * A searchable dropdown of SCUM's items (the list bundled with the plugin). The list is
+ * searched on the server, so 1,400+ items are not sent to the browser. Without a list it is a
+ * plain text field.
  */
 final class ItemSelect
 {
@@ -19,8 +19,7 @@ final class ItemSelect
         if ($catalog() === []) {
             return TextInput::make($name)
                 ->label($label)
-                ->placeholder('BP_Water_05l_C')
-                ->helperText('The item list appears here a minute after the server is online with PelicanConsole.');
+                ->placeholder('Water_05l');
         }
 
         return Select::make($name)

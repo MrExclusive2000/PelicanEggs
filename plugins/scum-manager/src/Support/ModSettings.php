@@ -71,7 +71,7 @@ final class ModSettings
                     ],
                 ],
                 'New players' => [
-                    'description' => 'For a player\'s first join. Placeholders: {name} {steamId}. Starter kit items go straight into the new player\'s inventory (experimental; the item list fills in a minute after the server is online). Starter kit admin commands (without #) run as an online admin, e.g. ChangeCurrencyBalance Normal 500 {steamId}; with commands set, the whole kit waits until an admin is online. Do not use SpawnItem there: it drops items in front of the admin.',
+                    'description' => 'For a player\'s first join. Placeholders: {name} {steamId}. Starter kit items go straight into the new player\'s inventory (experimental). Starter kit admin commands (without #) run as an online admin, e.g. ChangeCurrencyBalance Normal 500 {steamId}; with commands set, the whole kit waits until an admin is online. Do not use SpawnItem there: it drops items in front of the admin.',
                     'fields' => [
                         'newPlayers.messages' => ['lines', 'Welcome messages (one per line)', []],
                         'newPlayers.starterKit' => ['toggle', 'Starter kit on', true],

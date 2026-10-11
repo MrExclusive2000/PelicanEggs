@@ -459,7 +459,10 @@ local function giveItem(text)
     amount = math.max(1, math.min(tonumber(amount) or 1, 10))
 
     local class, className = findItemClass(item)
-    if class == nil then return output("Item " .. item .. " is not loaded. Try FindItem " .. item .. " for the exact class name.") end
+    if class == nil then
+        return output("Item " .. item .. " has not been loaded on this server yet. Spawn one once with SpawnItem " .. item
+            .. " (as an admin in game), then try again.")
+    end
     local pawn = pawnOf(player.controller)
     local at = pawn and locationOf(pawn)
     if at == nil then return output(player.name .. " has no character right now.") end
