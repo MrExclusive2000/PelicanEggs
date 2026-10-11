@@ -1,7 +1,9 @@
 ScumCommandProbe (read-only)
 
-Lists SCUM's admin, chat and console related game functions so we can tell whether
-console commands from Pelican can be bridged into the game with a Lua mod.
+Lists SCUM's game functions on a topic, with their parameters. The topic is set in
+probe.lua: this version looks for item and inventory functions, to find a way to put
+starter kit items straight into a player's inventory. Delete probe.lua for the original
+admin/chat/console report.
 
 It only reads Unreal's reflection data. It does not call or change anything in the game.
 

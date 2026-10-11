@@ -180,6 +180,19 @@ local fallbackReport = assert(io.open(tmp .. "/ScumCommandProbe/probe-output.txt
 check("fallback lookup logged", string.find(table.concat(log), "Fallback lookup found 1 of 6 known classes", 1, true) ~= nil)
 check("fallback still reports PlayerController functions", string.find(fallbackReport, "/Script/Engine.PlayerController:ServerExec", 1, true) ~= nil)
 
+-- Fourth scenario: probe.lua narrows the topic, skips Blueprints and lists whole classes.
+assert(io.open(tmp .. "/ScumCommandProbe/probe.lua", "w")):write([[return {
+    title = "Item probe", keywords = { "inventory" }, nativeOnly = true, wholeClasses = { "gamemode" },
+}]]):close()
+log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick, findObjectsWorks = {}, 0, 0, 1, nil, true
+dofile(copy)
+local itemReport = assert(io.open(tmp .. "/ScumCommandProbe/probe-output.txt")):read("a")
+check("probe.lua title", string.sub(itemReport, 1, 11) == "Item probe\n")
+check("probe.lua keywords", string.find(itemReport, "ConZPlayerController:GetInventory", 1, true) ~= nil
+    and string.find(itemReport, "Server_ProcessAdminCommand", 1, true) == nil)
+check("probe.lua whole class listed", string.find(itemReport, "ConZGameMode:BroadcastServerMessage", 1, true) ~= nil)
+check("probe.lua native only", string.find(itemReport, "BP_AdminTools", 1, true) == nil)
+
 os.execute("rm -rf '" .. tmp .. "'")
 print = _G.print
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))

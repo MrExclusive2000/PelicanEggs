@@ -61,6 +61,25 @@ local function safe(fn, ...)
     return nil
 end
 
+-- Optional probe.lua in the mod folder narrows the search to another topic:
+--   return { title = "...", keywords = { ... }, nativeOnly = true, wholeClasses = { ... } }
+-- nativeOnly skips Blueprint (/Game/) classes; wholeClasses lists every function of classes
+-- whose name contains one of these words.
+local TITLE = "ScumCommandProbe report"
+local NATIVE_ONLY = false
+local WHOLE_CLASSES = {}
+do
+    local source = string.gsub(debug.getinfo(1, "S").source or "", "^@", "")
+    local dir = string.match(source, "^(.*)[/\\]Scripts[/\\]main%.lua$")
+    local ok, settings = pcall(dofile, (dir or ".") .. "/probe.lua")
+    if ok and type(settings) == "table" then
+        KEYWORDS = settings.keywords or KEYWORDS
+        TITLE = settings.title or TITLE
+        NATIVE_ONLY = settings.nativeOnly == true
+        WHOLE_CLASSES = settings.wholeClasses or WHOLE_CLASSES
+    end
+end
+
 local function fname(object)
     return safe(function() return object:GetFName():ToString() end) or "?"
 end
@@ -80,6 +99,9 @@ local function matchesKeyword(name)
 end
 
 local function isNoisy(path)
+    if NATIVE_ONLY and string.sub(path, 1, 8) ~= "/Script/" then
+        return true
+    end
     for _, prefix in ipairs(NOISY_PREFIXES) do
         if string.sub(path, 1, #prefix) == prefix then
             return true
@@ -169,11 +191,16 @@ local function inspectClass(class, functions, classes)
         classes[#classes + 1] = classPath
     end
 
+    local whole = false
+    for _, word in ipairs(WHOLE_CLASSES) do
+        if string.find(lower(fname(class)), word, 1, true) then whole = true end
+    end
+
     local found = 0
     local classFunctions = collect(class, "ForEachFunction")
     for _, func in ipairs(classFunctions) do
         local name = fname(func)
-        if matchesKeyword(name) then
+        if whole or matchesKeyword(name) then
             progress = classPath .. ":" .. name
             local flags = safe(function() return func:GetFunctionFlags() end)
             functions[#functions + 1] = string.format("%s:%s %s\n    %s", classPath, name, describeParameters(func), describeFlags(flags))
@@ -238,7 +265,7 @@ local function scan()
     table.sort(classes)
 
     local lines = {
-        "ScumCommandProbe report",
+        TITLE,
         "Generated: " .. os.date("!%Y-%m-%d %H:%M:%S UTC"),
         string.format("Classes scanned: %d, matching functions: %d, matching classes: %d", objectCount, #functions, #classes),
         "",
