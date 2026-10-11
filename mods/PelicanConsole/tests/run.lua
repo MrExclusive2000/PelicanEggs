@@ -162,10 +162,10 @@ check("kick logged", string.find(consoleLog(), "Kicked Alice.", 1, true) ~= nil)
 -- With an admin online, other commands run through that admin's chat command channel.
 writeCommands("SetTime 6\nKick 76561198000000001\n")
 loopCallback()
-check("command runs as the admin", rpc[1] and rpc[1].by == "Bob" and rpc[1].command == "#SetTime 6")
-check("unknown kick target goes to SCUM", rpc[2] and rpc[2].command == "#Kick 76561198000000001")
+check("command runs as the admin", rpc[1] and rpc[1].by == "Bob" and rpc[1].command == "SetTime 6")
+check("unknown kick target goes to SCUM", rpc[2] and rpc[2].command == "Kick 76561198000000001")
 check("not sent through the test helper", #calls == 2)
-check("admin route logged", string.find(consoleLog(), "Ran as Bob: #SetTime 6", 1, true) ~= nil)
+check("admin route logged", string.find(consoleLog(), "Ran as Bob: SetTime 6", 1, true) ~= nil)
 check("non-admin channel never used", rpc[3] == nil)
 
 -- Admin online but their channel cannot be matched: falls back and says so.

@@ -179,8 +179,8 @@ local bob = Player("Bob", true)
 players = { alice, bob }
 step(2)
 check("kit item at the player's location", adminCommands[1] and adminCommands[1].by == "Bob"
-    and adminCommands[1].command == '#SpawnItem Water 1 Location "X=1000 Y=2000 Z=550"')
-check("kit runs every command", adminCommands[2] and adminCommands[2].command == "#ChangeCurrencyBalance Normal 500 76561198000000001")
+    and adminCommands[1].command == 'SpawnItem Water 1 Location "X=1000 Y=2000 Z=550"')
+check("kit runs every command", adminCommands[2] and adminCommands[2].command == "ChangeCurrencyBalance Normal 500 76561198000000001")
 check("kit message", lastPrivate("Alice") == "Kit for Alice.")
 local kitCommands = #adminCommands
 step(20)
@@ -242,7 +242,7 @@ step()
 check("vote counted", lastPrivate("Bob") == "Vote counted: yes.")
 local before = #adminCommands
 step(30)
-check("passed vote runs as admin", adminCommands[before + 1] and adminCommands[before + 1].command == "#SetTime 10")
+check("passed vote runs as admin", adminCommands[before + 1] and adminCommands[before + 1].command == "SetTime 10")
 check("vote result announced", anyHud("Vote passed (2 votes): make it daytime."))
 chat("76561198000000001", "Alice", "!vote day")
 step()
@@ -355,18 +355,18 @@ local function ran(command)
     end
     return nil
 end
-check("daily bonus run as the admin", ran("#Daily 76561198000000010") and ran("#Daily 76561198000000010").by == "Eve")
+check("daily bonus run as the admin", ran("Daily 76561198000000010") and ran("Daily 76561198000000010").by == "Eve")
 check("daily bonus message", has(table.concat((function() local t = {} for _, m in ipairs(private) do if m.to == "Dave" then t[#t + 1] = m.text end end return t end)(), "|"), "Daily bonus for Dave"))
-check("old records do not get back pay", ran("#Pay 76561198000000010") == nil)
+check("old records do not get back pay", ran("Pay 76561198000000010") == nil)
 step(60)
-check("hourly reward after the interval", ran("#Pay 76561198000000010") ~= nil)
+check("hourly reward after the interval", ran("Pay 76561198000000010") ~= nil)
 local pays = 0
-for _, entry in ipairs(adminCommands) do if entry.command == "#Pay 76561198000000010" then pays = pays + 1 end end
+for _, entry in ipairs(adminCommands) do if entry.command == "Pay 76561198000000010" then pays = pays + 1 end end
 step(10)
 local paysLater = 0
-for _, entry in ipairs(adminCommands) do if entry.command == "#Pay 76561198000000010" then paysLater = paysLater + 1 end end
+for _, entry in ipairs(adminCommands) do if entry.command == "Pay 76561198000000010" then paysLater = paysLater + 1 end end
 check("reward once per interval", pays == 1 and paysLater == 1)
-check("daily bonus once a day", (function() local n = 0 for _, e in ipairs(adminCommands) do if e.command == "#Daily 76561198000000010" then n = n + 1 end end return n end)() == 1)
+check("daily bonus once a day", (function() local n = 0 for _, e in ipairs(adminCommands) do if e.command == "Daily 76561198000000010" then n = n + 1 end end return n end)() == 1)
 
 -- Kill streaks and the streak bounty.
 local killTime = 0
@@ -390,7 +390,7 @@ kill("76561198000000011", "Eve", "76561198000000010", "Dave")
 check("streak end announced", anyHud("Eve ended Dave's 3 kill streak!"))
 check("bounty collected", anyHud("Eve collected the 500 bounty on Dave!"))
 step()
-check("bounty paid to the killer", ran("#ChangeCurrencyBalance Normal 500 76561198000000011") ~= nil and lastPrivate("Eve") == "Bounty paid: 500 added to your account.")
+check("bounty paid to the killer", ran("ChangeCurrencyBalance Normal 500 76561198000000011") ~= nil and lastPrivate("Eve") == "Bounty paid: 500 added to your account.")
 
 -- Player bounties.
 chat("76561198000000010", "Dave", "!bounty Eve 5000")
@@ -401,7 +401,7 @@ step()
 check("no bounty on yourself", lastPrivate("Dave") == "You cannot put a bounty on yourself.")
 chat("76561198000000010", "Dave", "!bounty Eve 200")
 step()
-check("bounty charged to the placer", ran("#ChangeCurrencyBalance Normal -200 76561198000000010") ~= nil)
+check("bounty charged to the placer", ran("ChangeCurrencyBalance Normal -200 76561198000000010") ~= nil)
 check("bounty announced", anyHud("Dave put a 200 bounty on Eve. Total: 200."))
 chat("76561198000000010", "Dave", "!bounty")
 step()
@@ -413,10 +413,10 @@ step()
 check("teleport list skips incomplete places", lastPrivate("Dave") == "Teleports (!tp <name>):\ntrader - 50")
 chat("76561198000000010", "Dave", "!tp trader")
 step()
-check("teleport waits", lastPrivate("Dave") == "Teleporting to trader in 5 s. Do not move." and ran("#Teleport 76561198000000010 100 200 300") == nil)
+check("teleport waits", lastPrivate("Dave") == "Teleporting to trader in 5 s. Do not move." and ran("Teleport 76561198000000010 100 200 300") == nil)
 step(5)
-check("teleport charged", ran("#ChangeCurrencyBalance Normal -50 76561198000000010") ~= nil)
-check("teleported", ran("#Teleport 76561198000000010 100 200 300") ~= nil and lastPrivate("Dave") == "Teleported to trader (50 paid).")
+check("teleport charged", ran("ChangeCurrencyBalance Normal -50 76561198000000010") ~= nil)
+check("teleported", ran("Teleport 76561198000000010 100 200 300") ~= nil and lastPrivate("Dave") == "Teleported to trader (50 paid).")
 chat("76561198000000010", "Dave", "!tp trader")
 step()
 check("teleport cooldown", has(lastPrivate("Dave"), "You can teleport again in"))
@@ -576,8 +576,8 @@ players = { gus, admin }
 chat("76561198000000040", "Gus", "!tp b4")
 step(3)
 check("direct teleport", teleported and teleported.X == 10 and teleported.Z == 30)
-check("teleport charged through the admin", ran("#ChangeCurrencyBalance Normal -300 76561198000000040") ~= nil)
-check("no Teleport admin command with the direct method", ran("#Teleport 76561198000000040 10 20 30") == nil)
+check("teleport charged through the admin", ran("ChangeCurrencyBalance Normal -300 76561198000000040") ~= nil)
+check("no Teleport admin command with the direct method", ran("Teleport 76561198000000040 10 20 30") == nil)
 
 money = "50"
 chat("76561198000000040", "Gus", "!bounty Hal 200")
@@ -679,7 +679,7 @@ check("king of the hill started", anyHud("KING OF THE HILL at hill"))
 killAt("76561198000000051", "Jay", "76561198000000050", "Ivy", 0, 0)
 check("manhunt won by the killer", anyHud("Manhunt over: Jay killed Ivy!"))
 step()
-check("hunter paid as the admin", ran("#Pay 76561198000000051 1000") ~= nil and lastPrivate("Jay") == "You won the manhunt. Reward received!")
+check("hunter paid as the admin", ran("Pay 76561198000000051 1000") ~= nil and lastPrivate("Jay") == "You won the manhunt. Reward received!")
 
 -- King of the Hill: Ivy stands in the zone, Jay does not.
 step(60)
@@ -687,7 +687,7 @@ check("koth update", anyHud("King of the Hill at hill: Ivy leads with"))
 step(60)
 check("koth winner", anyHud("King of the Hill over: Ivy held hill for"))
 step()
-check("koth reward", ran("#Pay 76561198000000050 500") ~= nil and lastPrivate("Ivy") == "You won King of the Hill. Reward received!")
+check("koth reward", ran("Pay 76561198000000050 500") ~= nil and lastPrivate("Ivy") == "You won King of the Hill. Reward received!")
 
 -- A target who survives wins.
 local before = #hud

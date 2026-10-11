@@ -649,6 +649,9 @@ local function run(command)
 
     local channel, admin = adminChannel()
     if channel ~= nil then
+        -- The game client strips the "#" before sending a chat command to the server, so
+        -- SCUM would read "#SetTime" as an unknown command.
+        command = (string.gsub(command, "^#+", ""))
         local ok, err = pcall(function() channel:Chat_Server_ProcessAdminCommand(command) end)
         if ok then
             output("Ran as " .. admin.name .. ": " .. command .. " (replies appear in their chat)")

@@ -408,7 +408,9 @@ local missingLogs = {}       -- prefix -> already reported missing
 local function refreshLogs(time)
     for _, line in ipairs(readTail(serverLog)) do handleServerLogLine(line) end
 
-    if lastLogRefresh == nil or time - lastLogRefresh >= LOG_REFRESH then
+    -- Look again sooner while a log has not been found yet (SCUM may create it later).
+    local waiting = gameLogs.chat_ == nil or gameLogs.kill_ == nil
+    if lastLogRefresh == nil or time - lastLogRefresh >= (waiting and 10 or LOG_REFRESH) then
         local firstRefresh = lastLogRefresh == nil
         lastLogRefresh = time
         for prefix in pairs(LOG_HANDLERS) do
@@ -570,7 +572,10 @@ local function runAdminCommand(command)
             admin = ownerOwner and admins[address(ownerOwner)]
         end
         if admin ~= nil then
-            local ok, err = pcall(function() channel:Chat_Server_ProcessAdminCommand("#" .. string.gsub(command, "^#+", "")) end)
+            -- Without the "#": the game client strips it before sending, and SCUM answers
+            -- "unknown command" when it is left on.
+            local text = string.gsub(command, "^#+", "")
+            local ok, err = pcall(function() channel:Chat_Server_ProcessAdminCommand(text) end)
             if ok then return true, admin.name end
             return false, tostring(err)
         end
