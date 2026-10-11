@@ -14,6 +14,8 @@ spl_autoload_register(function (string $class) {
 
 use MrExclusive\ScumManager\Support\ConsoleCommand;
 use MrExclusive\ScumManager\Support\IniDocument;
+use MrExclusive\ScumManager\Support\LuaTable;
+use MrExclusive\ScumManager\Support\ModSettings;
 use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
 use MrExclusive\ScumManager\Support\SettingLabel;
@@ -223,6 +225,104 @@ check('console: append after unterminated line', ConsoleCommand::append('Announc
 check('console: append after line', ConsoleCommand::append("Announce Hi\n", 'ListPlayers'), "Announce Hi\nListPlayers\n");
 check('console: tail keeps the last lines', ConsoleCommand::tail("a\r\nb\n\nc\nd\n", 2), "c\nd");
 check('console: tail of missing log', ConsoleCommand::tail(null), '');
+
+// ---------------------------------------------------------------- LuaTable
+$lua = <<<'LUA'
+-- comment
+--[[ block
+comment ]]
+return {
+    name = "a \"quoted\" \\ value\n", other = 'single', long = [[raw
+text]],
+    n = -12, f = 1.5, e = 1e3, yes = true, no = false, gone = nil,
+    list = { "x", 'y'; 3 },   -- trailing comment
+    nested = { deep = { 1, 2 }, ["odd key"] = 4, [10] = "ten" },
+    tuples = { { "bow", 150 }, { "1911", 150 } },
+}
+LUA;
+$parsed = LuaTable::parse($lua);
+check('lua: escaped string', $parsed['name'], "a \"quoted\" \\ value\n");
+check('lua: single quotes', $parsed['other'], 'single');
+check('lua: long string', $parsed['long'], 'raw' . "\n" . 'text');
+check('lua: numbers', [$parsed['n'], $parsed['f'], $parsed['e']], [-12, 1.5, 1000.0]);
+check('lua: booleans and nil', [$parsed['yes'], $parsed['no'], $parsed['gone']], [true, false, null]);
+check('lua: list with ; separator', $parsed['list'], ['x', 'y', 3]);
+check('lua: nested and bracket keys', $parsed['nested'], ['deep' => [1, 2], 'odd key' => 4, 10 => 'ten']);
+check('lua: list of tuples', $parsed['tuples'], [['bow', 150], ['1911', 150]]);
+check('lua: render round trip', LuaTable::parse(LuaTable::render($parsed, "header\nline two")), $parsed);
+check('lua: header as comments', str_starts_with(LuaTable::render(['a' => 1], "x\ny"), "-- x\n-- y\nreturn {"), true);
+check('lua: floats stay floats', LuaTable::render(['a' => 2.0, 'b' => 0.25, 'c' => 3]), "return {\n    a = 2.0,\n    b = 0.25,\n    c = 3,\n}\n");
+throws('lua: no return', fn () => LuaTable::parse('{ a = 1 }'), 'does not start with "return"');
+throws('lua: broken table', fn () => LuaTable::parse("return {\n a = 1\n b = 2 }"), 'line 3: Expected "," or "}"');
+throws('lua: unfinished string', fn () => LuaTable::parse('return { a = "x }'), 'Unfinished string');
+throws('lua: not a table', fn () => LuaTable::parse('return 5'), 'does not return a table');
+
+// ---------------------------------------------------------------- ModSettings
+foreach (array_keys(ModSettings::MODS) as $mod) {
+    $config = LuaTable::parse(file_get_contents(__DIR__ . "/../../../mods/$mod/config.lua"));
+    $flat = [];
+    $walk = function (array $table, string $prefix) use (&$walk, &$flat) {
+        foreach ($table as $key => $value) {
+            $flat[] = $prefix . $key;
+            if (is_array($value) && !array_is_list($value)) {
+                $walk($value, $prefix . $key . '.');
+            }
+        }
+    };
+    $walk($config, '');
+    $missing = array_values(array_diff(array_keys(ModSettings::fields($mod)), $flat));
+    check("settings: every $mod field is in its config.lua", $missing, []);
+
+    $state = ModSettings::toState($mod, $config);
+    check("settings: $mod unchanged form changes nothing", ModSettings::apply($mod, $config, $state), $config);
+}
+
+$config = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/PlayerTools/config.lua'));
+$state = ModSettings::toState('PlayerTools', $config);
+check('settings: lines become text', $state['PlayerTools__chatCommands__rules'], "No cheating or exploiting.\nRespect other players.");
+check('settings: vote options become rows', $state['PlayerTools__voting__options'][0], ['name' => 'day', 'label' => 'make it daytime', 'command' => 'SetTime 10']);
+$state['PlayerTools__afk__enabled'] = true;
+$state['PlayerTools__afk__minutes'] = '25';
+$state['PlayerTools__chatCommands__rules'] = "  Rule one \r\n\r\nRule two\n";
+$state['PlayerTools__voting__options'] = [['name' => 'rain', 'label' => 'make it rain', 'command' => 'SetWeather 1'], ['name' => '', 'label' => '', 'command' => '']];
+$state['PlayerTools__newPlayers__starterKitCommands'] = 'SpawnItem Water_05l 1 Location "{location}"';
+$state['PlayerTools__unknown'] = 'ignored';
+$updated = ModSettings::apply('PlayerTools', $config + ['custom' => 'kept'], $state);
+check('settings: toggle', $updated['afk']['enabled'], true);
+check('settings: number', $updated['afk']['minutes'], 25);
+check('settings: lines trimmed, blanks dropped', $updated['chatCommands']['rules'], ['Rule one', 'Rule two']);
+check('settings: empty rows dropped', $updated['voting']['options'], [['name' => 'rain', 'label' => 'make it rain', 'command' => 'SetWeather 1']]);
+check('settings: quotes survive', LuaTable::parse(LuaTable::render($updated))['newPlayers']['starterKitCommands'], ['SpawnItem Water_05l 1 Location "{location}"']);
+check('settings: unknown config keys kept', $updated['custom'], 'kept');
+
+$config = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/ScumAntiCheat/config.lua'));
+$state = ModSettings::toState('ScumAntiCheat', $config);
+check('settings: tuples become rows', $state['ScumAntiCheat__weaponMaxDistance'][0], ['c0' => 'bow', 'c1' => '150']);
+$state['ScumAntiCheat__weaponMaxDistance'] = [['c0' => 'mosin', 'c1' => '600'], ['c0' => '1911', 'c1' => '150']];
+$state['ScumAntiCheat__checks__aimSnap'] = false;
+$updated = ModSettings::apply('ScumAntiCheat', $config, $state);
+check('settings: rows become tuples, numbers only where numeric', $updated['weaponMaxDistance'], [['mosin', 600], ['1911', 150]]);
+check('settings: nested toggle', [$updated['checks']['aimSnap'], $updated['checks']['speed']], [false, true]);
+
+$state = ModSettings::toState('ServerMessages', LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/ServerMessages/config.lua')));
+check('settings: number list as text', $state['ServerMessages__restartWarnings'], '30, 15, 5, 1');
+$state['ServerMessages__restartWarnings'] = '10, 2';
+$state['ServerMessages__restartTimes'] = "06:00\n18:00";
+$updated = ModSettings::apply('ServerMessages', [], $state);
+check('settings: number list', $updated['restartWarnings'], [10, 2]);
+check('settings: missing config gets every field', $updated['restartTimes'], ['06:00', '18:00']);
+
+// ---------------------------------------------------------------- bundled mods
+$bundled = MrExclusive\ScumManager\Services\ScumServerService::bundledMods();
+check('bundled: our four mods ship with the plugin', array_keys($bundled), ['PelicanConsole', 'PlayerTools', 'ScumAntiCheat', 'ServerMessages']);
+foreach ($bundled as $name => $zip) {
+    $archive = ModArchive::open($zip, "$name.zip", 50 * 1024 * 1024, 100);
+    $mods = $archive->mods();
+    check("bundled: $name zip holds one mod", array_column($mods, 'name'), [$name]);
+    check("bundled: $name has main.lua", isset($mods[0]['files']['Scripts/main.lua']), true);
+    check("bundled: $name has no tests", array_values(array_filter(array_keys($mods[0]['files']), fn ($f) => str_starts_with($f, 'tests/'))), []);
+    $archive->close();
+}
 
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

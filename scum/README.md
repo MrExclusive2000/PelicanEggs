@@ -79,17 +79,18 @@ Commands typed while the server is starting or stopped are dropped.
 
 ## Server mods
 
-Ready-made UE4SS mods in [`mods/dist`](../mods/dist), uploaded on the **SCUM Mods** page:
+Our own UE4SS mods ship with the SCUM Manager plugin and are installed together with UE4SS (or with **Install our mods** on the **SCUM Mods** page). They are also in [`mods/dist`](../mods/dist) for manual upload.
 
 | Mod | What it does |
 |-----|--------------|
-| `PelicanConsole.zip` | Runs admin commands typed in the Pelican console (above) |
-| `ScumAntiCheat.zip` | Server-side anti-cheat: speed, teleport, fly and hover hacks, out-of-map/under-map, admin rights not in AdminUsers.ini, staff impersonation names, aimbot signs from the kill log and aim snaps (reported as suspects), a watchlist, and SCUM's own violation and admin logs in the console. It can kick or ban (via BannedUsers.ini), but only logs until you change `action` in its `config.lua` |
-| `ServerMessages.zip` | Welcome message, rotating announcements, join/leave log |
+| `PelicanConsole` | Runs admin commands from the SCUM Admin Console page or the Pelican console (above) |
+| `PlayerTools` | Chat commands (`!help`, `!rules`, `!discord`, `!online`, `!stats`, `!top`, `!vote`), kill feed, stats and leaderboard, AFK kicker, votes for time and weather, new-player welcome and starter kit |
+| `ServerMessages` | Welcome message, rotating announcements, join/leave log, restart countdown warnings |
+| `ScumAntiCheat` | Server-side anti-cheat: speed, teleport, fly and hover hacks, out-of-map/under-map, admin rights not in AdminUsers.ini, staff impersonation names, aimbot signs from the kill log and aim snaps (reported as suspects), a watchlist, and SCUM's own violation and admin logs in the console. It can kick or ban (via BannedUsers.ini), but only logs until you change its action |
 
-Each mod has a `config.lua` in `SCUM/Binaries/Win64/ue4ss/Mods/<Mod>/`. Restart after editing it. The mods report in the Pelican console when PelicanConsole is installed.
+Change their settings on the **SCUM Mod Settings** page, or in `config.lua` in `SCUM/Binaries/Win64/ue4ss/Mods/<Mod>/`. The mods pick up changes within 30 seconds. They report in the Pelican console and on the Admin Console page.
 
-For restart warnings, use a Pelican schedule: a **Send command** task with `Announce Server restarts in 10 minutes`, then a **Restart** power action 10 minutes later.
+Votes and starter kits run SCUM admin commands (SetTime, SpawnItem...) as an online admin, so an admin from `AdminUsers.ini` must be online for them to take effect. Restart warnings only announce: add a Pelican schedule (**Schedules**) with a **Restart** power action at the same times.
 
 ## Troubleshooting
 

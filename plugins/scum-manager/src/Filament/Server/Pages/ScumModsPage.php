@@ -123,7 +123,7 @@ class ScumModsPage extends Page implements HasTable
                 TextColumn::make('name')
                     ->label('Mod')
                     ->weight('bold')
-                    ->description(fn (array $record) => $record['builtin'] ? 'Ships with UE4SS' : null),
+                    ->description(fn (array $record) => $record['builtin'] ? 'Ships with UE4SS' : (($record['bundled'] ?? false) ? 'Ships with SCUM Manager' : null)),
                 TextColumn::make('type')
                     ->badge()
                     ->color('gray'),
@@ -223,7 +223,7 @@ class ScumModsPage extends Page implements HasTable
                 ->authorize(fn () => user()?->can(SubuserPermission::FileCreate, $this->getServer()) && user()?->can(SubuserPermission::FileArchive, $this->getServer()))
                 ->requiresConfirmation()
                 ->modalHeading(fn () => ($this->ue4ss['installed'] ?? false) ? 'Update UE4SS?' : 'Install UE4SS?')
-                ->modalDescription(fn () => 'Downloads the latest ' . config('scum-manager.ue4ss_channel') . ' UE4SS build from GitHub into ' . config('scum-manager.binaries_dir') . '. Your mods, mods.txt and UE4SS-settings.ini are kept. The server must be stopped.')
+                ->modalDescription(fn () => 'Downloads the latest ' . config('scum-manager.ue4ss_channel') . ' UE4SS build from GitHub into ' . config('scum-manager.binaries_dir') . '. Your mods, mods.txt and UE4SS-settings.ini are kept. A fresh install also installs the mods that ship with SCUM Manager. The server must be stopped.')
                 ->action(function (ScumServerService $service) {
                     $server = $this->getServer();
 
@@ -246,6 +246,25 @@ class ScumModsPage extends Page implements HasTable
                     } catch (Exception $exception) {
                         report($exception);
                         Notification::make()->title('Could not install UE4SS')->body($exception->getMessage())->danger()->persistent()->send();
+                    }
+                }),
+            Action::make('install_bundled')
+                ->label('Install our mods')
+                ->icon('tabler-package')
+                ->color('gray')
+                ->visible(fn () => ($this->ue4ss['installed'] ?? false) && ScumServerService::bundledMods() !== [])
+                ->authorize(fn () => user()?->can(SubuserPermission::FileCreate, $this->getServer()))
+                ->requiresConfirmation()
+                ->modalHeading('Install or update the SCUM Manager mods?')
+                ->modalDescription(fn () => 'Installs ' . implode(', ', array_keys(ScumServerService::bundledMods())) . ' and enables them. Mods you already have are updated, and their settings (config.lua) are kept. Restart the server to load them.')
+                ->action(function (ScumServerService $service) {
+                    try {
+                        $installed = $service->installBundledMods($this->getServer());
+
+                        Notification::make()->title('Installed ' . implode(', ', $installed))->body('Restart the server to load them.')->success()->send();
+                    } catch (Exception $exception) {
+                        report($exception);
+                        Notification::make()->title('Could not install the mods')->body($exception->getMessage())->danger()->persistent()->send();
                     }
                 }),
             Action::make('safe_settings')

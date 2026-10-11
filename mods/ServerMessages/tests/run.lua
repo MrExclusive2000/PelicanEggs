@@ -104,7 +104,7 @@ assert(io.open(mods .. "/PelicanConsole/console.log", "w")):close()
 writeConfig(assert(io.open("mods/ServerMessages/config.lua")):read("a"))
 dofile(dir .. "/Scripts/main.lua")
 local consoleLog = function() return read(mods .. "/PelicanConsole/console.log") end
-check("startup summary", string.find(consoleLog(), "Active. Welcome on, 1 announcement(s) every 30 min, join/leave log on.", 1, true) ~= nil)
+check("startup summary", string.find(consoleLog(), "Active. Welcome on, 1 announcement(s) every 30 min, join/leave log on, 0 restart time(s).", 1, true) ~= nil)
 
 -- A player connects; the name arrives a moment later, the character later still.
 local alice = Player("", nil)
@@ -180,6 +180,29 @@ gameModeAvailable = false
 advance(60)
 check("fallback to admin command uses prefix setting", commands[#commands] == "Announce Two")
 gameModeAvailable = true
+
+-- ------------------------------------------------------------------ restart warnings and reload
+-- clock 0 is 00:00:00 UTC; restart at 01:00 ("25:00" is invalid and ignored).
+players, hud, clock = {}, {}, 0
+writeConfig([[return { restartTimes = { "01:00", "25:00" }, restartWarnings = { 30, 5 }, restartMessage = "Restart in {minutes} min!" }]])
+dofile(dir .. "/Scripts/main.lua")
+advance(29 * 60)
+check("no warning too early", #hud == 0)
+advance(60)
+check("30 minute warning", hud[1] == "Restart in 30 min!")
+advance(25 * 60)
+check("5 minute warning, each once", hud[2] == "Restart in 5 min!" and #hud == 2)
+-- 00:55 -> next day 00:31, passing 00:30.
+advance(23 * 3600 + 36 * 60)
+check("next day warned again", hud[3] == "Restart in 30 min!")
+
+writeConfig([[return { restartTimes = { "23:00" }, restartWarnings = { 1 } }]])
+advance(31)
+check("settings reloaded", string.find(table.concat(log), "Settings reloaded.", 1, true) ~= nil)
+hud = {}
+-- Now 00:31:31; pass 22:59.
+advance(22 * 3600 + 28 * 60)
+check("reloaded restart time used", hud[1] == "Server restart in 1 minute(s).")
 
 -- ------------------------------------------------------------------ scenario 3: failures
 players, commands, private, clock, log = {}, {}, {}, 9000, {}

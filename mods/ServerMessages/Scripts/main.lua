@@ -4,10 +4,11 @@
     - Welcome: a private message to each player a few seconds after their character spawns.
     - Announcements: a list of messages broadcast in turn, one every few minutes.
     - Join/leave log: who came and went, in players.log and the Pelican console.
+    - Restart warnings: countdown announcements before the daily restart times (UTC).
 
     Announcements are shown the way #Announce shows them (ConZGameMode.SendHUDMessageToAll).
 
-    Settings: config.lua in this mod's folder.
+    Settings: config.lua in this mod's folder (re-read every 30 seconds).
 ]]
 
 local TAG = "[ServerMessages] "
@@ -24,7 +25,11 @@ local DEFAULTS = {
     onlyWhenPlayersOnline = true,
     logJoinsAndLeaves = true,
     commandPrefix = "#",
+    restartTimes = {},
+    restartWarnings = { 30, 15, 5, 1 },
+    restartMessage = "Server restart in {minutes} minute(s).",
 }
+local CONFIG_CHECK = 30
 
 local function safe(fn, ...)
     local ok, result = pcall(fn, ...)
@@ -68,7 +73,11 @@ local function output(message, toPlayersLog)
     end
 end
 
+local configText = nil
 local function loadConfig()
+    local raw = io.open(DIR .. "/config.lua", "rb")
+    configText = raw and raw:read("a") or nil
+    if raw then raw:close() end
     local config = {}
     for key, value in pairs(DEFAULTS) do config[key] = value end
 
@@ -227,10 +236,60 @@ local function scan()
     end
 end
 
+-- ------------------------------------------------------------------ restart warnings
+
+local announcedWarnings = {}
+
+-- Seconds from now until the next "HH:MM" (UTC), or nil when the time is not valid.
+local function secondsUntil(clockTime, now)
+    local hour, minute = string.match(tostring(clockTime), "^%s*(%d%d?):(%d%d)%s*$")
+    hour, minute = tonumber(hour), tonumber(minute)
+    if hour == nil or hour > 23 or minute > 59 then return nil end
+    local t = os.date("!*t", now)
+    local delta = hour * 3600 + minute * 60 - (t.hour * 3600 + t.min * 60 + t.sec)
+    if delta <= 0 then delta = delta + 86400 end
+    return delta
+end
+
+local function restartWarnings(now)
+    for _, clockTime in ipairs(config.restartTimes or {}) do
+        local delta = secondsUntil(clockTime, now)
+        if delta then
+            local restartAt = now + delta
+            for _, minutes in ipairs(config.restartWarnings or {}) do
+                minutes = tonumber(minutes)
+                local key = restartAt .. ":" .. tostring(minutes)
+                if minutes and delta <= minutes * 60 and delta > minutes * 60 - 60 and not announcedWarnings[key] then
+                    announcedWarnings[key] = true
+                    announce(fill(string.gsub(config.restartMessage, "{minutes}", tostring(minutes)), nil, 0))
+                    output("Restart warning: " .. minutes .. " min before " .. clockTime .. " UTC.")
+                end
+            end
+        end
+    end
+end
+
 local busy = false
 local lastScan = nil
+local lastConfigCheck = os.time()
 LoopAsync(1000, function()
     local now = os.time()
+    if now - lastConfigCheck >= CONFIG_CHECK then
+        lastConfigCheck = now
+        local raw = io.open(DIR .. "/config.lua", "rb")
+        local text = raw and raw:read("a") or nil
+        if raw then raw:close() end
+        if text ~= configText then
+            config = loadConfig()
+            output("Settings reloaded.")
+        end
+    end
+    if not busy then
+        ExecuteInGameThread(function()
+            local ok, err = pcall(restartWarnings, now)
+            if not ok then output("Restart warning failed: " .. tostring(err)) end
+        end)
+    end
     if not busy and (lastScan == nil or now - lastScan >= SCAN_SECONDS) then
         busy, lastScan = true, now
         ExecuteInGameThread(function()
@@ -242,6 +301,6 @@ LoopAsync(1000, function()
     return false
 end)
 
-output(string.format("Active. Welcome %s, %d announcement(s) every %d min, join/leave log %s.",
+output(string.format("Active. Welcome %s, %d announcement(s) every %d min, join/leave log %s, %d restart time(s).",
     config.welcome ~= "" and "on" or "off", #(config.announcements or {}), config.intervalMinutes,
-    config.logJoinsAndLeaves and "on" or "off"))
+    config.logJoinsAndLeaves and "on" or "off", #(config.restartTimes or {})))

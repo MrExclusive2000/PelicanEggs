@@ -16,6 +16,9 @@ return [
     // Optional direct download URL for a UE4SS zip. Overrides the channel when set.
     'ue4ss_url' => env('SCUM_MANAGER_UE4SS_URL'),
 
+    // Install the mods that ship with the plugin (resources/mods) together with a fresh UE4SS install.
+    'install_bundled_mods' => (bool) env('SCUM_MANAGER_INSTALL_BUNDLED_MODS', true),
+
     // Limits for uploaded mod archives.
     'mod_upload_max_kb' => (int) env('SCUM_MANAGER_MOD_UPLOAD_MAX_KB', 51200),
     'mod_max_extracted_bytes' => 200 * 1024 * 1024,

@@ -24,7 +24,8 @@
     on the server. Admins in AdminUsers.ini, players the game itself is teleporting, falling or
     parachuting players and freshly (re)spawned characters are not checked.
 
-    Settings: config.lua in this mod's folder.
+    Settings: config.lua in this mod's folder (re-read every 30 seconds; the aim-snap check
+              is only switched on or off by a restart).
     Reports:  anticheat.log in this mod's folder, UE4SS.log, and the Pelican console when the
               PelicanConsole mod is installed.
 ]]
@@ -131,7 +132,17 @@ local function set(list, lower)
     return result
 end
 
+local configText = nil
+local function readConfigText()
+    local file = io.open(DIR .. "/config.lua", "rb")
+    if not file then return nil end
+    local text = file:read("a")
+    file:close()
+    return text
+end
+
 local function loadConfig()
+    configText = readConfigText()
     local config = {}
     for key, value in pairs(DEFAULTS) do config[key] = value end
 
@@ -878,7 +889,15 @@ local function checkAll()
 end
 
 local busy = false
+local lastConfigCheck = os.time()
 LoopAsync(1000, function()
+    if os.time() - lastConfigCheck >= 30 then
+        lastConfigCheck = os.time()
+        if readConfigText() ~= configText then
+            config = loadConfig()
+            output("Settings reloaded (action=" .. config.action .. ").")
+        end
+    end
     if not busy then
         local ok, err = pcall(refreshFiles, os.time())
         if not ok then output("Reading SCUM's files failed: " .. tostring(err)) end

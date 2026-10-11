@@ -1,13 +1,14 @@
 # SCUM Manager (Pelican plugin)
 
-Adds four pages to SCUM servers in the Pelican client area:
+Adds five pages to SCUM servers in the Pelican client area:
 
 | Page | What it does |
 |------|--------------|
 | **SCUM Admin Console** | Sends SCUM admin commands (ListPlayers, Announce, Kick...) through the PelicanConsole mod and shows the results |
 | **SCUM Settings** | Form editor for `ServerSettings.ini`, with a tab per section and search |
 | **SCUM Player Lists** | Admins, settings admins, whitelist, exclusive, banned and silenced players |
-| **SCUM Mods** | Installs or updates UE4SS, uploads mods, and turns them on/off or deletes them |
+| **SCUM Mods** | Installs or updates UE4SS and our mods, uploads mods, and turns them on/off or deletes them |
+| **SCUM Mod Settings** | Settings for our mods: player tools (chat commands, kill feed, stats, AFK, voting, starter kit), messages and restart warnings, anti-cheat |
 
 The pages only appear on SCUM servers: eggs with the `scum_manager` feature or `scum` tag, or any server whose startup command runs `SCUMServer.exe`.
 
@@ -39,6 +40,7 @@ SCUM has no official mod support yet. Server-side mods run through [UE4SS](https
 
 - **Install UE4SS:** downloads the latest UE4SS build from GitHub into `SCUM/Binaries/Win64` and extracts it. The default is the *experimental* build, which SCUM mod authors use. **Update** keeps your `mods.txt`, `mods.json` and `UE4SS-settings.ini`. The server must be stopped.
 - **SCUM-safe settings:** UE4SS turns on about sixteen engine hooks by default, and on SCUM 1.3 these crash the server as soon as a player joins. A fresh install therefore turns off every hook except `HookCallFunctionByNameWithArguments` and `HookEngineTick`, and disables the UE4SS console window. The **SCUM-safe UE4SS settings** button re-applies this to an existing install. If a mod's instructions say it needs another hook, turn that hook back on in `ue4ss/UE4SS-settings.ini`.
+- **Our mods:** PelicanConsole, PlayerTools, ServerMessages and ScumAntiCheat ship inside the plugin (`resources/mods`) and are installed and enabled together with a fresh UE4SS install. **Install our mods** installs or updates them on an existing install; each mod's `config.lua` is kept. Set `SCUM_MANAGER_INSTALL_BUNDLED_MODS=false` in the panel's `.env` to skip them on fresh installs.
 - **Upload mod:** takes the mod's `.zip` as downloaded. Any folder inside that contains `Scripts/main.lua` (Lua) or `dlls/main.dll` (C++) is installed into `ue4ss/Mods/<name>` and enabled. Paths are checked, so nothing can be written outside the mod folder.
 - **Enable/Disable:** updates `mods.txt` and `mods.json` together, and keeps `Keybinds` last, as UE4SS requires.
 - **Delete:** removes the mod's folder. UE4SS's own built-in mods can be disabled but not deleted.
@@ -50,7 +52,9 @@ Changes apply on the next server start.
 
 To run admin commands, upload the [PelicanConsole](../../mods/PelicanConsole) mod (`mods/dist/PelicanConsole.zip`) on this page and restart. Then use the **SCUM Admin Console** page: it writes the command straight into the mod's `commands.txt`, tells you whether SCUM picked it up, and shows the mod's `console.log`. The SCUM egg also forwards commands typed in the Pelican console to the same mod. See the [egg README](../../scum/README.md#console-commands).
 
-Two more ready-made mods are in [`mods/dist`](../../mods/dist): `ScumAntiCheat` (movement checks) and `ServerMessages` (welcome message, announcements, join/leave log). See the [egg README](../../scum/README.md#server-mods).
+## SCUM Mod Settings
+
+A tab per installed mod of ours, with every option of its `config.lua`. Saving rewrites `config.lua` (comments are not kept; options the page doesn't know are), and the mods pick up the change within 30 seconds, without a restart. If the file changed after you opened the page, the save is refused for that mod. See the [egg README](../../scum/README.md#server-mods) for what each mod does.
 
 ### Wine
 
@@ -71,6 +75,7 @@ The pages use Pelican's existing subuser permissions:
 | Install UE4SS | `file.create` + `file.archive` |
 | Delete mods | `file.delete` |
 | Send admin commands | `control.console` + `file.update` |
+| View / save mod settings | `file.read-content` / `file.update` |
 | Start/stop from the Settings page | `control.start` / `control.stop` |
 
 ## Limits
@@ -84,4 +89,7 @@ The parts that don't need the panel (INI editing, value types, mod lists and zip
 
 ```bash
 php plugins/scum-manager/tests/run.php
+for t in mods/*/tests/run.lua; do lua5.4 "$t"; done
 ```
+
+`plugins/build.sh` rebuilds the mod zips, copies them into `resources/mods` and builds `plugins/dist/scum-manager.zip`.

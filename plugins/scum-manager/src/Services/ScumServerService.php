@@ -340,6 +340,11 @@ class ScumServerService
             $this->disableBuiltinMods($server);
         }
 
+        // Our own mods (admin console, anti-cheat, messages, player tools) come with a fresh install.
+        if (!$current['installed'] && config('scum-manager.install_bundled_mods', true)) {
+            $this->installBundledMods($server);
+        }
+
         Activity::event('server:file.pull')
             ->property('directory', $binaries)
             ->property('url', $url)
@@ -400,6 +405,7 @@ class ScumServerService
                 'name' => $name,
                 'enabled' => $list->isEnabled($name) ?? $children->contains('enabled.txt'),
                 'builtin' => in_array($name, self::BUILTIN_MODS, true),
+                'bundled' => array_key_exists($name, self::bundledMods()),
                 'type' => $children->contains('dlls') ? 'C++' : ($children->contains('scripts') ? 'Lua' : 'Other'),
             ];
         }
@@ -449,9 +455,10 @@ class ScumServerService
     /**
      * Upload every mod found in a zip and enable it.
      *
+     * @param  bool  $keepSettings  leave an existing config.lua alone (used when updating our own mods)
      * @return list<string> installed mod names
      */
-    public function installModArchive(Server $server, string $zipPath, string $originalName): array
+    public function installModArchive(Server $server, string $zipPath, string $originalName, bool $keepSettings = false): array
     {
         $ue4ss = $this->ue4ss($server);
         if (!$ue4ss['installed']) {
@@ -471,7 +478,12 @@ class ScumServerService
 
             foreach ($archive->mods() as $mod) {
                 foreach ($mod['files'] as $relative => $index) {
-                    $this->files($server)->putContent($ue4ss['mods'] . '/' . $mod['name'] . '/' . $relative, $archive->contents($index));
+                    $path = $ue4ss['mods'] . '/' . $mod['name'] . '/' . $relative;
+                    if ($keepSettings && $relative === 'config.lua' && $this->read($server, $path) !== null) {
+                        continue;
+                    }
+
+                    $this->files($server)->putContent($path, $archive->contents($index));
                 }
 
                 $list->setEnabled($mod['name'], true);
@@ -489,6 +501,66 @@ class ScumServerService
             ->log();
 
         return $installed;
+    }
+
+    /** @return array<string, string> mod name => zip path, for the mods that ship with this plugin */
+    public static function bundledMods(): array
+    {
+        $mods = [];
+        foreach (glob(dirname(__DIR__, 2) . '/resources/mods/*.zip') ?: [] as $zip) {
+            $mods[basename($zip, '.zip')] = $zip;
+        }
+        ksort($mods);
+
+        return $mods;
+    }
+
+    /**
+     * Install or update the mods that ship with this plugin. Existing settings are kept.
+     *
+     * @return list<string> installed mod names
+     */
+    public function installBundledMods(Server $server): array
+    {
+        $installed = [];
+        foreach (self::bundledMods() as $name => $zip) {
+            array_push($installed, ...$this->installModArchive($server, $zip, "$name.zip", keepSettings: true));
+        }
+
+        return $installed;
+    }
+
+    /**
+     * Which of the given mods are installed (have a folder in the mods directory).
+     *
+     * @param  list<string>  $names
+     * @return list<string>
+     */
+    public function installedModsOf(Server $server, array $names): array
+    {
+        $ue4ss = $this->ue4ss($server);
+        if (!$ue4ss['installed']) {
+            return [];
+        }
+
+        $folders = collect($this->listDirectory($server, $ue4ss['mods']))->where('directory', true)->pluck('name')->all();
+
+        return array_values(array_filter($names, fn (string $name) => in_array($name, $folders, true)));
+    }
+
+    /** A mod's config.lua, or null when it has none. */
+    public function modConfig(Server $server, string $mod): ?string
+    {
+        $this->assertModName($mod);
+
+        return $this->read($server, $this->ue4ss($server)['mods'] . "/$mod/config.lua");
+    }
+
+    public function writeModConfig(Server $server, string $mod, string $contents): void
+    {
+        $this->assertModName($mod);
+
+        $this->write($server, $this->ue4ss($server)['mods'] . "/$mod/config.lua", $contents);
     }
 
     private function modList(Server $server, string $modsDir): ModList

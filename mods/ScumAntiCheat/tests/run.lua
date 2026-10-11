@@ -477,6 +477,11 @@ check("defaults used", has(acLog(), "action=log"))
 start([[return { action = "nuke" }]])
 check("unknown action falls back to log", has(acLog(), "Unknown action 'nuke'"))
 
+-- Settings are re-read while the server runs.
+write(dir .. "/config.lua", 'return { action = "kick" }')
+step(31)
+check("settings reloaded", has(acLog(), "Settings reloaded (action=kick)."))
+
 os.execute("rm -rf '" .. tmp .. "'")
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))
 os.exit(failures == 0 and 0 or 1)

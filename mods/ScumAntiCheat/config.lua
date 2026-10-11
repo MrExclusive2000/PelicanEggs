@@ -1,4 +1,5 @@
--- ScumAntiCheat settings. Edit, then restart the server.
+-- ScumAntiCheat settings. Edit here or on the SCUM Manager "SCUM Mod Settings" page.
+-- Changes are picked up within 30 seconds (turning aimSnap on or off needs a restart).
 -- Distances are in metres, speeds in metres per second (1 m/s = 3.6 km/h).
 return {
     -- What happens when a player reaches strikesToAct (or trips an instant check):
