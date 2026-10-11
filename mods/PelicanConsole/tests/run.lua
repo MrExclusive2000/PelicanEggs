@@ -145,6 +145,20 @@ dofile(strayPath)
 check("unknown folder disables the mod", loopCallback == nil)
 check("unknown folder reported", string.find(table.concat(log), "Could not work out the mod folder", 1, true) ~= nil)
 
+-- UE4SS can name the script relative to its own folder ("Mods/...") while the game runs
+-- from Binaries/Win64, where the mod lives under ue4ss/Mods. Files must still land in the mod.
+if io.open("ue4ss") == nil then
+    os.execute("mkdir -p ue4ss/Mods/PelicanConsole/Scripts")
+    assert(io.open("ue4ss/Mods/PelicanConsole/Scripts/main.lua", "w")):write(source):close()
+    log, loopCallback = {}, nil
+    assert(load(source, "@Mods/PelicanConsole/Scripts/main.lua"))()
+    local handle = io.open("ue4ss/Mods/PelicanConsole/console.log")
+    check("relative script path resolved to ue4ss/Mods", handle ~= nil)
+    if handle then handle:close() end
+    check("mod folder printed", string.find(table.concat(log), "Mod folder: ue4ss/Mods/PelicanConsole", 1, true) ~= nil)
+    os.execute("rm -rf ue4ss")
+end
+
 os.execute("rm -rf '" .. tmp .. "'")
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))
 os.exit(failures == 0 and 0 or 1)
