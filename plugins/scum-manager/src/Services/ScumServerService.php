@@ -334,6 +334,11 @@ class ScumServerService
             $this->applyScumSafeUe4ssSettings($server);
         }
 
+        // The built-in mods are client tools (console, cheat manager, keybinds). Off by default on a server.
+        if (!isset($preserved[$current['mods'] . '/mods.txt'])) {
+            $this->disableBuiltinMods($server);
+        }
+
         Activity::event('server:file.pull')
             ->property('directory', $binaries)
             ->property('url', $url)
@@ -355,6 +360,21 @@ class ScumServerService
     }
 
     // ------------------------------------------------------------------ mods
+
+    /** Turn off every mod that ships with UE4SS. None of them do anything useful on a dedicated server. */
+    public function disableBuiltinMods(Server $server): void
+    {
+        $ue4ss = $this->ue4ss($server);
+        $list = $this->modList($server, $ue4ss['mods']);
+
+        foreach (array_keys($list->all()) as $name) {
+            if (in_array($name, self::BUILTIN_MODS, true)) {
+                $list->setEnabled($name, false);
+            }
+        }
+
+        $this->saveModList($server, $ue4ss['mods'], $list);
+    }
 
     /** @return list<array{name: string, enabled: bool, builtin: bool, type: string}> */
     public function mods(Server $server): array

@@ -41,6 +41,7 @@ SCUM has no official mod support yet. Server-side mods run through [UE4SS](https
 - **Upload mod:** takes the mod's `.zip` as downloaded. Any folder inside that contains `Scripts/main.lua` (Lua) or `dlls/main.dll` (C++) is installed into `ue4ss/Mods/<name>` and enabled. Paths are checked, so nothing can be written outside the mod folder.
 - **Enable/Disable:** updates `mods.txt` and `mods.json` together, and keeps `Keybinds` last, as UE4SS requires.
 - **Delete:** removes the mod's folder. UE4SS's own built-in mods can be disabled but not deleted.
+- **Built-in mods off:** UE4SS ships client tools: the console, a cheat manager that hooks every player spawn, keybinds, and the Blueprint mod loader. A fresh install turns them all off, and **Disable built-in mods** does the same for an existing install. Re-enable `BPModLoaderMod` and `BPML_GenericFunctions` only if a mod says it needs them.
 
 Changes apply on the next server start.
 

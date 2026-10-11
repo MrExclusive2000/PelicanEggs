@@ -267,6 +267,25 @@ class ScumModsPage extends Page implements HasTable
                         Notification::make()->title('Could not update UE4SS-settings.ini')->body($exception->getMessage())->danger()->send();
                     }
                 }),
+            Action::make('disable_builtins')
+                ->label('Disable built-in mods')
+                ->icon('tabler-toggle-left')
+                ->color('gray')
+                ->visible(fn () => $this->ue4ss['installed'] ?? false)
+                ->authorize(fn () => user()?->can(SubuserPermission::FileUpdate, $this->getServer()))
+                ->requiresConfirmation()
+                ->modalHeading('Disable the mods that ship with UE4SS?')
+                ->modalDescription('They are client tools: the in-game console, the cheat manager (which hooks every player spawn), keybinds and the Blueprint mod loader. None are needed on a dedicated server. Your own mods are not touched. Re-enable BPModLoaderMod and BPML_GenericFunctions only if a mod says it needs them. Restart the server to apply.')
+                ->action(function (ScumServerService $service) {
+                    try {
+                        $service->disableBuiltinMods($this->getServer());
+
+                        Notification::make()->title('Built-in mods disabled')->body('Restart the server to apply.')->success()->send();
+                    } catch (Exception $exception) {
+                        report($exception);
+                        Notification::make()->title('Could not update mods.txt')->body($exception->getMessage())->danger()->send();
+                    }
+                }),
             Action::make('open_folder')
                 ->label('Open folder')
                 ->icon('tabler-folder-open')
