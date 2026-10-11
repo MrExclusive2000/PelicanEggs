@@ -342,18 +342,19 @@ login("76561198000000007", "Reported")
 players = { banMe, reported }
 tick()
 write(gameLogDir .. "/violations_1.log", utf16("2026.10.11-12.40.00: Ammo count mismatch 76561198000000007\n"), "a")
-write(gameLogDir .. "/admin_1.log", "2026.10.11-12.40.00: '76561198000000001:Admin(1)' Command: 'ListPlayers'\n", "a")
+write(gameLogDir .. "/admin_1.log", "2026.10.11-12.39.00: Game version: 1.3.4.2.161892\n2026.10.11-12.40.00: '76561198000000001:Admin(1)' Command: 'ListPlayers'\n", "a")
 banMe.pawn.x = 1000
 step()
 text = acLog()
 check("ban action bans immediately", has(read(configDir .. "/BannedUsers.ini"), "76561198000000006"))
 check("game violation shown (UTF-16 decoded)", has(text, "SCUM violation: 2026.10.11-12.40.00: Ammo count mismatch 76561198000000007"))
+check("admin log header skipped", not has(text, "Game version"))
 check("admin command shown", has(text, "SCUM admin command: 2026.10.11-12.40.00: '76561198000000001:Admin(1)' Command: 'ListPlayers'"))
 check("game violation counted as strike", has(text, "Reported (76561198000000007): SCUM reported:"))
 
 -- A new game log file (after SCUM rotates it) is read from the start.
 gameLogFiles.violations_ = "violations_2.log"
-write(gameLogDir .. "/violations_2.log", "first line of new file\n")
+write(gameLogDir .. "/violations_2.log", "first line of new file 76561198000000008\n")
 step(61)
 check("new game log read in full", has(acLog(), "SCUM violation: first line of new file"))
 

@@ -33,22 +33,9 @@ local function safe(fn, ...)
     return nil
 end
 
--- UE4SS may give the script path relative to its own folder (ue4ss/) while the game's
--- working folder is Binaries/Win64, so check which candidate really holds this script.
 local function modDir()
     local source = string.gsub(debug.getinfo(1, "S").source or "", "^@", "")
-    local dir = string.match(source, "^(.*)[/\\]Scripts[/\\]main%.lua$")
-    if dir == nil then return nil end
-    local name = string.match(dir, "([^/\\]+)$") or dir
-    local candidates = { dir, "ue4ss/" .. dir, "ue4ss/Mods/" .. name, "Mods/" .. name }
-    for _, candidate in ipairs(candidates) do
-        local file = io.open(candidate .. "/Scripts/main.lua", "r")
-        if file ~= nil then
-            file:close()
-            return candidate
-        end
-    end
-    return dir
+    return string.match(source, "^(.*)[/\\]Scripts[/\\]main%.lua$")
 end
 
 local DIR = modDir()
