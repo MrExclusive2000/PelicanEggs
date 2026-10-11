@@ -74,6 +74,20 @@ The console then shows `[PelicanConsole] Ran: #ListPlayers` and SCUM's own reply
 
 The mod calls SCUM's `MiscStatics.Test_ProcessAdminCommand`, an internal function SCUM's developers use for testing. Try a harmless command first, and expect a SCUM update to rename or remove it.
 
+## Server mods
+
+Ready-made UE4SS mods in [`mods/dist`](../mods/dist), uploaded on the **SCUM Mods** page:
+
+| Mod | What it does |
+|-----|--------------|
+| `PelicanConsole.zip` | Runs admin commands typed in the Pelican console (above) |
+| `ScumAntiCheat.zip` | Flags or kicks players moving faster than possible or teleporting. It only logs until you set `action = "kick"` in its `config.lua` |
+| `ServerMessages.zip` | Welcome message, rotating announcements, join/leave log |
+
+Each mod has a `config.lua` in `SCUM/Binaries/Win64/ue4ss/Mods/<Mod>/`. Restart after editing it. The mods report in the Pelican console when PelicanConsole is installed.
+
+For restart warnings, use a Pelican schedule: a **Send command** task with `Announce Server restarts in 10 minutes`, then a **Restart** power action 10 minutes later.
+
 ## Troubleshooting
 
 - **The server runs but doesn't show in the server browser:**
