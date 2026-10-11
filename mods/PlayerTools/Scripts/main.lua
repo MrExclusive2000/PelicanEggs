@@ -194,8 +194,15 @@ local function newTail(path, fromEnd)
 end
 
 local function readTail(tail)
-    local file = io.open(tail.path, "rb")
-    if not file then return {} end
+    local file, err = io.open(tail.path, "rb")
+    if not file then
+        -- Said once per file, so a log SCUM keeps locked does not fail silently.
+        if not tail.reportedOpen then
+            tail.reportedOpen = true
+            output("Could not open " .. tail.path .. ": " .. tostring(err))
+        end
+        return {}
+    end
     local size = file:seek("end") or 0
     if tail.offset == nil or size < tail.offset then
         tail.offset = (tail.offset == nil and tail.fromEnd) and size or 0
@@ -389,9 +396,22 @@ local function handleKillLine(line)
     pendingKills[#pendingKills + 1] = kill
 end
 
+local chatLinesShown, unreadChatShown = 0, 0
+
 local function handleChatLine(line)
     local chat = parseChat(line)
-    if chat == nil then return end
+    -- The first few chat lines are logged as-is, so a problem with SCUM's chat log shows up.
+    if chatLinesShown < 3 and string.find(line, "%S") then
+        chatLinesShown = chatLinesShown + 1
+        output("Chat log line: " .. line)
+    end
+    if chat == nil then
+        if unreadChatShown < 5 and string.find(line, "'") then
+            unreadChatShown = unreadChatShown + 1
+            output("Could not read chat line: " .. line)
+        end
+        return
+    end
     if chat.name then steamIdByName[chat.name] = chat.steamId end
     local prefix = config.chatCommands.prefix or "!"
     if string.sub(chat.text, 1, #prefix) == prefix then
