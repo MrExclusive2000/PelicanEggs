@@ -38,6 +38,7 @@ local FALLING_SPEED = 5       -- m/s downwards; above this the horizontal speed 
 local HOVER_SPEED = 1         -- m/s; slower vertical movement than this while falling is hovering
 local SETTLE_SECONDS = 5      -- seconds after getting into or out of a vehicle before movement counts
 local MAX_SAMPLE_GAP = 5      -- seconds; older samples are discarded instead of compared
+local VEHICLE_REPORT_COOLDOWN = 30   -- seconds between reports of the same vehicle glitch
 local REPEAT_COOLDOWN = 5     -- seconds between strikes for the same continuous violation
 local FILE_REFRESH = 60       -- seconds between re-reading AdminUsers.ini and looking for new game logs
 local MAX_READ = 1024 * 1024  -- bytes read from a log per second
@@ -62,6 +63,7 @@ local DEFAULTS = {
     hoverSeconds = 8,
     mapBounds = { minX = -9548, maxX = 6692, minY = -9548, maxY = 6692, minZ = -300 },
     vehicleMapMargin = 3000,
+    vehicleMovementStrikes = false,
     ignoreAdmins = true,
     ignoreNames = {},
     ignoreSteamIds = {},
@@ -503,6 +505,17 @@ local function movementMode(pawn)
     return type(mode) == "number" and mode or nil
 end
 
+local MOVE_NONE = 0   -- no movement of its own, e.g. a ragdolling body
+
+-- SCUM's own flags where this build has them, and otherwise a character with no movement mode.
+local function knockedOut(pawn)
+    if not isCharacter(pawn) then return false end
+    for _, method in ipairs({ "IsUnconscious", "IsKnockedOut", "IsRagdolling", "IsInRagdoll" }) do
+        if isTrue(pawn, method) then return true end
+    end
+    return movementMode(pawn) == MOVE_NONE
+end
+
 local function location(pawn)
     local vector = safe(function() return pawn:K2_GetActorLocation() end)
     if vector == nil then return nil end
@@ -823,8 +836,23 @@ local function checkMovement(player, controller, pawn, position, previous, elaps
     -- A teleport is a jump further than the fastest legal movement could cover since the last
     -- check (a plane covers a lot of ground when the server stalls for a few seconds).
     local fastest = vehicle and config.maxVehicleSpeed or config.maxFootSpeed
+    -- SCUM's vehicle physics glitch a lot (rubber-banding, flips, the server snapping a car
+    -- back), which looks just like teleporting or speeding. In a vehicle these are only
+    -- reported, unless vehicleMovementStrikes is on.
+    local function flag(kind, reason)
+        if vehicle and not config.vehicleMovementStrikes then
+            local last = player.lastReport and player.lastReport[kind]
+            if last and time - last < VEHICLE_REPORT_COOLDOWN then return end
+            player.lastReport = player.lastReport or {}
+            player.lastReport[kind] = time
+            output("Possible vehicle glitch, not counted as a strike: " .. describe(player) .. ": " .. reason)
+        else
+            strike(player, controller, reason, time)
+        end
+    end
+
     if config.checks.teleport and distance >= config.teleportDistance + fastest * elapsed then
-        strike(player, controller, string.format("teleported %.0f m in %.1f s %s", distance, elapsed, where), time)
+        flag("teleport", string.format("teleported %.0f m in %.1f s %s", distance, elapsed, where))
         return
     end
 
@@ -832,8 +860,8 @@ local function checkMovement(player, controller, pawn, position, previous, elaps
         local limit = vehicle and config.maxVehicleSpeed or config.maxFootSpeed
         local speed = distance / elapsed
         if speed > limit then
-            strike(player, controller, string.format("moving %.1f m/s %s (limit %d) %s",
-                speed, vehicle and "in a vehicle" or "on foot", limit, where), time)
+            flag("speed", string.format("moving %.1f m/s %s (limit %d) %s",
+                speed, vehicle and "in a vehicle" or "on foot", limit, where))
         end
     end
 end
@@ -884,6 +912,14 @@ local function check(controller, time, seen)
     if previous ~= nil and (elapsed <= 0 or elapsed > MAX_SAMPLE_GAP) then
         previous = nil
         player.flyingSince, player.hoverSince = nil, nil
+    end
+
+    -- Unconscious (passed out, knocked out) bodies ragdoll: physics throws them about, out of
+    -- vehicles too. Nothing counts until they have been back in control for a few seconds.
+    if knockedOut(pawn) then
+        player.flyingSince, player.hoverSince = nil, nil
+        player.settleUntil = time + SETTLE_SECONDS
+        return
     end
 
     -- A passenger's character rides along attached to the vehicle and its position jumps

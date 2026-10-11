@@ -270,7 +270,7 @@ step(4)
 check("plane flying fast and high not flagged", not has(acLog(), "Pilot"))
 pilot.pawn.x = pilot.pawn.x + 900
 step()
-check("jump no plane could make flagged", has(acLog(), "Pilot: teleported 900 m"))
+check("jump no plane could make reported", has(acLog(), "Possible vehicle glitch, not counted as a strike: Pilot: teleported 900 m"))
 
 -- Vehicles get extra room past the map edge; on foot the edge is where it is.
 local flyer = Player("Flyer", Pawn("BPC_Airplane_C", 6600, 0, 1500))
@@ -288,6 +288,36 @@ step()
 flyer.teleporting = false
 for _ = 1, 3 do flyer.pawn.x = flyer.pawn.x + 80 step() end
 check("plane far past the margin flagged", has(acLog(), "Flyer: outside the map"))
+
+-- A glitching car jumps about: reported, but not a strike unless vehicleMovementStrikes is on.
+local glitcher = Player("Glitcher", Pawn("BPC_Rager_C", 0, -3000, 0))
+players = { glitcher }
+tick()
+glitcher.pawn.x = 900
+step()
+glitcher.pawn.x = 0
+step()
+check("car glitch reported", has(acLog(), "Possible vehicle glitch, not counted as a strike: Glitcher"))
+check("car glitch not a strike", not string.find(acLog(), "Glitcher: teleported[^\n]*%[strike"))
+
+-- A passed-out body ragdolls (no movement mode of its own) and gets thrown out of the car.
+local sleeper = Player("Sleeper", Pawn("BP_Prisoner_C", 0, -4000, 0))
+players = { sleeper }
+tick()
+sleeper.pawn.CharacterMovement.MovementMode = 0
+sleeper.pawn.x = 900
+step()
+sleeper.pawn.x = 1800
+step()
+sleeper.pawn.CharacterMovement.MovementMode = 1
+step()
+sleeper.pawn.x = 1805
+step()
+check("unconscious body thrown about not flagged", not has(acLog(), "Sleeper"))
+step(5)
+sleeper.pawn.x = 3000
+step()
+check("teleport after waking up still flagged", has(acLog(), "Sleeper: teleported"))
 
 -- Admin rights without being in AdminUsers.ini.
 local rogue = Player("Rogue", Pawn("BP_Prisoner_C", 0, 0, 0))

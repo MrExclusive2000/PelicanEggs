@@ -47,6 +47,9 @@ return {
     mapBounds = { minX = -9548, maxX = 6692, minY = -9548, maxY = 6692, minZ = -300 },
     -- Extra metres past those bounds allowed in a vehicle (planes and boats can stray off the island).
     vehicleMapMargin = 3000,
+    -- Speed and teleport checks in vehicles are only reported (SCUM's car physics glitch a lot).
+    -- true counts them as strikes like on foot.
+    vehicleMovementStrikes = false,
 
     -- Real admins (listed in AdminUsers.ini) are never checked. Neither are these.
     ignoreAdmins = true,

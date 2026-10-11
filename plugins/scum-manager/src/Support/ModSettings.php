@@ -273,6 +273,7 @@ final class ModSettings
                         'maxVehicleSpeed' => ['int', 'Max speed in vehicles (m/s)', 120],
                         'teleportDistance' => ['int', 'Teleport distance (m)', 300],
                         'vehicleMapMargin' => ['int', 'Extra room past the map edge in vehicles (m)', 3000],
+                        'vehicleMovementStrikes' => ['toggle', 'Count speed and teleports in vehicles as strikes (off: only reported, car glitches are common)', false],
                         'flyingSeconds' => ['int', 'Flying for (s)', 10],
                         'hoverSeconds' => ['int', 'Hovering for (s)', 8],
                     ],
