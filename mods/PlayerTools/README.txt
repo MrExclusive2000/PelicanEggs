@@ -39,8 +39,10 @@ Quality-of-life features for SCUM players:
                  with "Add a place where a player stands" on the Admin Console.
 
 Experimental (found by the probe, not yet confirmed on a live server; off unless set):
- - Item lists for the starter kit, hourly rewards and the daily bonus: items go straight
-   into the player's inventory (or at their feet when it is full), no admin needed.
+ - Item lists for the starter kit, hourly rewards, the daily bonus, manhunt and King of the
+   Hill: items go straight into the player's inventory (or at their feet when it is full),
+   no admin needed. One switch turns all item giving on or off: itemRewards.enabled
+   ("Item rewards" on the settings page). Off by default.
  - teleports.method = "direct": moves the player without an admin.
  - checkBalance (bounties, teleports): reads the player's money first and refuses what they
    cannot pay. Turn it on for bounties before allowing player bounties.

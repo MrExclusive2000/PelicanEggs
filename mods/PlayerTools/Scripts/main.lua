@@ -55,7 +55,7 @@ local DEFAULTS = {
     newPlayers = { messages = {}, starterKit = false, starterKitItems = {}, starterKitCommands = {}, starterKitMessage = "" },
     welcomeBack = { enabled = true, message = "Welcome back {name}! {hours} played, {kills} kills, {deaths} deaths." },
     playtimeRewards = {
-        enabled = true, everyMinutes = 60,
+        enabled = true, everyMinutes = 60, dailyEnabled = true,
         commands = { "ChangeCurrencyBalance Normal 100 {steamId}" },
         message = "+100 cash for an hour on the server. Thanks for playing!",
         dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" },
@@ -83,6 +83,7 @@ local DEFAULTS = {
     info = { enabled = true, lines = {} },
     reports = { enabled = true, cooldownSeconds = 60 },
     featureTips = { onJoin = true, announceEveryMinutes = 20, extraTips = {} },
+    itemRewards = { enabled = false },
     deathRecap = { enabled = true, message = "You were killed by {killer} with {weapon} from {distance} m." },
     hotspots = {
         enabled = true, kills = 3, withinMinutes = 5, radius = 500, cooldownMinutes = 10,
@@ -775,10 +776,24 @@ local function canAfford(session, price, check)
     return true
 end
 
+local classesByName = nil   -- every loaded class by short name, built on the first miss
+
 local function findItemClass(name)
-    for _, candidate in ipairs({ name, name .. "_C", "BP_" .. name .. "_C", "BP_" .. name }) do
+    local candidates = { name, name .. "_C", "BP_" .. name .. "_C", "BP_" .. name }
+    for _, candidate in ipairs(candidates) do
         local found = safe(function() return FindObject("BlueprintGeneratedClass", candidate) end)
         if isValid(found) then return found, candidate end
+    end
+    -- FindObject by short name does not work on every UE4SS build: look through the classes.
+    if classesByName == nil then
+        classesByName = {}
+        for _, class in pairs(safe(function() return FindObjects(0, "Class", nil, 0, 0, false) end) or {}) do
+            local short = safe(function() return class:GetFName():ToString() end)
+            if short then classesByName[short] = class end
+        end
+    end
+    for _, candidate in ipairs(candidates) do
+        if isValid(classesByName[candidate]) then return classesByName[candidate], candidate end
     end
     return nil
 end
@@ -786,7 +801,8 @@ end
 -- Gives { { item = "Water_05l", amount = 2 }, ... } to the player. Items go into the inventory,
 -- or at the player's feet when there is no room. Returns the number given, or nil and why.
 local function giveItems(session, items)
-    if items == nil or #items == 0 then return 0 end
+    -- Item rewards have one switch for everything (starter kit, rewards, events).
+    if not config.itemRewards.enabled or items == nil or #items == 0 then return 0 end
     local pawn = characterOf(session.controller)
     local at = pawn and location(pawn)
     if at == nil then return nil, "the player has no character" end
@@ -1081,7 +1097,8 @@ local function featureTips()
     if rewards.enabled and (#(rewards.commands or {}) > 0 or #(rewards.items or {}) > 0) then
         features[#features + 1] = "playtime rewards"
         tips[#tips + 1] = string.format("You earn a reward for every %d minutes played%s.", tonumber(rewards.everyMinutes) or 60,
-            (#(rewards.dailyCommands or {}) > 0 or #(rewards.dailyItems or {}) > 0) and ", plus a daily login bonus" or "")
+            rewards.dailyEnabled ~= false and (#(rewards.dailyCommands or {}) > 0 or #(rewards.dailyItems or {}) > 0)
+                and ", plus a daily login bonus" or "")
     end
     if config.voting.enabled and commands then
         local names = {}
@@ -1579,7 +1596,8 @@ local function newPlayerCheck(session, time)
             name = session.name, steamId = session.steamId,
             location = position and string.format("X=%.0f Y=%.0f Z=%.0f", position.x, position.y, position.z + 50) or "",
         }
-        if #(kit.starterKitCommands or {}) == 0 and #(kit.starterKitItems or {}) == 0 then
+        local kitItems = config.itemRewards.enabled and (kit.starterKitItems or {}) or {}
+        if #(kit.starterKitCommands or {}) == 0 and #kitItems == 0 then
             session.newChecked = true
             return
         end
@@ -1616,14 +1634,16 @@ local function rewardCheck(session, time)
 
     local rewards = config.playtimeRewards
     if rewards.enabled then
-        local hasDaily = #(rewards.dailyCommands or {}) > 0 or #(rewards.dailyItems or {}) > 0
+        local itemsOn = config.itemRewards.enabled
+        local hasDaily = rewards.dailyEnabled ~= false
+            and (#(rewards.dailyCommands or {}) > 0 or (itemsOn and #(rewards.dailyItems or {}) > 0))
         if hasDaily and entry.daily ~= today(time) and giveReward(session, rewards.dailyCommands, rewards.dailyItems, values) then
             entry.daily = today(time)
             recordsDirty = true
             if (rewards.dailyMessage or "") ~= "" then tell(session, fill(rewards.dailyMessage, values)) end
         end
         local every = (tonumber(rewards.everyMinutes) or 0) * 60
-        local hasReward = #(rewards.commands or {}) > 0 or #(rewards.items or {}) > 0
+        local hasReward = #(rewards.commands or {}) > 0 or (itemsOn and #(rewards.items or {}) > 0)
         if every > 0 and hasReward and entry.playtime - (entry.rewarded or 0) >= every
             and giveReward(session, rewards.commands, rewards.items, values) then
             entry.rewarded = (entry.rewarded or 0) + every

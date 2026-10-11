@@ -312,12 +312,20 @@ local function teleportPlayer(text)
     end
 end
 
+local itemClasses = {}   -- class name -> class, from the last item scan
+local scanItems          -- defined with the item list below
+
 -- Item classes are Blueprints such as BP_Weapon_AK47_C. Look among the classes the game has loaded.
 local function findItemClass(name)
     local candidates = { name, name .. "_C", "BP_" .. name .. "_C", "BP_" .. name }
     for _, candidate in ipairs(candidates) do
         local found = safe(function() return FindObject("BlueprintGeneratedClass", candidate) end)
         if isValid(found) then return found, candidate end
+    end
+    -- FindObject by short name does not work on every UE4SS build: use the item scan.
+    if next(itemClasses) == nil then scanItems() end
+    for _, candidate in ipairs(candidates) do
+        if isValid(itemClasses[candidate]) then return itemClasses[candidate], candidate end
     end
     return nil
 end
@@ -326,51 +334,84 @@ end
 -- Manager reads it to offer item dropdowns.
 local ITEMS_FILE = DIR and (DIR .. "/items.txt") or nil
 
-local function isItemClass(class)
+local NOT_AN_ITEM = { "^ABP_", "^WBP_", "^UI_", "^SKEL_", "^REINST_", "^Default__", "Component", "AnimBP", "Widget" }
+
+-- True / false from the class's parents (needs UE4SS's GetSuperStruct), or nil when unknown.
+local function derivesFromItem(class)
     local current = class
-    for _ = 1, 15 do
-        current = safe(function() return current:GetSuperStruct() end)
-        if not isValid(current) then return false end
-        local name = safe(function() return current:GetFName():ToString() end)
+    for depth = 1, 15 do
+        local ok, parent = pcall(function() return current:GetSuperStruct() end)
+        if not ok then
+            if depth == 1 then return nil end   -- this UE4SS cannot read parents
+            return false
+        end
+        if not isValid(parent) then return false end
+        local name = safe(function() return parent:GetFName():ToString() end)
         if name == "Item" then return true end
+        current = parent
     end
     return false
 end
 
-local function writeItemList(quiet)
-    local names = {}
-    local classes = safe(function() return FindObjects(0, "BlueprintGeneratedClass", nil, 0, 0, false) end) or {}
+-- Every loaded item class. Items live under /Game/ConZ_Files/Items/; where UE4SS can read a
+-- class's parents, only classes deriving from SCUM's Item count.
+scanItems = function()
+    local classes = safe(function() return FindObjects(0, "Class", nil, 0, 0, false) end) or {}
+    local names, byParent, byFolder = {}, 0, 0
+    itemClasses = {}
     for _, class in pairs(classes) do
         local name = safe(function() return class:GetFName():ToString() end)
-        if name and not string.find(name, "^SKEL_") and not string.find(name, "^REINST_") and isItemClass(class) then
-            names[#names + 1] = name
+        local path = safe(function() return class:GetFullName() end) or ""
+        local skip = name == nil
+        for _, pattern in ipairs(NOT_AN_ITEM) do
+            if name and string.find(name, pattern) then skip = true end
+        end
+        if not skip then
+            local isItem = derivesFromItem(class)
+            if isItem == true then
+                byParent = byParent + 1
+            elseif isItem == nil and string.find(path, "/ConZ_Files/Items/", 1, true) and string.find(name, "_C$") then
+                isItem = true
+                byFolder = byFolder + 1
+            end
+            if isItem then
+                names[#names + 1] = name
+                itemClasses[name] = class
+            end
         end
     end
     table.sort(names)
+    return names, #classes, byParent, byFolder
+end
+
+local function writeItemList(quiet)
+    local names, scanned, byParent, byFolder = scanItems()
     if #names == 0 then
-        if not quiet then output("No item classes found yet. Try again once the server is fully online.") end
+        if not quiet then output("No item classes found (" .. scanned .. " classes checked). Try ListItems again once the server is fully online.") end
         return false
     end
     local file = io.open(ITEMS_FILE, "w")
-    if file == nil then return false end
+    if file == nil then
+        output("Could not write " .. tostring(ITEMS_FILE) .. ".")
+        return false
+    end
     file:write(table.concat(names, "\n") .. "\n")
     file:close()
-    output("Item list written: " .. #names .. " items (items.txt).")
+    output(string.format("Item list written: %d items from %d classes (%d by parent class, %d by folder). Refresh SCUM Manager to see them.",
+        #names, scanned, byParent, byFolder))
     return true
 end
 
 local function findItems(text)
     local lowered = string.lower(trim(text))
     if lowered == "" then return output("Usage: FindItem <part of an item name>") end
+    local names = scanItems()
     local matches = {}
-    local classes = safe(function() return FindObjects(0, "BlueprintGeneratedClass", nil, 0, 0, false) end) or {}
-    for _, class in pairs(classes) do
-        local name = safe(function() return class:GetFName():ToString() end)
-        if name and string.find(string.lower(name), lowered, 1, true) then matches[#matches + 1] = name end
+    for _, name in ipairs(names) do
+        if string.find(string.lower(name), lowered, 1, true) then matches[#matches + 1] = name end
     end
-    table.sort(matches)
-    if #matches == 0 then return output("No loaded class matches \"" .. text .. "\".") end
-    output(#matches .. " loaded class(es) match \"" .. text .. "\"" .. (#matches > 40 and ", first 40:" or ":"))
+    if #matches == 0 then return output("No item matches \"" .. text .. "\" (" .. #names .. " items loaded).") end
+    output(#matches .. " item(s) match \"" .. text .. "\"" .. (#matches > 40 and ", first 40:" or ":"))
     for index = 1, math.min(40, #matches) do output("  " .. matches[index]) end
 end
 
@@ -608,7 +649,9 @@ LoopAsync(1000, function()
             if worldSeenAt == nil and findFirst(GAME_MODE_CLASSES) then worldSeenAt = now end
             if worldSeenAt and now - worldSeenAt >= 60 + itemTries * 60 then
                 itemTries = itemTries + 1
-                local ok, written = pcall(writeItemList, true)
+                -- Only report a failure on the last try; a list is reported whenever it is written.
+                local ok, written = pcall(writeItemList, itemTries < 10)
+                if not ok then output("Writing the item list failed: " .. tostring(written)) end
                 itemsWritten = ok and written
             end
         end)

@@ -224,8 +224,10 @@ local function ExpPlayer(name)
 end
 local waterClass = object({ name = "BP_Water_05l_C" })
 function waterClass:GetFName() return { ToString = function() return "BP_Water_05l_C" end } end
+function waterClass:GetFullName() return "BlueprintGeneratedClass /Game/ConZ_Files/Items/Water/BP_Water_05l.BP_Water_05l_C" end
 local otherClass = object()
 function otherClass:GetFName() return { ToString = function() return "BP_Weapon_AK47_C" end } end
+function otherClass:GetFullName() return "BlueprintGeneratedClass /Game/ConZ_Files/Weapons/BP_Weapon_AK47.BP_Weapon_AK47_C" end
 function FindObject(className, name)
     assert(className == "BlueprintGeneratedClass")
     if name == "BP_Water_05l_C" then return waterClass end
@@ -264,7 +266,7 @@ loopCallback()
 check("teleport usage", string.find(lastLine(), "Usage: TeleportPlayer", 1, true) ~= nil and #teleports == 1)
 writeCommands("FindItem water\n")
 loopCallback()
-check("find item", string.find(consoleLog(), "1 loaded class(es) match \"water\":", 1, true) ~= nil and string.find(consoleLog(), "  BP_Water_05l_C", 1, true) ~= nil)
+check("find item", string.find(consoleLog(), "1 item(s) match \"water\":", 1, true) ~= nil and string.find(consoleLog(), "  BP_Water_05l_C", 1, true) ~= nil)
 writeCommands("GiveItem Mr Exclusive Water_05l 2\n")
 loopCallback()
 check("give item spawned at the player", #spawned == 2 and spawned[1].at.Z == 350 and spawned[1].actor.finished)
@@ -329,23 +331,40 @@ FindAllOf = oldFindAll
 FindObjects = savedFindObjects
 
 
--- Item list for SCUM Manager's dropdowns: only classes deriving from SCUM's Item.
+-- Item list for SCUM Manager's dropdowns: classes deriving from SCUM's Item, or (when UE4SS
+-- cannot read parents) classes in /Game/ConZ_Files/Items/.
 local itemBase = object()
 function itemBase:GetFName() return { ToString = function() return "Item" end } end
-local function Class(name, super)
+local function Class(name, super, path)
     local class = object()
     function class:GetFName() return { ToString = function() return name end } end
-    function class:GetSuperStruct() return super end
+    function class:GetFullName() return "BlueprintGeneratedClass " .. (path or "/Game/Other/") .. name end
+    if super ~= false then function class:GetSuperStruct() return super end end
     return class
 end
 local foodBase = Class("FoodItem", itemBase)
 local loadedClasses = { Class("BP_Water_05l_C", foodBase), Class("BP_Weapon_AK47_C", Class("WeaponItem", itemBase)),
     Class("BP_Door_C", Class("Actor", nil)), Class("SKEL_BP_Apple_C", foodBase) }
-function FindObjects() return loadedClasses end
+function FindObjects(count, className) assert(className == "Class") return loadedClasses end
 writeCommands("ListItems\n")
 loopCallback()
-check("item list written", string.find(consoleLog(), "Item list written: 2 items (items.txt).", 1, true) ~= nil)
-check("item list contents", (function() local f = io.open(dir .. "/items.txt") local t = f and f:read("a") or "" if f then f:close() end return t end)() == "BP_Water_05l_C\nBP_Weapon_AK47_C\n")
+local function itemsFile() local f = io.open(dir .. "/items.txt") local t = f and f:read("a") or "" if f then f:close() end return t end
+check("item list written", string.find(consoleLog(), "Item list written: 2 items from 4 classes (2 by parent class, 0 by folder).", 1, true) ~= nil)
+check("item list contents", itemsFile() == "BP_Water_05l_C\nBP_Weapon_AK47_C\n")
+-- Without GetSuperStruct: items are recognised by their folder.
+loadedClasses = { Class("Christmas_Headband_01_ES_C", false, "/Game/ConZ_Files/Items/Clothes/"),
+    Class("BP_SphereMotionTriggerComponent_C", false, "/Game/ConZ_Files/Items/Traps/"), Class("BP_Door_C", false) }
+writeCommands("ListItems\n")
+loopCallback()
+check("items found by folder", string.find(consoleLog(), "Item list written: 1 items from 3 classes (0 by parent class, 1 by folder).", 1, true) ~= nil
+    and itemsFile() == "Christmas_Headband_01_ES_C\n")
+writeCommands("FindItem headband\n")
+loopCallback()
+check("find item uses the scan", string.find(consoleLog(), "1 item(s) match \"headband\":", 1, true) ~= nil)
+loadedClasses = {}
+writeCommands("ListItems\n")
+loopCallback()
+check("nothing found is reported", string.find(consoleLog(), "No item classes found (0 classes checked).", 1, true) ~= nil)
 
 -- Started from an unexpected path: disabled with a message instead of erroring.
 log, loopCallback = {}, nil

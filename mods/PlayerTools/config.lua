@@ -85,6 +85,7 @@ return {
         commands = { "ChangeCurrencyBalance Normal 100 {steamId}" },
         message = "+100 cash for an hour on the server. Thanks for playing!",
         -- Once per day (UTC), the first time the player is online.
+        dailyEnabled = true,
         dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" },
         dailyMessage = "Daily login bonus: +200 cash.",
         -- EXPERIMENTAL: items given with each reward, e.g. { item = "Water_05l", amount = 1 }.
@@ -204,5 +205,11 @@ return {
         zones = {},
         rewardCommands = { "ChangeCurrencyBalance Normal 1000 {steamId}" },
         rewardItems = {},
+    },
+
+    -- EXPERIMENTAL: one switch for every item list above (starter kit, playtime and daily
+    -- rewards, manhunt and King of the Hill rewards). Commands such as cash are not affected.
+    itemRewards = {
+        enabled = false,
     },
 }

@@ -75,9 +75,15 @@ final class ModSettings
                     'fields' => [
                         'newPlayers.messages' => ['lines', 'Welcome messages (one per line)', []],
                         'newPlayers.starterKit' => ['toggle', 'Starter kit on', true],
-                        'newPlayers.starterKitItems' => ['rows', 'Starter kit items (experimental: straight into the inventory, no admin needed)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
+                        'newPlayers.starterKitItems' => ['rows', 'Starter kit items (experimental: needs "Give items" on)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'newPlayers.starterKitCommands' => ['lines', 'Starter kit admin commands (one per line, need an admin online)', []],
                         'newPlayers.starterKitMessage' => ['text', 'Message when the kit is given', ''],
+                    ],
+                ],
+                'Item rewards (experimental)' => [
+                    'description' => 'One switch for every item list on this page: starter kit, playtime and daily rewards, manhunt and King of the Hill. Items go straight into the player\'s inventory without an admin. Leave this off until "Give an item" on the Admin Console has worked for you. Cash and other commands are not affected.',
+                    'fields' => [
+                        'itemRewards.enabled' => ['toggle', 'Give items', false],
                     ],
                 ],
                 'Welcome back' => [
@@ -95,6 +101,7 @@ final class ModSettings
                         'playtimeRewards.commands' => ['lines', 'Reward commands (one per line)', ['ChangeCurrencyBalance Normal 100 {steamId}']],
                         'playtimeRewards.items' => ['rows', 'Reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'playtimeRewards.message' => ['text', 'Reward message', '+100 cash for an hour on the server. Thanks for playing!'],
+                        'playtimeRewards.dailyEnabled' => ['toggle', 'Daily login bonus on', true],
                         'playtimeRewards.dailyCommands' => ['lines', 'Daily login bonus commands (one per line)', ['ChangeCurrencyBalance Normal 200 {steamId}']],
                         'playtimeRewards.dailyItems' => ['rows', 'Daily bonus items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'playtimeRewards.dailyMessage' => ['text', 'Daily bonus message', 'Daily login bonus: +200 cash.'],

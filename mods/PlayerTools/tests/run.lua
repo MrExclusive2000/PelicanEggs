@@ -523,6 +523,7 @@ function FindFirstOf(className)
     return oldFindFirst(className)
 end
 write(dir .. "/config.lua", [[return {
+    itemRewards = { enabled = true },
     newPlayers = { starterKit = true, starterKitItems = { { item = "Water_05l", amount = 2 }, { item = "Nope", amount = 1 } },
         starterKitCommands = {}, starterKitMessage = "Kit!" },
     playtimeRewards = { enabled = false },
@@ -547,6 +548,19 @@ check("kit message", lastPrivate("Gus") == "Kit!")
 check("unknown kit item reported", has(read(dir .. "/playertools.log"), "Item Nope is not loaded; skipped."))
 step(20)
 check("kit items given once", #spawned == 2)
+
+-- With item rewards switched off, a new player's kit of items only is skipped.
+write(dir .. "/config.lua", (read(dir .. "/config.lua"):gsub("itemRewards = { enabled = true }", "itemRewards = { enabled = false }")))
+step(31)
+login("76561198000000042", "Ned")
+local ned = Player("Ned")
+players = { gus, ned }
+local spawnedBefore = #spawned
+step(12)
+check("no items while item rewards are off", #spawned == spawnedBefore and lastPrivate("Ned") ~= "Kit!")
+write(dir .. "/config.lua", (read(dir .. "/config.lua"):gsub("itemRewards = { enabled = false }", "itemRewards = { enabled = true }")))
+step(31)
+players = { gus }
 
 chat("76561198000000040", "Gus", "!tp b4")
 step(3)

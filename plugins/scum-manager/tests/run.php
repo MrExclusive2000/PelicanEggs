@@ -352,7 +352,7 @@ check('settings: teleport numbers saved as numbers', ModSettings::apply('PlayerT
 // The page's defaults for a missing setting must match what the mod does without it.
 $shipped = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/PlayerTools/config.lua'));
 $fromDefaults = ModSettings::apply('PlayerTools', [], ModSettings::toState('PlayerTools', []));
-foreach (['welcomeBack', 'playtimeRewards', 'killStreaks', 'bounties', 'teleports', 'info', 'reports', 'featureTips', 'deathRecap', 'hotspots', 'manhunt', 'koth'] as $section) {
+foreach (['welcomeBack', 'playtimeRewards', 'killStreaks', 'bounties', 'teleports', 'info', 'reports', 'featureTips', 'deathRecap', 'hotspots', 'manhunt', 'koth', 'itemRewards'] as $section) {
     // Same keys and values; the order of keys does not matter to Lua.
     check("settings: page defaults match shipped PlayerTools $section", $fromDefaults[$section] == $shipped[$section], true);
 }
