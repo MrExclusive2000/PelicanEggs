@@ -158,4 +158,51 @@ return {
         announceEveryMinutes = 20,     -- a rotating tip to everyone (0 = never)
         extraTips = {},                -- your own tips, added to the rotation
     },
+
+    -- A private message to the player who died. {killer} {weapon} {distance}
+    deathRecap = {
+        enabled = true,
+        message = "You were killed by {killer} with {weapon} from {distance} m.",
+    },
+
+    -- Several kills close together are announced, by map sector (worked out from the outposts)
+    -- or the nearest teleport destination. {place} {kills}
+    hotspots = {
+        enabled = true,
+        kills = 3,
+        withinMinutes = 5,
+        radius = 500,               -- metres
+        cooldownMinutes = 10,       -- the same place at most this often
+        message = "Heavy fighting reported {place}!",
+    },
+
+    -- Players volunteer with !manhunt join. Every so often one becomes the target; their sector
+    -- is announced every few minutes. The killer, or the target if they survive, is rewarded.
+    -- Commands need an admin online (rewards wait); items are experimental.
+    manhunt = {
+        enabled = true,
+        everyMinutes = 60,
+        durationMinutes = 15,
+        revealEveryMinutes = 3,
+        minPlayers = 3,
+        hunterCommands = { "ChangeCurrencyBalance Normal 1000 {steamId}" },
+        hunterItems = {},
+        survivorCommands = { "ChangeCurrencyBalance Normal 1000 {steamId}" },
+        survivorItems = {},
+    },
+
+    -- King of the Hill: one zone is announced; whoever stays inside it longest wins.
+    -- Zones: { name = "airfield", x = 0, y = 0, z = 0, radius = 100 } (world units; radius in m).
+    -- Do not use outposts: they are safe zones.
+    koth = {
+        enabled = true,
+        everyMinutes = 90,
+        durationMinutes = 15,
+        updateEveryMinutes = 5,
+        minPlayers = 3,
+        minSeconds = 60,
+        zones = {},
+        rewardCommands = { "ChangeCurrencyBalance Normal 1000 {steamId}" },
+        rewardItems = {},
+    },
 }

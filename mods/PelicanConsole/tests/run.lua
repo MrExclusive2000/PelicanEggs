@@ -114,7 +114,7 @@ check("ready message printed to UE4SS log", string.find(table.concat(log), "Read
 
 -- Nothing queued: nothing runs and the loop keeps going.
 check("loop keeps running", loopCallback() == false)
-check("no commands, no calls", #calls == 0 and gameThreadRuns == 0)
+check("no commands, no calls", #calls == 0 and gameThreadRuns == 1)   -- the item list check only
 
 -- No admin online: SCUM's test helper is the only route, and the console says so.
 writeCommands("SetTime 12\n\n   \n##SetWeather 0\r\n")
@@ -123,7 +123,7 @@ check("two commands run", #calls == 2)
 check("prefix added", calls[1] and calls[1].command == "#SetTime 12")
 check("repeated prefix collapsed, CR trimmed", calls[2] and calls[2].command == "#SetWeather 0")
 check("world passed as context", calls[1] and calls[1].context == world)
-check("run on the game thread", gameThreadRuns == 2)
+check("run on the game thread", gameThreadRuns == 3)   -- two commands plus the item list check
 check("queue file consumed", not exists("commands.txt") and not exists("commands.processing"))
 check("no-admin warning", string.find(consoleLog(), "Sent #SetTime 12, but no admin is online", 1, true) ~= nil)
 check("log lines timestamped", string.find(consoleLog(), "%d%d:%d%d:%d%d %[PelicanConsole%] Sent #SetTime 12") ~= nil)
@@ -312,6 +312,25 @@ writeCommands("FindOutposts\n")
 loopCallback()
 check("no bankers", string.find(consoleLog(), "No outposts found", 1, true) ~= nil)
 FindAllOf = oldFindAll
+
+
+-- Item list for SCUM Manager's dropdowns: only classes deriving from SCUM's Item.
+local itemBase = object()
+function itemBase:GetFName() return { ToString = function() return "Item" end } end
+local function Class(name, super)
+    local class = object()
+    function class:GetFName() return { ToString = function() return name end } end
+    function class:GetSuperStruct() return super end
+    return class
+end
+local foodBase = Class("FoodItem", itemBase)
+local loadedClasses = { Class("BP_Water_05l_C", foodBase), Class("BP_Weapon_AK47_C", Class("WeaponItem", itemBase)),
+    Class("BP_Door_C", Class("Actor", nil)), Class("SKEL_BP_Apple_C", foodBase) }
+function FindObjects() return loadedClasses end
+writeCommands("ListItems\n")
+loopCallback()
+check("item list written", string.find(consoleLog(), "Item list written: 2 items (items.txt).", 1, true) ~= nil)
+check("item list contents", (function() local f = io.open(dir .. "/items.txt") local t = f and f:read("a") or "" if f then f:close() end return t end)() == "BP_Water_05l_C\nBP_Weapon_AK47_C\n")
 
 -- Started from an unexpected path: disabled with a message instead of erroring.
 log, loopCallback = {}, nil

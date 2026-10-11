@@ -13,7 +13,8 @@ namespace MrExclusive\ScumManager\Support;
  *   toggle, int, text, select (options), lines (list of strings, one per line),
  *   ints (list of numbers, comma separated), rows (list of tables, edited as a repeater;
  *   "columns" names the keys, or with "tuple" the positions, of each row; "numeric" lists
- *   the column positions saved as numbers).
+ *   the column positions saved as numbers; "itemColumn" names a column picked from the
+ *   server's item list).
  */
 final class ModSettings
 {
@@ -70,11 +71,11 @@ final class ModSettings
                     ],
                 ],
                 'New players' => [
-                    'description' => 'For a player\'s first join. Placeholders: {name} {steamId}. Starter kit items go straight into the new player\'s inventory (experimental; find item names with "Find an item name" on the Admin Console). Starter kit admin commands (without #) run as an online admin, e.g. ChangeCurrencyBalance Normal 500 {steamId}; with commands set, the whole kit waits until an admin is online. Do not use SpawnItem there: it drops items in front of the admin.',
+                    'description' => 'For a player\'s first join. Placeholders: {name} {steamId}. Starter kit items go straight into the new player\'s inventory (experimental; the item list fills in a minute after the server is online). Starter kit admin commands (without #) run as an online admin, e.g. ChangeCurrencyBalance Normal 500 {steamId}; with commands set, the whole kit waits until an admin is online. Do not use SpawnItem there: it drops items in front of the admin.',
                     'fields' => [
                         'newPlayers.messages' => ['lines', 'Welcome messages (one per line)', []],
                         'newPlayers.starterKit' => ['toggle', 'Starter kit on', true],
-                        'newPlayers.starterKitItems' => ['rows', 'Starter kit items (experimental: straight into the inventory, no admin needed)', [], 'numeric' => [1], 'columns' => ['item' => 'Item (e.g. Water_05l)', 'amount' => 'Amount']],
+                        'newPlayers.starterKitItems' => ['rows', 'Starter kit items (experimental: straight into the inventory, no admin needed)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'newPlayers.starterKitCommands' => ['lines', 'Starter kit admin commands (one per line, need an admin online)', []],
                         'newPlayers.starterKitMessage' => ['text', 'Message when the kit is given', ''],
                     ],
@@ -92,10 +93,10 @@ final class ModSettings
                         'playtimeRewards.enabled' => ['toggle', 'Playtime rewards on', true],
                         'playtimeRewards.everyMinutes' => ['int', 'Reward every (min played)', 60],
                         'playtimeRewards.commands' => ['lines', 'Reward commands (one per line)', ['ChangeCurrencyBalance Normal 100 {steamId}']],
-                        'playtimeRewards.items' => ['rows', 'Reward items (experimental)', [], 'numeric' => [1], 'columns' => ['item' => 'Item (e.g. Water_05l)', 'amount' => 'Amount']],
+                        'playtimeRewards.items' => ['rows', 'Reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'playtimeRewards.message' => ['text', 'Reward message', '+100 cash for an hour on the server. Thanks for playing!'],
                         'playtimeRewards.dailyCommands' => ['lines', 'Daily login bonus commands (one per line)', ['ChangeCurrencyBalance Normal 200 {steamId}']],
-                        'playtimeRewards.dailyItems' => ['rows', 'Daily bonus items (experimental)', [], 'numeric' => [1], 'columns' => ['item' => 'Item (e.g. Water_05l)', 'amount' => 'Amount']],
+                        'playtimeRewards.dailyItems' => ['rows', 'Daily bonus items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'playtimeRewards.dailyMessage' => ['text', 'Daily bonus message', 'Daily login bonus: +200 cash.'],
                     ],
                 ],
@@ -144,6 +145,47 @@ final class ModSettings
                         'featureTips.onJoin' => ['toggle', 'Tell each player the server\'s features when they join', true],
                         'featureTips.announceEveryMinutes' => ['int', 'Announce a rotating tip every (min, 0 = never)', 20],
                         'featureTips.extraTips' => ['lines', 'Your own tips (one per line)', []],
+                    ],
+                ],
+                'Death recap and hotspots' => [
+                    'description' => 'Death recap: a private message to the player who died. Hotspots: several kills close together are announced by map sector (worked out from the outposts) or the nearest teleport destination.',
+                    'fields' => [
+                        'deathRecap.enabled' => ['toggle', 'Death recap on', true],
+                        'deathRecap.message' => ['text', 'Death recap ({killer} {weapon} {distance})', 'You were killed by {killer} with {weapon} from {distance} m.'],
+                        'hotspots.enabled' => ['toggle', 'Hotspots on', true],
+                        'hotspots.message' => ['text', 'Hotspot message ({place} {kills})', 'Heavy fighting reported {place}!'],
+                        'hotspots.kills' => ['int', 'Kills', 3],
+                        'hotspots.withinMinutes' => ['int', 'Within (min)', 5],
+                        'hotspots.radius' => ['int', 'Within (m)', 500],
+                        'hotspots.cooldownMinutes' => ['int', 'Same place at most every (min)', 10],
+                    ],
+                ],
+                'Manhunt' => [
+                    'description' => 'Players volunteer with !manhunt join. Every so often one of them becomes the target; their sector is announced every few minutes. Whoever kills them gets the hunter reward; if they survive, they get the survivor reward. Commands need an admin online; items are experimental.',
+                    'fields' => [
+                        'manhunt.enabled' => ['toggle', 'Manhunt on', true],
+                        'manhunt.everyMinutes' => ['int', 'A manhunt every (min)', 60],
+                        'manhunt.durationMinutes' => ['int', 'Lasts (min)', 15],
+                        'manhunt.revealEveryMinutes' => ['int', 'Reveal the target every (min)', 3],
+                        'manhunt.minPlayers' => ['int', 'Only with at least this many players online', 3],
+                        'manhunt.hunterCommands' => ['lines', 'Hunter reward commands ({steamId})', ['ChangeCurrencyBalance Normal 1000 {steamId}']],
+                        'manhunt.hunterItems' => ['rows', 'Hunter reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
+                        'manhunt.survivorCommands' => ['lines', 'Survivor reward commands ({steamId})', ['ChangeCurrencyBalance Normal 1000 {steamId}']],
+                        'manhunt.survivorItems' => ['rows', 'Survivor reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
+                    ],
+                ],
+                'King of the Hill' => [
+                    'description' => 'Every so often one zone is announced; whoever stays inside it longest wins. Add zones here, or on the Admin Console with "Add a teleport where a player stands" (Add as: King of the Hill zone). Do not use outposts: they are safe zones.',
+                    'fields' => [
+                        'koth.enabled' => ['toggle', 'King of the Hill on', true],
+                        'koth.zones' => ['rows', 'Zones', [], 'numeric' => [1, 2, 3, 4], 'columns' => ['name' => 'Name', 'x' => 'X', 'y' => 'Y', 'z' => 'Z', 'radius' => 'Radius (m)']],
+                        'koth.everyMinutes' => ['int', 'An event every (min)', 90],
+                        'koth.durationMinutes' => ['int', 'Lasts (min)', 15],
+                        'koth.updateEveryMinutes' => ['int', 'Announce the leader every (min)', 5],
+                        'koth.minPlayers' => ['int', 'Only with at least this many players online', 3],
+                        'koth.minSeconds' => ['int', 'Winner must hold it at least (s)', 60],
+                        'koth.rewardCommands' => ['lines', 'Reward commands ({steamId})', ['ChangeCurrencyBalance Normal 1000 {steamId}']],
+                        'koth.rewardItems' => ['rows', 'Reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                     ],
                 ],
                 'Info and reports' => [

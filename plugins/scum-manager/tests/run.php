@@ -339,6 +339,11 @@ throws('commands: unknown command', fn () => AdminCommands::build('nope', []), '
 check('commands: known players from players.tsv', AdminCommands::knownPlayers("76561198000000002\tbob\t0\n76561198000000001\tAlice\t3\nbad line\n"),
     ['76561198000000001' => 'Alice (76561198000000001)', '76561198000000002' => 'bob (76561198000000002)']);
 check('commands: no players file', AdminCommands::knownPlayers(null), []);
+check('commands: item catalog', AdminCommands::itemCatalog("BP_Water_05l_C\r\nBP_Apple_C\nbad name!\n\n"), ['BP_Apple_C' => 'Apple (BP_Apple_C)', 'BP_Water_05l_C' => 'Water 05l (BP_Water_05l_C)']);
+check('commands: no item list yet', AdminCommands::itemCatalog(null), []);
+$catalog = AdminCommands::itemCatalog("BP_Water_05l_C\nBP_Water_1l_C\nBP_Apple_C\nBP_Canned_Water_C\n");
+check('items: search every word', MrExclusive\ScumManager\Support\ItemSelect::search($catalog, 'water 05'), ['BP_Water_05l_C' => 'Water 05l (BP_Water_05l_C)']);
+check('items: search is case-insensitive', array_keys(MrExclusive\ScumManager\Support\ItemSelect::search($catalog, 'WATER')), ['BP_Canned_Water_C', 'BP_Water_05l_C', 'BP_Water_1l_C']);
 
 $state = ModSettings::toState('PlayerTools', ['teleports' => ['locations' => [['name' => 'trader', 'x' => 1, 'y' => -2, 'z' => 3, 'price' => 50]]]]);
 check('settings: teleport rows', $state['PlayerTools__teleports__locations'], [['name' => 'trader', 'x' => '1', 'y' => '-2', 'z' => '3', 'price' => '50']]);
@@ -347,7 +352,7 @@ check('settings: teleport numbers saved as numbers', ModSettings::apply('PlayerT
 // The page's defaults for a missing setting must match what the mod does without it.
 $shipped = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/PlayerTools/config.lua'));
 $fromDefaults = ModSettings::apply('PlayerTools', [], ModSettings::toState('PlayerTools', []));
-foreach (['welcomeBack', 'playtimeRewards', 'killStreaks', 'bounties', 'teleports', 'info', 'reports', 'featureTips'] as $section) {
+foreach (['welcomeBack', 'playtimeRewards', 'killStreaks', 'bounties', 'teleports', 'info', 'reports', 'featureTips', 'deathRecap', 'hotspots', 'manhunt', 'koth'] as $section) {
     // Same keys and values; the order of keys does not matter to Lua.
     check("settings: page defaults match shipped PlayerTools $section", $fromDefaults[$section] == $shipped[$section], true);
 }
@@ -367,6 +372,9 @@ check('teleports: same name replaced, others kept and added', array_column($upda
 check('teleports: price and position', $updated['teleports']['locations'][0], ['name' => 'b4', 'x' => -400250, 'y' => 600000, 'z' => 1020, 'price' => 500]);
 check('teleports: other settings kept', $updated['teleports']['enabled'], true);
 check('teleports: works on an empty config', TeleportDestinations::add([], [['name' => 'Trader', 'x' => 1, 'y' => 2, 'z' => 3]], 0)['teleports']['locations'], [['name' => 'trader', 'x' => 1, 'y' => 2, 'z' => 3, 'price' => 0]]);
+$zoned = TeleportDestinations::addZone(['koth' => ['enabled' => true, 'zones' => [['name' => 'hill', 'x' => 0, 'y' => 0, 'z' => 0, 'radius' => 50]]]], ['name' => 'Hill', 'x' => 1, 'y' => 2, 'z' => 3], 120);
+check('zones: same name replaced', $zoned['koth']['zones'], [['name' => 'hill', 'x' => 1, 'y' => 2, 'z' => 3, 'radius' => 120]]);
+check('zones: other koth settings kept', $zoned['koth']['enabled'], true);
 throws('teleports: one-word names', fn () => TeleportDestinations::name('my base'), 'one word');
 check('teleports: written config loads back', LuaTable::parse(LuaTable::render($updated))['teleports']['locations'][2]['name'], 'a0');
 

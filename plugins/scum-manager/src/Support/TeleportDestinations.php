@@ -50,6 +50,26 @@ final class TeleportDestinations
     }
 
     /**
+     * PlayerTools' config with a King of the Hill zone added (same name replaced).
+     *
+     * @param  array<mixed>  $config
+     * @param  array{name: string, x: int, y: int, z: int}  $zone
+     * @return array<mixed>
+     */
+    public static function addZone(array $config, array $zone, int $radius): array
+    {
+        $entry = ['name' => self::name($zone['name']), 'x' => $zone['x'], 'y' => $zone['y'], 'z' => $zone['z'], 'radius' => max(10, $radius)];
+        $zones = is_array($config['koth']['zones'] ?? null) ? array_values($config['koth']['zones']) : [];
+        $zones = array_values(array_filter($zones, fn ($existing) => !is_array($existing) || strtolower((string) ($existing['name'] ?? '')) !== $entry['name']));
+        $zones[] = $entry;
+
+        $config['koth'] = is_array($config['koth'] ?? null) ? $config['koth'] : [];
+        $config['koth']['zones'] = $zones;
+
+        return $config;
+    }
+
+    /**
      * PlayerTools' config with these destinations added. A destination with the same name is replaced.
      *
      * @param  array<mixed>  $config

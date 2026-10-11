@@ -143,6 +143,7 @@ write(dir .. "/players.tsv", "76561198000000005\tVeteran\t10\t2\t7200\t350\t\t1\
 write(dir .. "/config.lua", [[return {
     playtimeRewards = { enabled = false }, bounties = { enabled = false }, teleports = { enabled = false },
     featureTips = { onJoin = false, announceEveryMinutes = 0 },
+    manhunt = { enabled = false }, koth = { enabled = false },
     chatCommands = { rules = { "Be nice." }, discord = "discord.gg/test" },
     afk = { enabled = true, minutes = 3, warnMinutesBefore = 1 },
     voting = { minVotes = 1, percentNeeded = 50, durationSeconds = 30, cooldownMinutes = 5,
@@ -336,7 +337,7 @@ write(dir .. "/config.lua", [[return {
     featureTips = { onJoin = false, announceEveryMinutes = 0 },
 }]])
 dofile(dir .. "/Scripts/main.lua")
-check("new features in startup summary", has(read(dir .. "/playertools.log"), "playtime rewards, kill streaks, bounties, teleports."))
+check("new features in startup summary", has(read(dir .. "/playertools.log"), "playtime rewards, kill streaks, bounties, teleports, manhunt, King of the Hill."))
 
 login("76561198000000010", "Dave")
 login("76561198000000011", "Eve")
@@ -453,7 +454,7 @@ step(60)
 local saved = read(dir .. "/players.tsv")
 local fields = {}
 for field in string.gmatch(string.match(saved, "76561198000000010[^\n]*") .. "\t", "([^\t]*)\t") do fields[#fields + 1] = field end
-check("saved with the new columns", #fields == 13)
+check("saved with the new columns", #fields == 15)
 check("daily date saved", fields[10] == "1970-01-01")
 check("best streak saved", fields[11] == "3")
 check("bounty on Dave cleared", fields[12] == "0")
@@ -474,7 +475,7 @@ login("76561198000000030", "Fay")
 players = { fay }
 step(12)
 check("feature summary on join", has(table.concat((function() local t = {} for _, m in ipairs(private) do t[#t + 1] = m.text end return t end)(), "|"),
-    "This server has: kill feed, stats (!stats, !top), kill streaks, bounties, playtime rewards, votes (!vote), teleports (!tp), reports (!report). Type !help for all commands."))
+    "This server has: kill feed, stats (!stats, !top), kill streaks, bounties, playtime rewards, votes (!vote), teleports (!tp), reports (!report), manhunts (!manhunt). Type !help for all commands."))
 local told = #private
 step(20)
 check("summary sent once", #private == told)
@@ -569,6 +570,109 @@ chat("76561198000000040", "Gus", "!bounty Hal 200")
 step()
 check("unreadable balance refuses", lastPrivate("Gus") == "You cannot place that bounty: your balance could not be read.")
 FindFirstOf = oldFindFirst
+players = {}
+
+
+-- ================================================================== death recap, hotspots, !seen, manhunt, king of the hill
+private, hud, adminCommands, kicks = {}, {}, {}, {}
+-- Bankers at the outposts: rows A..Z along +X, columns 0..4 along +Y (cell = 3248 m).
+local CELL = 324800
+local function centre(row, column) return -954800 + (row + 0.5) * CELL, -954800 + (column + 0.5) * CELL end
+local bankers = {}
+for _, rc in ipairs({ { 0, 0 }, { 1, 4 }, { 2, 2 }, { 4, 3 } }) do
+    local x, y = centre(rc[1], rc[2])
+    local banker = object({ x = x, y = y })
+    function banker:K2_GetActorLocation() return { X = self.x, Y = self.y, Z = 0 } end
+    bankers[#bankers + 1] = banker
+end
+local plainFindAll = FindAllOf
+function FindAllOf(className)
+    if className == "Banker" then return bankers end
+    return plainFindAll(className)
+end
+write(dir .. "/config.lua", [[return {
+    playtimeRewards = { enabled = false }, bounties = { enabled = false }, killFeed = { enabled = false },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 },
+    hotspots = { kills = 2, withinMinutes = 5, radius = 500, cooldownMinutes = 10 },
+    manhunt = { everyMinutes = 1, durationMinutes = 2, revealEveryMinutes = 1, minPlayers = 2,
+        hunterCommands = { "Pay {steamId} 1000" }, survivorCommands = { "Pay {steamId} 1000" } },
+    koth = { everyMinutes = 1, durationMinutes = 2, updateEveryMinutes = 1, minPlayers = 2, minSeconds = 30,
+        zones = { { name = "hill", x = 0, y = 0, z = 0, radius = 50 } }, rewardCommands = { "Pay {steamId} 500" } },
+}]])
+dofile(dir .. "/Scripts/main.lua")
+login("76561198000000050", "Ivy")
+login("76561198000000051", "Jay")
+local ivy, jay = Player("Ivy"), Player("Jay", true)
+ivy.pawn.x, ivy.pawn.y = 0, 0
+jay.pawn.x, jay.pawn.y = 5000, 5000
+players = { ivy, jay }
+step(2)
+check("map sectors from the outposts", has(read(dir .. "/playertools.log"), "Map sectors worked out from the outposts."))
+
+-- !seen
+chat("76561198000000050", "Ivy", "!seen jay")
+step()
+check("seen online", lastPrivate("Ivy") == "Jay is online now.")
+chat("76561198000000050", "Ivy", "!seen Nobody")
+step()
+check("seen unknown", lastPrivate("Ivy") == "No player called Nobody.")
+
+-- Volunteer for manhunts before the first one starts.
+chat("76561198000000050", "Ivy", "!manhunt join")
+step()
+check("manhunt join", has(lastPrivate("Ivy"), "You can now be picked as the manhunt target."))
+
+-- Death recap and hotspot: two kills in sector B2 (row 1, column 2), in metres in the kill log.
+local bx, by = centre(1, 2)
+local killNo = 0
+local function killAt(killerId, killerName, victimId, victimName, x, y)
+    killNo = killNo + 1
+    write(gameLogDir .. "/kill_1.log", string.format('2026.10.11-17.00.%02d: {"Killer":{"ServerLocation":{"X":%d,"Y":%d,"Z":0},"ProfileName":"%s","UserId":"%s"},"Victim":{"ServerLocation":{"X":%d,"Y":%d,"Z":0},"ProfileName":"%s","UserId":"%s"},"Weapon":"BP_Weapon_M1911_C"}\n',
+        killNo, x - 3000, y, killerName, killerId, x, y, victimName, victimId), "a")
+    step()
+end
+killAt("76561198000000051", "Jay", "76561198000000060", "Kim", bx, by)
+check("no hotspot after one kill", #hud == 0 or not anyHud("Heavy fighting"))
+killAt("76561198000000051", "Jay", "76561198000000061", "Lou", bx + 10000, by)
+check("hotspot announced by sector", anyHud("Heavy fighting reported in sector B2!"))
+killAt("76561198000000051", "Jay", "76561198000000050", "Ivy", 0, 0)
+check("death recap with streak", lastPrivate("Ivy") == "You were killed by Jay with M1911 from 30 m. They are on a 3 kill streak.")
+
+-- Manhunt starts on the volunteer; her sector is revealed; Jay kills her and is paid.
+hud = {}
+step(60)
+check("manhunt started", anyHud("MANHUNT! Ivy is the target for 2 minutes."))
+check("target revealed by sector", anyHud("Manhunt: Ivy was last seen in sector "))
+check("target told", lastPrivate("Ivy") == "You are the manhunt target! Survive 2 minutes to win.")
+check("king of the hill started", anyHud("KING OF THE HILL at hill"))
+killAt("76561198000000051", "Jay", "76561198000000050", "Ivy", 0, 0)
+check("manhunt won by the killer", anyHud("Manhunt over: Jay killed Ivy!"))
+step()
+check("hunter paid as the admin", ran("#Pay 76561198000000051 1000") ~= nil and lastPrivate("Jay") == "You won the manhunt. Reward received!")
+
+-- King of the Hill: Ivy stands in the zone, Jay does not.
+step(60)
+check("koth update", anyHud("King of the Hill at hill: Ivy leads with"))
+step(60)
+check("koth winner", anyHud("King of the Hill over: Ivy held hill for"))
+step()
+check("koth reward", ran("#Pay 76561198000000050 500") ~= nil and lastPrivate("Ivy") == "You won King of the Hill. Reward received!")
+
+-- A target who survives wins.
+local before = #hud
+step(60)
+check("second manhunt", anyHud("MANHUNT! Ivy is the target"))
+step(125)
+check("survivor wins", anyHud("Manhunt over: Ivy survived and wins the reward!"))
+
+-- !seen after leaving.
+players = { ivy }
+step(120)
+chat("76561198000000050", "Ivy", "!seen Jay")
+step()
+check("seen offline", has(lastPrivate("Ivy"), "Jay was last online 2 min ago."))
+check("no errors in events", not has(read(dir .. "/playertools.log"), "failed"))
+FindAllOf = plainFindAll
 players = {}
 
 os.execute("rm -rf '" .. tmp .. "'")

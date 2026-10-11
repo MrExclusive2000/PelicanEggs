@@ -23,6 +23,7 @@ use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Services\ScumServerService;
+use MrExclusive\ScumManager\Support\ItemSelect;
 use MrExclusive\ScumManager\Support\LuaTable;
 use MrExclusive\ScumManager\Support\ModSettings;
 
@@ -150,7 +151,9 @@ class ScumModSettingsPage extends ServerFormPage
                 ->reorderable()
                 ->columns(count($field['columns']))
                 ->schema(array_map(
-                    fn ($key, string $column, int $index) => TextInput::make(($field['tuple'] ?? false) ? 'c' . $index : $key)->label($column)->required(),
+                    fn ($key, string $column, int $index) => ($field['itemColumn'] ?? null) === $key
+                        ? ItemSelect::make($key, $column, fn () => app(ScumServerService::class)->itemCatalog($this->getRecord()))->required()
+                        : TextInput::make(($field['tuple'] ?? false) ? 'c' . $index : $key)->label($column)->required(),
                     array_keys($field['columns']),
                     array_values($field['columns']),
                     array_keys(array_values($field['columns'])),

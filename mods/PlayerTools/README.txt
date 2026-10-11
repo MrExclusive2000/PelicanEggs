@@ -26,6 +26,17 @@ Quality-of-life features for SCUM players:
   Feature tips   "This server has: ..." to each player on joining, and a rotating tip to
                  everyone every 20 minutes. Built from the settings, so they only mention
                  what is switched on.
+  Death recap    Who killed you, with what, from how far (and their kill streak).
+  Hotspots       "Heavy fighting reported in sector B2!" after several kills close together.
+                 Sectors are worked out from the four outposts (A0, B4, C2, Z3); if they do
+                 not fit SCUM's grid, the nearest teleport destination is used instead.
+  !seen <name>   When a player was last online.
+  Manhunt        Players volunteer with !manhunt join. Every hour (with 3+ online) one becomes
+                 the target for 15 minutes; their sector is announced every 3 minutes. The
+                 killer, or the target if they survive, gets the reward (1000 cash).
+  King of the    Every 90 minutes one of your zones is announced; whoever stays inside it the
+  Hill           longest in 15 minutes wins (1000 cash). Add zones on the settings page or
+                 with "Add a place where a player stands" on the Admin Console.
 
 Experimental (found by the probe, not yet confirmed on a live server; off unless set):
  - Item lists for the starter kit, hourly rewards and the daily bonus: items go straight

@@ -663,6 +663,18 @@ class ScumServerService
      */
     public function addTeleportDestinations(Server $server, array $destinations, int $price): void
     {
+        $this->updatePlayerTools($server, fn (array $config) => TeleportDestinations::add($config, $destinations, $price));
+    }
+
+    /** @param array{name: string, x: int, y: int, z: int} $zone */
+    public function addKothZone(Server $server, array $zone, int $radius): void
+    {
+        $this->updatePlayerTools($server, fn (array $config) => TeleportDestinations::addZone($config, $zone, $radius));
+    }
+
+    /** @param \Closure(array<mixed>): array<mixed> $change */
+    private function updatePlayerTools(Server $server, \Closure $change): void
+    {
         if ($this->installedModsOf($server, ['PlayerTools']) === []) {
             throw new RuntimeException('The PlayerTools mod is not installed.');
         }
@@ -670,7 +682,7 @@ class ScumServerService
         $raw = $this->modConfig($server, 'PlayerTools');
         $config = $raw === null ? [] : LuaTable::parse($raw);
         $this->writeModConfig($server, 'PlayerTools', LuaTable::render(
-            TeleportDestinations::add($config, $destinations, $price),
+            $change($config),
             "PlayerTools settings, written by SCUM Manager (SCUM Mod Settings page).\nYou can edit this file by hand; comments are not kept when the page saves it.",
         ));
     }
@@ -681,6 +693,21 @@ class ScumServerService
         $ue4ss = $this->ue4ss($server);
 
         return $ue4ss['installed'] ? AdminCommands::knownPlayers($this->read($server, $ue4ss['mods'] . '/PlayerTools/players.tsv')) : [];
+    }
+
+    /** @return array<string, string> item class => label, from PelicanConsole's items.txt */
+    public function itemCatalog(Server $server): array
+    {
+        $ue4ss = $this->ue4ss($server);
+
+        if (!$ue4ss['installed']) {
+            return [];
+        }
+
+        // The list has thousands of entries and only changes when the server restarts.
+        return cache()->remember("scum-manager.items.$server->uuid", 120, fn () => AdminCommands::itemCatalog(
+            $this->read($server, $ue4ss['mods'] . '/PelicanConsole/items.txt'),
+        ));
     }
 
     /** The newest player reports from PlayerTools' reports.log, newest first. */

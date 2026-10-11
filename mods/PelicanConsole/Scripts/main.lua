@@ -5,7 +5,9 @@
     ue4ss/Mods/PelicanConsole/commands.txt. This mod picks those lines up once a second
     and runs them through an online admin's chat command channel, exactly as if they typed it in chat.
     Announce, ListPlayers and Kick <name> are handled directly and work with no admin online,
-    as do the experimental WhereIs, Balance, TeleportPlayer, FindItem and GiveItem.
+    as do the experimental WhereIs, Balance, TeleportPlayer, FindOutposts, FindItem, GiveItem
+    and ListItems. A minute after the world loads, the mod writes the item names to items.txt
+    for SCUM Manager's item dropdowns.
 
     Results and errors are written to ue4ss/Mods/PelicanConsole/console.log, which the
     egg and the SCUM Manager Admin Console page show.
@@ -320,6 +322,43 @@ local function findItemClass(name)
     return nil
 end
 
+-- Writes every item class the game has loaded to items.txt, one class name per line. SCUM
+-- Manager reads it to offer item dropdowns.
+local ITEMS_FILE = DIR and (DIR .. "/items.txt") or nil
+
+local function isItemClass(class)
+    local current = class
+    for _ = 1, 15 do
+        current = safe(function() return current:GetSuperStruct() end)
+        if not isValid(current) then return false end
+        local name = safe(function() return current:GetFName():ToString() end)
+        if name == "Item" then return true end
+    end
+    return false
+end
+
+local function writeItemList(quiet)
+    local names = {}
+    local classes = safe(function() return FindObjects(0, "BlueprintGeneratedClass", nil, 0, 0, false) end) or {}
+    for _, class in pairs(classes) do
+        local name = safe(function() return class:GetFName():ToString() end)
+        if name and not string.find(name, "^SKEL_") and not string.find(name, "^REINST_") and isItemClass(class) then
+            names[#names + 1] = name
+        end
+    end
+    table.sort(names)
+    if #names == 0 then
+        if not quiet then output("No item classes found yet. Try again once the server is fully online.") end
+        return false
+    end
+    local file = io.open(ITEMS_FILE, "w")
+    if file == nil then return false end
+    file:write(table.concat(names, "\n") .. "\n")
+    file:close()
+    output("Item list written: " .. #names .. " items (items.txt).")
+    return true
+end
+
 local function findItems(text)
     local lowered = string.lower(trim(text))
     if lowered == "" then return output("Usage: FindItem <part of an item name>") end
@@ -437,6 +476,7 @@ local function run(command)
     local name, rest = verb(command)
 
     if name == "findoutposts" then return findOutposts() end
+    if name == "listitems" then return writeItemList(false) end
 
     if name == "whereis" then return whereIs(rest) end
     if name == "balance" then return balance(rest) end
@@ -501,7 +541,24 @@ end
 os.remove(COMMANDS_FILE)
 os.remove(PROCESSING_FILE)
 
+-- The item list is written once per start, a minute after the world has loaded. Game objects
+-- are only touched on the game thread.
+local itemsWritten, itemTries, worldSeenAt, lastItemCheck = false, 0, nil, nil
+
 LoopAsync(1000, function()
+    local now = os.time()
+    if not itemsWritten and itemTries < 10 and (lastItemCheck == nil or now - lastItemCheck >= 10) then
+        lastItemCheck = now
+        ExecuteInGameThread(function()
+            if worldSeenAt == nil and findFirst(GAME_MODE_CLASSES) then worldSeenAt = now end
+            if worldSeenAt and now - worldSeenAt >= 60 + itemTries * 60 then
+                itemTries = itemTries + 1
+                local ok, written = pcall(writeItemList, true)
+                itemsWritten = ok and written
+            end
+        end)
+    end
+
     local commands = takeCommands()
     for _, command in ipairs(commands) do
         ExecuteInGameThread(function()

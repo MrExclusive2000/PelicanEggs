@@ -22,6 +22,7 @@ use Illuminate\Support\HtmlString;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\AdminCommands;
+use MrExclusive\ScumManager\Support\ItemSelect;
 use MrExclusive\ScumManager\Support\TeleportDestinations;
 
 class ScumConsolePage extends Page
@@ -129,6 +130,7 @@ class ScumConsolePage extends Page
                 [$type, $label] = $definition;
 
                 $component = match (true) {
+                    $type === 'item' => ItemSelect::make($name, $label, fn () => app(ScumServerService::class)->itemCatalog($this->getServer())),
                     $type === 'player' && $players !== [] => Select::make($name)->options($players)->searchable(),
                     $type === 'playerName' && $names !== [] => Select::make($name)->options($names)->searchable(),
                     $type === 'select' => Select::make($name)->options($definition[2])->selectablePlaceholder(false),
@@ -216,14 +218,14 @@ class ScumConsolePage extends Page
                     $this->refreshOutput();
                 }),
             Action::make('destination_here')
-                ->label('Add a teleport where a player stands')
+                ->label('Add a place where a player stands')
                 ->icon('tabler-map-pin-plus')
                 ->color('gray')
                 ->visible(fn () => $this->modInstalled)
                 ->authorize(fn () => user()?->can(SubuserPermission::ControlConsole, $this->getServer())
                     && user()?->can(SubuserPermission::FileUpdate, $this->getServer()))
-                ->modalHeading('Add a teleport destination')
-                ->modalDescription('Stand where you want the destination in game, then pick yourself here. The spot is added to PlayerTools as !tp <name>.')
+                ->modalHeading('Add a teleport destination or King of the Hill zone')
+                ->modalDescription('Stand where you want it in game, then pick yourself here.')
                 ->schema(function () {
                     $players = app(ScumServerService::class)->knownPlayers($this->getServer());
                     $names = [];
@@ -236,8 +238,13 @@ class ScumConsolePage extends Page
                         $names === []
                             ? TextInput::make('player')->label('Player (exact in-game name)')->required()
                             : Select::make('player')->label('Player')->options($names)->searchable()->required(),
-                        TextInput::make('name')->label('Destination name (what players type after !tp)')->required()->maxLength(24),
-                        TextInput::make('price')->label('Price')->integer()->minValue(0)->default(500)->required(),
+                        Select::make('kind')->label('Add as')->options(['teleport' => 'Teleport destination (!tp <name>)', 'koth' => 'King of the Hill zone'])
+                            ->default('teleport')->selectablePlaceholder(false)->required()->live(),
+                        TextInput::make('name')->label('Name (one word)')->required()->maxLength(24),
+                        TextInput::make('price')->label('Teleport price')->integer()->minValue(0)->default(500)->required()
+                            ->visible(fn (\Filament\Schemas\Components\Utilities\Get $get) => $get('kind') !== 'koth'),
+                        TextInput::make('radius')->label('Zone radius (m)')->integer()->minValue(10)->default(100)->required()
+                            ->visible(fn (\Filament\Schemas\Components\Utilities\Get $get) => $get('kind') === 'koth'),
                     ];
                 })
                 ->action(function (array $data, ScumServerService $service) {
@@ -247,9 +254,13 @@ class ScumConsolePage extends Page
                         $output = $service->runConsoleCommandAndRead($this->getServer(), 'WhereIs ' . $player, '/ is at |No online player|has no character/');
                         $at = TeleportDestinations::parseWhereIs($output, $player)
                             ?? throw new \RuntimeException(trim($output) !== '' ? trim(preg_replace('/^.*\] /m', '', $output)) : 'The mod did not answer in time.');
-                        $service->addTeleportDestinations($this->getServer(), [['name' => $name] + $at], (int) $data['price']);
-
-                        Notification::make()->title("Added !tp $name")->body("At {$at['x']} {$at['y']} {$at['z']}.")->success()->send();
+                        if (($data['kind'] ?? 'teleport') === 'koth') {
+                            $service->addKothZone($this->getServer(), ['name' => $name] + $at, (int) ($data['radius'] ?? 100));
+                            Notification::make()->title("Added King of the Hill zone $name")->body("At {$at['x']} {$at['y']} {$at['z']}.")->success()->send();
+                        } else {
+                            $service->addTeleportDestinations($this->getServer(), [['name' => $name] + $at], (int) ($data['price'] ?? 0));
+                            Notification::make()->title("Added !tp $name")->body("At {$at['x']} {$at['y']} {$at['z']}.")->success()->send();
+                        }
                     } catch (Exception $exception) {
                         Notification::make()->title('Could not add the destination')->body($exception->getMessage())->danger()->persistent()->send();
                     }

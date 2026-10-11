@@ -16,6 +16,12 @@
       - Info:          !info with uptime, players online and the next restart
       - Reports:       !report <name> <reason>, logged to reports.log and sent to online admins
       - Feature tips:  what the server offers, to each player on joining and as rotating tips
+      - Death recap:   who killed you, with what, from how far
+      - Hotspots:      "Heavy fighting reported in sector B2!" after several kills close together
+      - !seen <name>:  when a player was last online
+      - Manhunt:       a volunteer (!manhunt join) is hunted; their sector is revealed every few
+                       minutes; the killer, or the target if they survive, gets a reward
+      - King of the Hill: hold a zone longest to win a reward
 
     Chat and kills come from SCUM's own logs (SCUM/Saved/SaveFiles/Logs/chat_*.log and
     kill_*.log). Messages to one player use Prisoner.SendMessageToClient, announcements use
@@ -77,6 +83,21 @@ local DEFAULTS = {
     info = { enabled = true, lines = {} },
     reports = { enabled = true, cooldownSeconds = 60 },
     featureTips = { onJoin = true, announceEveryMinutes = 20, extraTips = {} },
+    deathRecap = { enabled = true, message = "You were killed by {killer} with {weapon} from {distance} m." },
+    hotspots = {
+        enabled = true, kills = 3, withinMinutes = 5, radius = 500, cooldownMinutes = 10,
+        message = "Heavy fighting reported {place}!",
+    },
+    manhunt = {
+        enabled = true, everyMinutes = 60, durationMinutes = 15, revealEveryMinutes = 3, minPlayers = 3,
+        hunterCommands = { "ChangeCurrencyBalance Normal 1000 {steamId}" }, hunterItems = {},
+        survivorCommands = { "ChangeCurrencyBalance Normal 1000 {steamId}" }, survivorItems = {},
+    },
+    koth = {
+        enabled = true, everyMinutes = 90, durationMinutes = 15, updateEveryMinutes = 5, minPlayers = 3,
+        minSeconds = 60, zones = {},
+        rewardCommands = { "ChangeCurrencyBalance Normal 1000 {steamId}" }, rewardItems = {},
+    },
 }
 
 local function safe(fn, ...)
@@ -218,7 +239,8 @@ end
 -- Not saved: streak (current kill streak), new (first seen joining this session).
 local records = {}
 local recordsDirty = false
-local FIELDS = { "name", "kills", "deaths", "playtime", "longest", "kit", "first", "rewarded", "daily", "bestStreak", "bounty", "owed" }
+local FIELDS = { "name", "kills", "deaths", "playtime", "longest", "kit", "first", "rewarded", "daily", "bestStreak", "bounty", "owed",
+    "lastSeen", "manhunt" }
 
 local function loadRecords()
     local text = readText(PLAYERS_FILE) or ""
@@ -235,7 +257,8 @@ local function loadRecords()
                 -- Records from before playtime rewards existed start counting from now.
                 rewarded = tonumber(parts[9]) or playtime, daily = parts[10] or "",
                 bestStreak = tonumber(parts[11]) or 0, bounty = tonumber(parts[12]) or 0,
-                owed = tonumber(parts[13]) or 0, streak = 0,
+                owed = tonumber(parts[13]) or 0, lastSeen = tonumber(parts[14]) or 0, manhunt = parts[15] or "",
+                streak = 0,
             }
         end
     end
@@ -265,7 +288,8 @@ local function record(id, name, joined)
     if entry == nil then
         entry = {
             name = name or "?", kills = 0, deaths = 0, playtime = 0, longest = 0, kit = joined and "pending" or "",
-            first = os.time(), rewarded = 0, daily = "", bestStreak = 0, bounty = 0, owed = 0, streak = 0,
+            first = os.time(), rewarded = 0, daily = "", bestStreak = 0, bounty = 0, owed = 0, lastSeen = 0,
+            manhunt = "", streak = 0,
             new = joined or nil,
         }
         records[id] = entry
@@ -318,6 +342,7 @@ local function parseKill(line)
             victimName = string.match(victim, '"ProfileName":"(.-)"'),
             weapon = string.match(line, '"Weapon":"(.-)"'),
             distance = distanceBetween(vectorIn(killer, "ServerLocation"), vectorIn(victim, "ServerLocation")),
+            victimAt = vectorIn(victim, "ServerLocation"),   -- metres
         }
     end
 
@@ -327,6 +352,11 @@ local function parseKill(line)
             killerId = killerId, killerName = killerName, victimId = victimId, victimName = victimName,
             weapon = string.match(line, "Weapon: (.-)%s+[SC]%[") or string.match(line, "Weapon: (%S+)"),
             distance = number(string.match(line, "Distance: ([%d%.]+) m")),
+            victimAt = (function()
+                local x, y, z = string.match(line, "VictimLoc: (%-?[%d%.]+), (%-?[%d%.]+), (%-?[%d%.]+)")
+                if x == nil then return nil end
+                return { x = tonumber(x) / CM_PER_M, y = tonumber(y) / CM_PER_M, z = tonumber(z) / CM_PER_M }
+            end)(),
         }
     end
     return nil
@@ -540,8 +570,10 @@ local function weaponName(weapon)
 end
 
 local recentVictims = {}   -- "killer>victim" -> time, to stop streak and bounty farming
+local events = {}          -- filled in further down: onKill(kill, time)
 
 local function handleKill(kill, time)
+    if events.onKill then events.onKill(kill, time) end
     local streaks, bounties = config.killStreaks, config.bounties
     local tracked = config.stats.enabled or streaks.enabled or bounties.enabled
     local killer = tracked and record(kill.killerId, kill.killerName)
@@ -1073,6 +1105,20 @@ local function featureTips()
         tips[#tips + 1] = "See a cheater or a problem? Type " .. p .. "report <name> <what happened> and the admins are told."
     end
     if config.afk.enabled then tips[#tips + 1] = "Players who are AFK for " .. config.afk.minutes .. " minutes are kicked." end
+    if config.manhunt.enabled and commands then
+        features[#features + 1] = "manhunts (" .. p .. "manhunt)"
+        tips[#tips + 1] = "Feeling brave? " .. p .. "manhunt join and you may become the hunted. Survive and you win."
+    end
+    local hasZones = false
+    for _, zone in ipairs(config.koth.zones or {}) do
+        if type(zone) == "table" and zone.name and tonumber(zone.x) then hasZones = true end
+    end
+    if config.koth.enabled and hasZones then
+        features[#features + 1] = "King of the Hill"
+        tips[#tips + 1] = "King of the Hill events: hold the announced zone the longest to win."
+    end
+    if config.hotspots.enabled then tips[#tips + 1] = "Big fights are announced. Follow the gunfire, or stay away from it." end
+    if commands then tips[#tips + 1] = "Type " .. p .. "seen <name> to see when a player was last online." end
     if commands and (config.chatCommands.discord or "") ~= "" then tips[#tips + 1] = "Join our Discord: " .. config.chatCommands.discord end
     for _, tip in ipairs(config.featureTips.extraTips or {}) do tips[#tips + 1] = tostring(tip) end
 
@@ -1097,6 +1143,311 @@ local function announceTip(time, online)
     announce("Tip: " .. tips[tipIndex])
 end
 
+-- ------------------------------------------------------------------ map sectors
+-- SCUM's map grid has rows A, B, C, D and Z and columns 0 to 4 over the island. The four
+-- outposts are in A0, B4, C2 and Z3, so their bankers show which way the grid lies on this map.
+-- Sector names are only used once all four bankers land in the right sector.
+
+local GRID_MIN, GRID_SIZE = -954800, 1624000   -- cm: the island's bounds in SCUM's own map
+local ROW_ORDERS = { { "A", "B", "C", "D", "Z" }, { "Z", "A", "B", "C", "D" } }
+local OUTPOST_SECTOR_SET = { A0 = true, B4 = true, C2 = true, Z3 = true }
+local grid = nil
+local gridTries, lastGridTry = 0, nil
+
+local function cell(value, direction)
+    local t = (value - GRID_MIN) / GRID_SIZE
+    if direction < 0 then t = 1 - t end
+    return math.floor(t * 5)
+end
+
+local function sectorWith(layout, position)
+    local row = cell(position[layout.rowAxis], layout.rowDirection)
+    local column = cell(position[layout.columnAxis], layout.columnDirection)
+    if row < 0 or row > 4 or column < 0 or column > 4 then return nil end
+    return layout.rows[row + 1] .. column
+end
+
+local function calibrateGrid(time)
+    if grid or gridTries >= 10 or (lastGridTry and time - lastGridTry < 60) then return end
+    lastGridTry, gridTries = time, gridTries + 1
+
+    local points = {}
+    for _, banker in ipairs(findAll({ "BP_Banker_C", "Banker" })) do
+        local at = location(banker)
+        local duplicate = false
+        for _, point in ipairs(points) do
+            if at and math.abs(point.x - at.x) < 30000 and math.abs(point.y - at.y) < 30000 then duplicate = true end
+        end
+        if at and not duplicate then points[#points + 1] = at end
+    end
+    if #points ~= 4 then return end
+
+    for _, rows in ipairs(ROW_ORDERS) do
+        for _, rowAxis in ipairs({ "x", "y" }) do
+            for _, rowDirection in ipairs({ 1, -1 }) do
+                for _, columnDirection in ipairs({ 1, -1 }) do
+                    local layout = { rows = rows, rowAxis = rowAxis, rowDirection = rowDirection,
+                        columnAxis = rowAxis == "x" and "y" or "x", columnDirection = columnDirection }
+                    local found = {}
+                    for _, point in ipairs(points) do
+                        local sector = sectorWith(layout, point)
+                        if sector and OUTPOST_SECTOR_SET[sector] then found[sector] = true end
+                    end
+                    if found.A0 and found.B4 and found.C2 and found.Z3 then
+                        grid = layout
+                        output("Map sectors worked out from the outposts.")
+                        return
+                    end
+                end
+            end
+        end
+    end
+    if gridTries == 1 then output("The outposts do not match SCUM's sector grid; places are described by the nearest destination instead.") end
+end
+
+-- "in sector B2", or "near <teleport destination or KotH zone>", or nil. Position in cm.
+local function describePlace(position)
+    if position == nil then return nil end
+    if grid then
+        local sector = sectorWith(grid, position)
+        if sector then return "in sector " .. sector end
+    end
+    local best, bestDistance = nil, 300000   -- 3 km
+    local candidates = {}
+    for _, place in ipairs(teleportLocations()) do candidates[#candidates + 1] = place end
+    for _, zone in ipairs(config.koth.zones or {}) do
+        if type(zone) == "table" and zone.name and tonumber(zone.x) then candidates[#candidates + 1] = zone end
+    end
+    for _, place in ipairs(candidates) do
+        local d = math.sqrt((tonumber(place.x) - position.x) ^ 2 + (tonumber(place.y) - position.y) ^ 2)
+        if d < bestDistance then best, bestDistance = place.name, d end
+    end
+    return best and ("near " .. best) or nil
+end
+
+-- ------------------------------------------------------------------ queued rewards
+
+local pendingRewards = {}   -- rewards that wait for an admin (commands) or for the player to spawn
+
+local function queueReward(steamId, commands, items, message)
+    pendingRewards[#pendingRewards + 1] = { steamId = steamId, commands = commands or {}, items = items or {}, message = message }
+end
+
+local function payQueuedRewards(session)
+    for index = #pendingRewards, 1, -1 do
+        local reward = pendingRewards[index]
+        if reward.steamId == session.steamId then
+            local values = { name = session.name, steamId = session.steamId }
+            if giveReward(session, reward.commands, reward.items, values) then
+                table.remove(pendingRewards, index)
+                if reward.message then tell(session, reward.message) end
+            end
+        end
+    end
+end
+
+-- ------------------------------------------------------------------ death recap and hotspots
+
+local recentKillPlaces = {}   -- { time, at (cm) }
+local lastHotspot = {}        -- place -> time
+
+local function deathRecap(kill)
+    local recap = config.deathRecap
+    if not recap.enabled or kill.victimId == nil then return end
+    local victim = sessionById(kill.victimId)
+    if victim == nil then return end
+    local killer = records[kill.killerId]
+    local text = fill(recap.message, {
+        killer = kill.killerName or "?", weapon = weaponName(kill.weapon),
+        distance = kill.distance and string.format("%d", math.floor(kill.distance + 0.5)) or "?",
+    })
+    -- The killer's streak is counted after this hook, so add this kill.
+    local streak = killer and ((killer.streak or 0) + 1) or 0
+    if streak >= 2 then text = text .. " They are on a " .. streak .. " kill streak." end
+    tell(victim, text)
+end
+
+local function hotspotCheck(kill, time)
+    local hotspots = config.hotspots
+    if not hotspots.enabled or kill.victimAt == nil then return end
+    local at = { x = kill.victimAt.x * CM_PER_M, y = kill.victimAt.y * CM_PER_M, z = kill.victimAt.z * CM_PER_M }
+    local window = (tonumber(hotspots.withinMinutes) or 5) * 60
+    local radius = (tonumber(hotspots.radius) or 500) * CM_PER_M
+
+    local kept = {}
+    for _, entry in ipairs(recentKillPlaces) do
+        if time - entry.time <= window then kept[#kept + 1] = entry end
+    end
+    kept[#kept + 1] = { time = time, at = at }
+    recentKillPlaces = kept
+
+    local nearby = 0
+    for _, entry in ipairs(kept) do
+        if math.sqrt((entry.at.x - at.x) ^ 2 + (entry.at.y - at.y) ^ 2) <= radius then nearby = nearby + 1 end
+    end
+    if nearby < (tonumber(hotspots.kills) or 3) then return end
+
+    local place = describePlace(at)
+    if place == nil then return end
+    local cooldown = (tonumber(hotspots.cooldownMinutes) or 10) * 60
+    if lastHotspot[place] and time - lastHotspot[place] < cooldown then return end
+    lastHotspot[place] = time
+    announce(fill(hotspots.message, { place = place, kills = nearby }))
+end
+
+-- ------------------------------------------------------------------ manhunt
+
+local hunt = nil       -- { targetId, targetName, endsAt, nextReveal }
+local lastHunt = nil
+
+local function revealTarget(session)
+    local pawn = characterOf(session.controller)
+    local place = describePlace(pawn and location(pawn))
+    announce(string.format("Manhunt: %s was last seen %s.", session.name, place or "somewhere on the island"))
+end
+
+local function manhuntTick(time, online)
+    local settings = config.manhunt
+    if hunt then
+        local target = sessionById(hunt.targetId)
+        if target == nil then
+            announce("Manhunt over: " .. hunt.targetName .. " left the server.")
+            hunt = nil
+        elseif time >= hunt.endsAt then
+            announce("Manhunt over: " .. hunt.targetName .. " survived and wins the reward!")
+            queueReward(hunt.targetId, settings.survivorCommands, settings.survivorItems, "You survived the manhunt. Reward received!")
+            output("Manhunt: " .. hunt.targetName .. " survived.")
+            hunt = nil
+        elseif time >= hunt.nextReveal then
+            hunt.nextReveal = time + (tonumber(settings.revealEveryMinutes) or 3) * 60
+            revealTarget(target)
+        end
+        return
+    end
+
+    if not settings.enabled or online < (tonumber(settings.minPlayers) or 3) then return end
+    lastHunt = lastHunt or time
+    if time - lastHunt < (tonumber(settings.everyMinutes) or 60) * 60 then return end
+    lastHunt = time
+
+    local candidates = {}
+    for _, session in pairs(sessions) do
+        local entry = session.steamId and records[session.steamId]
+        if entry and entry.manhunt == "1" and characterOf(session.controller) then candidates[#candidates + 1] = session end
+    end
+    if #candidates == 0 then return end
+    table.sort(candidates, function(a, b) return a.name < b.name end)
+    local target = candidates[math.random(#candidates)]
+    local minutes = tonumber(settings.durationMinutes) or 15
+    hunt = { targetId = target.steamId, targetName = target.name, endsAt = time + minutes * 60,
+        nextReveal = time + (tonumber(settings.revealEveryMinutes) or 3) * 60 }
+    announce(string.format("MANHUNT! %s is the target for %d minutes. Kill them for a reward; if they survive, they win it.", target.name, minutes))
+    revealTarget(target)
+    tell(target, "You are the manhunt target! Survive " .. minutes .. " minutes to win.")
+    output("Manhunt started on " .. target.name .. ".")
+end
+
+local function manhuntKill(kill)
+    if hunt == nil or kill.victimId ~= hunt.targetId or kill.killerId == hunt.targetId then return end
+    announce(string.format("Manhunt over: %s killed %s!", kill.killerName or "?", hunt.targetName))
+    queueReward(kill.killerId, config.manhunt.hunterCommands, config.manhunt.hunterItems, "You won the manhunt. Reward received!")
+    output("Manhunt: " .. (kill.killerName or "?") .. " killed " .. hunt.targetName .. ".")
+    hunt = nil
+end
+
+local function manhuntCommand(session, rest)
+    local action = string.lower(rest or "")
+    local entry = session.steamId and record(session.steamId, session.name, true)
+    if entry and action == "join" then
+        entry.manhunt, recordsDirty = "1", true
+        return tell(session, "You can now be picked as the manhunt target. " .. config.chatCommands.prefix .. "manhunt leave to stop.")
+    elseif entry and action == "leave" then
+        entry.manhunt, recordsDirty = "", true
+        return tell(session, "You will not be picked as the manhunt target.")
+    end
+    local lines = {}
+    if hunt then lines[1] = "Manhunt running: " .. hunt.targetName .. " is the target." else lines[1] = "No manhunt right now." end
+    lines[#lines + 1] = "Volunteer as a target: " .. config.chatCommands.prefix .. "manhunt join (" .. ((entry and entry.manhunt == "1") and "you are in" or "you are out") .. ")."
+    tell(session, lines)
+end
+
+-- ------------------------------------------------------------------ king of the hill
+
+local hill = nil       -- { zone, endsAt, nextUpdate, scores = { id = seconds }, names = { id = name } }
+local lastHill = nil
+
+local function kothZones()
+    local zones = {}
+    for _, zone in ipairs(config.koth.zones or {}) do
+        if type(zone) == "table" and zone.name and tonumber(zone.x) and tonumber(zone.y) then zones[#zones + 1] = zone end
+    end
+    return zones
+end
+
+local function hillLeader()
+    local bestId, bestScore = nil, 0
+    for id, score in pairs(hill.scores) do
+        if score > bestScore or (score == bestScore and bestId and id < bestId) then bestId, bestScore = id, score end
+    end
+    return bestId, bestScore
+end
+
+local function kothTick(time, elapsed, online)
+    local settings = config.koth
+    if hill then
+        local zone = hill.zone
+        local radius = (tonumber(zone.radius) or 100) * CM_PER_M
+        for _, session in pairs(sessions) do
+            local pawn = session.steamId and characterOf(session.controller)
+            local at = pawn and location(pawn)
+            if at and math.sqrt((at.x - tonumber(zone.x)) ^ 2 + (at.y - tonumber(zone.y)) ^ 2) <= radius then
+                hill.scores[session.steamId] = (hill.scores[session.steamId] or 0) + elapsed
+                hill.names[session.steamId] = session.name
+            end
+        end
+
+        if time >= hill.endsAt then
+            local winner, score = hillLeader()
+            if winner and score >= (tonumber(settings.minSeconds) or 60) then
+                announce(string.format("King of the Hill over: %s held %s for %s and wins!", hill.names[winner], zone.name, duration(score)))
+                queueReward(winner, settings.rewardCommands, settings.rewardItems, "You won King of the Hill. Reward received!")
+                output("King of the Hill: " .. hill.names[winner] .. " won.")
+            else
+                announce("King of the Hill over: nobody held " .. zone.name .. " long enough.")
+            end
+            hill = nil
+        elseif time >= hill.nextUpdate then
+            hill.nextUpdate = time + (tonumber(settings.updateEveryMinutes) or 5) * 60
+            local leader, score = hillLeader()
+            announce(string.format("King of the Hill at %s: %s, %s left.", zone.name,
+                leader and (hill.names[leader] .. " leads with " .. duration(score)) or "nobody has held it yet",
+                duration(hill.endsAt - time)))
+        end
+        return
+    end
+
+    local zones = kothZones()
+    if not settings.enabled or #zones == 0 or online < (tonumber(settings.minPlayers) or 3) then return end
+    lastHill = lastHill or time
+    if time - lastHill < (tonumber(settings.everyMinutes) or 90) * 60 then return end
+    lastHill = time
+
+    local zone = zones[math.random(#zones)]
+    local minutes = tonumber(settings.durationMinutes) or 15
+    hill = { zone = zone, endsAt = time + minutes * 60, nextUpdate = time + (tonumber(settings.updateEveryMinutes) or 5) * 60,
+        scores = {}, names = {} }
+    local place = describePlace({ x = tonumber(zone.x), y = tonumber(zone.y), z = tonumber(zone.z) or 0 })
+    announce(string.format("KING OF THE HILL at %s%s for %d minutes! Stay within %d m of it longest to win.", zone.name,
+        place and place ~= ("near " .. zone.name) and (" (" .. place .. ")") or "", minutes, tonumber(zone.radius) or 100))
+    output("King of the Hill started at " .. zone.name .. ".")
+end
+
+events.onKill = function(kill, time)
+    deathRecap(kill)
+    hotspotCheck(kill, time)
+    manhuntKill(kill)
+end
+
 -- ------------------------------------------------------------------ chat commands
 
 local function handleChat(chat, time)
@@ -1118,6 +1469,8 @@ local function handleChat(chat, time)
         if config.info.enabled then more[#more + 1] = prefix .. "info" end
         if config.bounties.enabled then more[#more + 1] = prefix .. "bounty" end
         if config.teleports.enabled then more[#more + 1] = prefix .. "tp" end
+        more[#more + 1] = prefix .. "seen <name>"
+        if config.manhunt.enabled then more[#more + 1] = prefix .. "manhunt" end
         if config.reports.enabled then more[#more + 1] = prefix .. "report <name> <what happened>" end
         if #more > 0 then lines[#lines + 1] = table.concat(more, ", ") end
         tell(session, lines)
@@ -1157,6 +1510,14 @@ local function handleChat(chat, time)
         bountyCommand(session, rest)
     elseif word == "tp" and config.teleports.enabled then
         teleportCommand(session, rest, time)
+    elseif word == "seen" then
+        local id, entry = findPlayerRecord(rest)
+        if id == nil or entry == nil then return tell(session, rest == "" and ("Usage: " .. prefix .. "seen <name>") or ("No player called " .. rest .. ".")) end
+        if sessionById(id) then return tell(session, entry.name .. " is online now.") end
+        if (entry.lastSeen or 0) <= 0 then return tell(session, entry.name .. " has not been seen since this was turned on.") end
+        tell(session, entry.name .. " was last online " .. duration(time - entry.lastSeen) .. " ago.")
+    elseif word == "manhunt" and config.manhunt.enabled then
+        manhuntCommand(session, rest)
     elseif word == "where" and isAdmin(session.controller) then
         local pawn = characterOf(session.controller)
         local position = pawn and location(pawn)
@@ -1259,6 +1620,8 @@ local function rewardCheck(session, time)
         end
     end
 
+    payQueuedRewards(session)
+
     if config.bounties.enabled and (entry.owed or 0) > 0 then
         local ok = runAdminCommand(fill(config.bounties.payCommand, { amount = entry.owed, steamId = session.steamId, name = session.name }))
         if ok then
@@ -1334,6 +1697,7 @@ local function tick()
                 entry.playtime = entry.playtime + elapsed
                 recordsDirty = true
             end
+            if session.steamId and records[session.steamId] then records[session.steamId].lastSeen = time end
         end
     end
     for key in pairs(sessions) do
@@ -1368,6 +1732,12 @@ local function tick()
 
     finishVote(time)
     announceTip(time, online)
+    local ok, err = pcall(calibrateGrid, time)
+    if not ok then output("Working out map sectors failed: " .. tostring(err)) end
+    ok, err = pcall(manhuntTick, time, online)
+    if not ok then output("Manhunt failed: " .. tostring(err)) end
+    ok, err = pcall(kothTick, time, elapsed, online)
+    if not ok then output("King of the Hill failed: " .. tostring(err)) end
 
     local every = (tonumber(config.stats.announceTopEveryMinutes) or 0) * 60
     if config.stats.enabled and every > 0 and online > 0 then
@@ -1423,4 +1793,6 @@ if config.playtimeRewards.enabled then features[#features + 1] = "playtime rewar
 if config.killStreaks.enabled then features[#features + 1] = "kill streaks" end
 if config.bounties.enabled then features[#features + 1] = "bounties" end
 if config.teleports.enabled then features[#features + 1] = "teleports" end
+if config.manhunt.enabled then features[#features + 1] = "manhunt" end
+if config.koth.enabled then features[#features + 1] = "King of the Hill" end
 output("Active: " .. (#features > 0 and table.concat(features, ", ") or "nothing enabled") .. ".")

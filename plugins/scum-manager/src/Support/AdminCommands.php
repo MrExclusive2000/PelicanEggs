@@ -59,7 +59,7 @@ final class AdminCommands
         'giveitem' => [
             'label' => 'Give an item to a player', 'anytime' => true, 'experimental' => true, 'template' => 'GiveItem {name} {item} {amount}',
             'help' => 'Puts the item in the player\'s inventory (or at their feet if it is full). Use a name from "Find an item name". New: try it on yourself first.',
-            'fields' => ['name' => ['playerName', 'Player'], 'item' => ['text', 'Item'], 'amount' => ['int', 'Amount', 1, 10]],
+            'fields' => ['name' => ['playerName', 'Player'], 'item' => ['item', 'Item'], 'amount' => ['int', 'Amount', 1, 10]],
         ],
         'settime' => [
             'label' => 'Set the time of day', 'anytime' => false, 'template' => 'SetTime {hour}',
@@ -172,6 +172,7 @@ final class AdminCommands
                         throw new InvalidArgumentException("Pick a $label.");
                     }
                     break;
+                case 'item':
                 case 'text':
                     if (in_array($field, ['item', 'text'], true) && preg_match('/\s/', $value)) {
                         throw new InvalidArgumentException("$label cannot contain spaces.");
@@ -183,6 +184,28 @@ final class AdminCommands
         }
 
         return ConsoleCommand::normalize(strtr($command['template'], $replacements));
+    }
+
+    /**
+     * Items the game has loaded, from PelicanConsole's items.txt (class names such as
+     * BP_Water_05l_C), labelled for a dropdown ("Water 05l (BP_Water_05l_C)").
+     *
+     * @return array<string, string> class name => label, sorted by label
+     */
+    public static function itemCatalog(?string $itemsTxt): array
+    {
+        $items = [];
+        foreach (explode("\n", str_replace("\r\n", "\n", $itemsTxt ?? '')) as $line) {
+            $name = trim($line);
+            if ($name === '' || !preg_match('/^[A-Za-z0-9_]+$/', $name)) {
+                continue;
+            }
+            $label = preg_replace(['/^BP_/', '/_C$/'], '', $name);
+            $items[$name] = str_replace('_', ' ', $label) . " ($name)";
+        }
+        asort($items, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $items;
     }
 
     /**
