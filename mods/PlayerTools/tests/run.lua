@@ -675,6 +675,29 @@ check("no errors in events", not has(read(dir .. "/playertools.log"), "failed"))
 FindAllOf = plainFindAll
 players = {}
 
+
+-- ================================================================== sectors from outpost destinations
+write(dir .. "/config.lua", [[return {
+    featureTips = { onJoin = false, announceEveryMinutes = 0 }, playtimeRewards = { enabled = false },
+    teleports = { locations = {
+        { name = "a0", x = -792400, y = -792400, z = 0, price = 0 },
+        { name = "b4", x = -467600, y = 506800, z = 0, price = 0 },
+        { name = "c2", x = -142800, y = -142800, z = 0, price = 0 },
+        { name = "z3", x = 506800, y = 182000, z = 0, price = 0 },
+    } },
+}]])
+local function countWorkedOut()
+    local n = 0
+    for _ in read(dir .. "/playertools.log"):gmatch("Map sectors worked out from the outposts%.") do n = n + 1 end
+    return n
+end
+local workedOutBefore = countWorkedOut()
+dofile(dir .. "/Scripts/main.lua")
+players = { Player("Solo") }
+step(2)
+check("sectors from destinations named after the outposts", countWorkedOut() == workedOutBefore + 1)
+players = {}
+
 os.execute("rm -rf '" .. tmp .. "'")
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))
 os.exit(failures == 0 and 0 or 1)

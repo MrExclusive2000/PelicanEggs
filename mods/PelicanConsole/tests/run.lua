@@ -282,36 +282,51 @@ check("unknown player", string.find(lastLine(), "No online player matches \"Nobo
 online = {}
 
 
--- Outposts from the bankers' positions.
+-- Outposts: found by searching loaded classes for traders, bankers and safe zones.
 local function Banker(x, y)
     local banker = object({ x = x, y = y })
     function banker:K2_GetActorLocation() return { X = self.x, Y = self.y, Z = 1000 } end
     function banker:GetActorForwardVector() return { X = 1, Y = 0, Z = 0 } end
     return banker
 end
+local function NamedClass(name) local c = object() function c:GetFName() return { ToString = function() return name end } end return c end
+local classList = { NamedClass("BP_Banker_Outpost_C"), NamedClass("BankATMWidget"), NamedClass("TraderFilterFamePointsButton"),
+    NamedClass("BP_SafeZone_C"), NamedClass("Default__BP_Banker_Outpost_C") }
+local savedFindObjects = FindObjects
+function FindObjects(count, className) assert(className == "Class") return classList end
 -- Rows along -Y (A at the top), columns along +X: A0 (0, 900), B4 (4, 600), C2 (2, 300), Z3 (3, -300), in km-ish units.
 local bankers = { Banker(0, 900000), Banker(400000, 600000), Banker(200000, 300000), Banker(300000, -300000), Banker(300100, -300100) }
+local zones = {}
 local oldFindAll = FindAllOf
+local asked = {}
 function FindAllOf(className)
-    if className == "Banker" then return bankers end
+    asked[className] = true
+    if className == "BP_Banker_Outpost_C" then return bankers end
+    if className == "BP_SafeZone_C" then return zones end
     return oldFindAll(className)
 end
 writeCommands("FindOutposts\n")
 loopCallback()
-check("outposts found and de-duplicated", string.find(consoleLog(), "4 outpost(s) found, named by sector:", 1, true) ~= nil)
+check("UI classes are not searched", not asked.BankATMWidget and not asked.TraderFilterFamePointsButton)
+check("outposts found from bankers and de-duplicated", string.find(consoleLog(), "4 outpost(s) found from banker positions, named by sector:", 1, true) ~= nil)
 check("outposts named by sector, in front of the banker", string.find(consoleLog(), "Outpost a0 at 250 900000 1020", 1, true) ~= nil
     and string.find(consoleLog(), "Outpost b4 at 400250 600000 1020", 1, true) ~= nil
     and string.find(consoleLog(), "Outpost c2 at 200250 300000 1020", 1, true) ~= nil
     and string.find(consoleLog(), "Outpost z3 at 300250 -300000 1020", 1, true) ~= nil)
-bankers = { Banker(0, 0), Banker(500000, 0) }
-writeCommands("FindOutposts\n")
-loopCallback()
-check("unmatched layouts get plain names", string.find(consoleLog(), "Outpost outpost2 at 500250 0 1020", 1, true) ~= nil)
+-- No bankers loaded: safe zones are used instead, with a warning about the height.
 bankers = {}
+zones = { Banker(0, 0), Banker(500000, 0) }
 writeCommands("FindOutposts\n")
 loopCallback()
-check("no bankers", string.find(consoleLog(), "No outposts found", 1, true) ~= nil)
+check("safe zones as a fallback", string.find(consoleLog(), "2 outpost(s) found from safezone positions", 1, true) ~= nil
+    and string.find(consoleLog(), "centres of the safe zones", 1, true) ~= nil
+    and string.find(consoleLog(), "Outpost outpost2 at 500000 0 1000", 1, true) ~= nil)
+zones = {}
+writeCommands("FindOutposts\n")
+loopCallback()
+check("nothing found explains what exists", string.find(consoleLog(), "No outposts found. Outpost-like objects in the world: none.", 1, true) ~= nil)
 FindAllOf = oldFindAll
+FindObjects = savedFindObjects
 
 
 -- Item list for SCUM Manager's dropdowns: only classes deriving from SCUM's Item.

@@ -1145,7 +1145,8 @@ end
 
 -- ------------------------------------------------------------------ map sectors
 -- SCUM's map grid has rows A, B, C, D and Z and columns 0 to 4 over the island. The four
--- outposts are in A0, B4, C2 and Z3, so their bankers show which way the grid lies on this map.
+-- outposts are in A0, B4, C2 and Z3, so their bankers (or teleport destinations named a0, b4,
+-- c2 and z3) show which way the grid lies on this map.
 -- Sector names are only used once all four bankers land in the right sector.
 
 local GRID_MIN, GRID_SIZE = -954800, 1624000   -- cm: the island's bounds in SCUM's own map
@@ -1153,6 +1154,7 @@ local ROW_ORDERS = { { "A", "B", "C", "D", "Z" }, { "Z", "A", "B", "C", "D" } }
 local OUTPOST_SECTOR_SET = { A0 = true, B4 = true, C2 = true, Z3 = true }
 local grid = nil
 local gridTries, lastGridTry = 0, nil
+local GRID_TRIES = 30   -- once a minute for half an hour (destinations may be added meanwhile)
 
 local function cell(value, direction)
     local t = (value - GRID_MIN) / GRID_SIZE
@@ -1168,7 +1170,7 @@ local function sectorWith(layout, position)
 end
 
 local function calibrateGrid(time)
-    if grid or gridTries >= 10 or (lastGridTry and time - lastGridTry < 60) then return end
+    if grid or gridTries >= GRID_TRIES or (lastGridTry and time - lastGridTry < 60) then return end
     lastGridTry, gridTries = time, gridTries + 1
 
     local points = {}
@@ -1180,7 +1182,17 @@ local function calibrateGrid(time)
         end
         if at and not duplicate then points[#points + 1] = at end
     end
-    if #points ~= 4 then return end
+    if #points ~= 4 then
+        -- Fall back to teleport destinations named after the outposts (SCUM Manager's
+        -- "Add outposts as teleports" names them a0, b4, c2 and z3).
+        points = {}
+        for _, place in ipairs(teleportLocations()) do
+            if OUTPOST_SECTOR_SET[string.upper(place.name)] then
+                points[#points + 1] = { x = tonumber(place.x), y = tonumber(place.y), z = tonumber(place.z) }
+            end
+        end
+        if #points ~= 4 then return end
+    end
 
     for _, rows in ipairs(ROW_ORDERS) do
         for _, rowAxis in ipairs({ "x", "y" }) do

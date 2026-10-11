@@ -409,8 +409,7 @@ local function giveItem(text)
     output(string.format("Gave %s %d x %s (experimental): %d in their inventory, %d at their feet.", player.name, amount, className, placed, dropped))
 end
 
--- Every trader outpost has a banker. Their positions give the outposts on this server's map.
-local OUTPOST_MARKERS = { "BP_Banker_C", "Banker" }
+-- Outposts are found from the traders, bankers or safe zones the map has loaded.
 local OUTPOST_SECTORS = { "a0", "b4", "c2", "z3" }   -- SCUM's four outposts
 local SAME_OUTPOST = 30000                            -- 300 m
 
@@ -443,30 +442,86 @@ local function sectorNames(points)
     return #fits == 1 and fits[1] or nil
 end
 
+-- Classes whose names suggest an outpost, best first. NPCs stand on the ground, so their
+-- positions are good teleport spots; safe zone volumes only mark the area.
+local OUTPOST_KEYWORDS = { "banker", "trader", "outpost", "safezone" }
+local NOT_IN_WORLD = { "widget", "button", "panel", "request", "response", "filter", "menu", "statics",
+    "setup", "settings", "data", "registry", "tag", "atm", "ui", "category", "depot", "interface" }
+
+local function outpostCandidates()
+    local candidates = {}
+    local classes = safe(function() return FindObjects(0, "Class", nil, 0, 0, false) end) or {}
+    for _, class in pairs(classes) do
+        local name = safe(function() return class:GetFName():ToString() end)
+        local lowered = name and string.lower(name) or ""
+        local keyword = nil
+        for _, word in ipairs(OUTPOST_KEYWORDS) do
+            if keyword == nil and string.find(lowered, word, 1, true) then keyword = word end
+        end
+        local excluded = string.find(lowered, "^default__") or string.find(lowered, "^skel_") or string.find(lowered, "^reinst_")
+        for _, word in ipairs(NOT_IN_WORLD) do
+            if string.find(lowered, word, 1, true) then excluded = true end
+        end
+        if keyword and not excluded then candidates[#candidates + 1] = { name = name, keyword = keyword } end
+    end
+    table.sort(candidates, function(a, b) return a.name < b.name end)
+    return candidates
+end
+
 local function findOutposts()
-    local points = {}
-    for _, actor in ipairs(findAll(OUTPOST_MARKERS)) do
-        local at = locationOf(actor)
-        if at then
-            -- Stand a few metres in front of the banker, not inside them.
-            local forward = safe(function() return actor:GetActorForwardVector() end)
-            local fx, fy = safe(function() return forward.X end), safe(function() return forward.Y end)
-            if type(fx) == "number" and type(fy) == "number" then
-                at.X, at.Y = at.X + fx * 250, at.Y + fy * 250
+    local found = {}   -- keyword -> list of { at, onGround }
+    local report = {}
+    for _, candidate in ipairs(outpostCandidates()) do
+        local count = 0
+        for _, actor in ipairs(findAll({ candidate.name })) do
+            local at = locationOf(actor)
+            if at then
+                count = count + 1
+                local onGround = candidate.keyword == "banker" or candidate.keyword == "trader"
+                if onGround then
+                    -- Stand a few metres in front of the NPC, not inside them.
+                    local forward = safe(function() return actor:GetActorForwardVector() end)
+                    local fx, fy = safe(function() return forward.X end), safe(function() return forward.Y end)
+                    if type(fx) == "number" and type(fy) == "number" then
+                        at.X, at.Y = at.X + fx * 250, at.Y + fy * 250
+                    end
+                    at.Z = at.Z + 20
+                end
+                found[candidate.keyword] = found[candidate.keyword] or {}
+                table.insert(found[candidate.keyword], at)
             end
-            at.Z = at.Z + 20
+        end
+        if count > 0 then report[#report + 1] = candidate.name .. ": " .. count end
+    end
+
+    local points, used = {}, nil
+    for _, keyword in ipairs(OUTPOST_KEYWORDS) do
+        local clusters = {}
+        for _, at in ipairs(found[keyword] or {}) do
             local duplicate = false
-            for _, point in ipairs(points) do
+            for _, point in ipairs(clusters) do
                 if math.abs(point.X - at.X) < SAME_OUTPOST and math.abs(point.Y - at.Y) < SAME_OUTPOST then duplicate = true end
             end
-            if not duplicate then points[#points + 1] = at end
+            if not duplicate then clusters[#clusters + 1] = at end
+        end
+        if #clusters >= 2 and #clusters <= 8 then
+            points, used = clusters, keyword
+            break
         end
     end
-    if #points == 0 then return output("No outposts found: no bankers are loaded on this map.") end
+
+    if #points == 0 then
+        output("No outposts found. Outpost-like objects in the world: " .. (#report > 0 and table.concat(report, ", ") or "none")
+            .. ". Traders may only exist while a player is near; try again with someone at an outpost, or use \"Add a place where a player stands\".")
+        return
+    end
 
     table.sort(points, function(a, b) return a.X < b.X end)
     local names = sectorNames(points)
-    output(#points .. " outpost(s) found" .. (names and ", named by sector:" or " (names could not be matched to sectors):"))
+    output(#points .. " outpost(s) found from " .. used .. " positions" .. (names and ", named by sector:" or " (names could not be matched to sectors):"))
+    if used == "outpost" or used == "safezone" then
+        output("These are the centres of the safe zones: teleport there once to check the height is right.")
+    end
     for index, point in ipairs(points) do
         output(string.format("Outpost %s at %.0f %.0f %.0f", names and names[index] or ("outpost" .. index), point.X, point.Y, point.Z))
     end
