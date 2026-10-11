@@ -12,6 +12,7 @@ spl_autoload_register(function (string $class) {
     }
 });
 
+use MrExclusive\ScumManager\Support\ConsoleCommand;
 use MrExclusive\ScumManager\Support\IniDocument;
 use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
@@ -209,6 +210,19 @@ check('archive: sanitize name', ModArchive::sanitizeName('..\\My Mod<script>.zip
 
 array_map('unlink', glob("$tmp/*"));
 rmdir($tmp);
+
+// ---------------------------------------------------------------- ConsoleCommand
+check('console: trims', ConsoleCommand::normalize("  Announce Hello \t"), 'Announce Hello');
+check('console: keeps a leading #', ConsoleCommand::normalize('#ListPlayers'), '#ListPlayers');
+throws('console: empty', fn () => ConsoleCommand::normalize('   '), 'Type a command');
+throws('console: only #', fn () => ConsoleCommand::normalize('##'), 'Type a command');
+throws('console: two lines', fn () => ConsoleCommand::normalize("ListPlayers\nShutdownServer"), 'one command');
+throws('console: too long', fn () => ConsoleCommand::normalize(str_repeat('a', 501)), 'at most 500');
+check('console: append to nothing', ConsoleCommand::append(null, 'ListPlayers'), "ListPlayers\n");
+check('console: append after unterminated line', ConsoleCommand::append('Announce Hi', 'ListPlayers'), "Announce Hi\nListPlayers\n");
+check('console: append after line', ConsoleCommand::append("Announce Hi\n", 'ListPlayers'), "Announce Hi\nListPlayers\n");
+check('console: tail keeps the last lines', ConsoleCommand::tail("a\r\nb\n\nc\nd\n", 2), "c\nd");
+check('console: tail of missing log', ConsoleCommand::tail(null), '');
 
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

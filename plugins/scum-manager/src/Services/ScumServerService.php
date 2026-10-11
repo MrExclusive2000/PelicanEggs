@@ -10,6 +10,7 @@ use App\Repositories\Daemon\DaemonServerRepository;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
+use MrExclusive\ScumManager\Support\ConsoleCommand;
 use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
 use MrExclusive\ScumManager\Support\Ue4ssSettings;
@@ -512,6 +513,55 @@ class ScumServerService
     }
 
     // ------------------------------------------------------------------ helpers
+
+    // ------------------------------------------------------------------ admin console
+
+    /** Folder of the PelicanConsole mod, or null when it is not installed. */
+    public function consoleModDir(Server $server): ?string
+    {
+        $ue4ss = $this->ue4ss($server);
+        if (!$ue4ss['installed']) {
+            return null;
+        }
+
+        $exists = collect($this->listDirectory($server, $ue4ss['mods']))
+            ->contains(fn (array $entry) => $entry['directory'] && $entry['name'] === 'PelicanConsole');
+
+        return $exists ? $ue4ss['mods'] . '/PelicanConsole' : null;
+    }
+
+    /**
+     * Queue a command for the PelicanConsole mod. Returns true when the mod picked it up
+     * within $waitSeconds (it checks once a second while the server runs).
+     */
+    public function sendConsoleCommand(Server $server, string $command, int $waitSeconds = 4): bool
+    {
+        $dir = $this->consoleModDir($server);
+        if ($dir === null) {
+            throw new RuntimeException('The PelicanConsole mod is not installed. Upload PelicanConsole.zip on the SCUM Mods page and restart the server.');
+        }
+
+        $command = ConsoleCommand::normalize($command);
+        $path = "$dir/commands.txt";
+        $this->write($server, $path, ConsoleCommand::append($this->read($server, $path), $command));
+
+        for ($i = 0; $i < $waitSeconds * 2; $i++) {
+            usleep(500_000);
+            if ($this->read($server, $path) === null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** The end of PelicanConsole's console.log (command results and mod messages). */
+    public function consoleOutput(Server $server, int $lines = 60): string
+    {
+        $dir = $this->consoleModDir($server);
+
+        return $dir === null ? '' : ConsoleCommand::tail($this->read($server, "$dir/console.log"), $lines);
+    }
 
     private function files(Server $server): DaemonFileRepository
     {
