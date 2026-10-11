@@ -26,6 +26,8 @@ return {
         names = true,             -- name contains one of blockedNames (impersonation, instant)
         watchlist = true,         -- announce when a watchlisted SteamID joins
         gameLogs = true,          -- show SCUM's own violation and admin command logs in the console
+        killLog = true,           -- aimbot signs in SCUM's kill log (range, god mode, desync, kill rate)
+        aimSnap = true,           -- aim jumping onto targets right before kills
     },
 
     -- Speed limits. Sprinting is about 7 m/s; the fastest vehicles stay well under 100.
@@ -62,6 +64,37 @@ return {
 
     -- With checks.gameLogs: also count each SCUM violation-log entry as a strike for that player.
     strikeOnGameViolations = false,
+
+    -- ------------------------------------------------------------ aimbot detection
+    -- These checks report "SUSPECT" lines for you to look into. Good players can trip them
+    -- now and then; a cheater trips them again and again. Spectate before you ban.
+
+    -- Longest believable kill with a firearm, and with melee (melee further away = kill aura).
+    maxKillDistance = 800,
+    maxMeleeDistance = 8,
+    -- Shorter limits for weapons whose name contains the given text (any case).
+    weaponMaxDistance = {
+        { "bow", 150 },          -- bows and crossbows
+        { "1911", 150 }, { "deagle", 150 }, { "m9", 150 }, { "revolver", 150 },
+        { "pistol", 150 }, { "tec01", 150 }, { "glock", 150 },
+    },
+
+    -- This many kills within killRateMinutes is suspicious.
+    killRateKills = 8,
+    killRateMinutes = 5,
+
+    -- The killer's position on their own PC vs on the server, in metres. A big gap means
+    -- they killed from somewhere the server never saw them (teleport/desync kills).
+    maxLocationMismatch = 50,
+
+    -- Aim turning at least this many degrees within a tenth of a second counts as a snap.
+    -- Report a player once this many of their kills (and at least half of them) had a snap
+    -- just before.
+    aimSnapDegrees = 150,
+    aimSnapPattern = 3,
+
+    -- Also count aimbot suspicions as strikes (so they can lead to a kick/ban). Off by default.
+    strikeOnKillFlags = false,
 
     kickReason = "Kicked by anti-cheat. Contact an admin if this is a mistake.",
 }

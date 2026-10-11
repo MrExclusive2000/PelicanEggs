@@ -20,6 +20,17 @@ Also:
   - game logs   SCUM's own violations_*.log and admin_*.log entries are shown in the console;
                 with strikeOnGameViolations = true each violation also counts as a strike
 
+Aimbot signs (report "SUSPECT" lines only, unless strikeOnKillFlags = true):
+  - long-range kills   past config.maxKillDistance, or a weapon's limit in weaponMaxDistance
+                       (pistols, bows); melee kills from further than maxMeleeDistance
+  - god-mode kills     the killer had immortality (normally admin-only)
+  - desync kills       the killer's own position was far from where the server had them
+  - kill rate          config.killRateKills kills within config.killRateMinutes
+  - aim snaps          the view jumping 150+ degrees in a tenth of a second right before a
+                       kill; reported once it happens on 3 kills (and at least half of them)
+These read SCUM's kill_*.log and sample each player's aim 10 times a second. Aimbots run on
+the cheater's PC, so this cannot prove anything: it points at who to spectate.
+
 Actions (config.action):
   "log"   report only (default - run like this for a few days first)
   "kick"  kick; with banAfterKicks, players kicked that many times are banned

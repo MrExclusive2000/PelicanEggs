@@ -81,7 +81,7 @@ Ready-made UE4SS mods in [`mods/dist`](../mods/dist), uploaded on the **SCUM Mod
 | Mod | What it does |
 |-----|--------------|
 | `PelicanConsole.zip` | Runs admin commands typed in the Pelican console (above) |
-| `ScumAntiCheat.zip` | Server-side anti-cheat: speed, teleport, fly and hover hacks, out-of-map/under-map, admin rights not in AdminUsers.ini, staff impersonation names, a watchlist, and SCUM's own violation and admin logs in the console. It can kick or ban (via BannedUsers.ini), but only logs until you change `action` in its `config.lua` |
+| `ScumAntiCheat.zip` | Server-side anti-cheat: speed, teleport, fly and hover hacks, out-of-map/under-map, admin rights not in AdminUsers.ini, staff impersonation names, aimbot signs from the kill log and aim snaps (reported as suspects), a watchlist, and SCUM's own violation and admin logs in the console. It can kick or ban (via BannedUsers.ini), but only logs until you change `action` in its `config.lua` |
 | `ServerMessages.zip` | Welcome message, rotating announcements, join/leave log |
 
 Each mod has a `config.lua` in `SCUM/Binaries/Win64/ue4ss/Mods/<Mod>/`. Restart after editing it. The mods report in the Pelican console when PelicanConsole is installed.

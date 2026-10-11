@@ -41,6 +41,8 @@ local function Player(name, pawn)
     function controller:K2_GetPawn() return self.pawn end
     function controller:IsUserAdmin() return self.admin end
     function controller:IsTeleportInProgress() return self.teleporting end
+    controller.yaw, controller.pitch = 0, 0
+    function controller:GetControlRotation() return { Yaw = self.yaw, Pitch = self.pitch } end
     return controller
 end
 
@@ -80,8 +82,10 @@ function StaticFindObject(path)
     return nil
 end
 function ExecuteInGameThread(callback) callback() end
-local tick
-function LoopAsync(delay, callback) assert(delay == 1000) tick = callback end
+local tick, aimTick
+function LoopAsync(delay, callback)
+    if delay == 1000 then tick = callback elseif delay == 100 then aimTick = callback else error("unexpected delay " .. delay) end
+end
 
 -- SCUM's game logs are listed with "dir"; answer from a table instead.
 local gameLogFiles = {}
@@ -133,7 +137,7 @@ write(mods .. "/PelicanConsole/console.log", "")
 -- ------------------------------------------------------------------ scenario 1: shipped config (log only)
 start(read("mods/ScumAntiCheat/config.lua"))
 check("loop registered", tick ~= nil)
-check("startup line lists checks", has(acLog(), "Active. action=log, 3 strikes in 60 s. Checks: speed, teleport, flying, hovering, mapBounds, unauthorizedAdmin, names, watchlist, gameLogs."))
+check("startup line lists checks", has(acLog(), "Active. action=log, 3 strikes in 60 s. Checks: speed, teleport, flying, hovering, mapBounds, unauthorizedAdmin, names, watchlist, gameLogs, killLog, aimSnap."))
 check("startup line mirrored to Pelican console", has(read(mods .. "/PelicanConsole/console.log"), "Active."))
 
 local walker = Player("Walker", Pawn("BP_Prisoner_C", 0, 0, 0))
@@ -352,7 +356,106 @@ write(gameLogDir .. "/violations_2.log", "first line of new file\n")
 step(61)
 check("new game log read in full", has(acLog(), "SCUM violation: first line of new file"))
 
--- ------------------------------------------------------------------ scenario 4: broken config
+-- ------------------------------------------------------------------ scenario 4: aimbot checks from the kill log
+local function vec(x, y, z) return string.format('{"X":%.1f,"Y":%.1f,"Z":%.1f}', x * 100, y * 100, z * 100) end
+local function jsonKill(stamp, killerId, killerName, killerPos, clientPos, victimId, victimName, victimPos, weapon, immortal)
+    return string.format('%s: {"Killer":{"ServerLocation":%s,"ClientLocation":%s,"IsInGameEvent":false,"ProfileName":"%s","UserId":"%s","HasImmortality":%s},'
+        .. '"Victim":{"ServerLocation":%s,"ClientLocation":%s,"IsInGameEvent":false,"ProfileName":"%s","UserId":"%s"},"Weapon":"%s","TimeOfDay":"12:00:00"}\n',
+        stamp, vec(table.unpack(killerPos)), vec(table.unpack(clientPos or killerPos)), killerName, killerId, immortal and "true" or "false",
+        vec(table.unpack(victimPos)), vec(table.unpack(victimPos)), victimName, victimId, weapon)
+end
+local function textKill(stamp, killerId, killerName, victimId, victimName, weapon, distance)
+    return string.format("%s: Died: %s (%s), Killer: %s (%s) Weapon: %s S[KillerLoc : 0, 0, 0 VictimLoc: 0, 0, 0, Distance: %.2f m] C[...]\n",
+        stamp, victimName, victimId, killerName, killerId, weapon, distance)
+end
+
+local killLog = gameLogDir .. "/kill_1.log"
+write(killLog, utf16(textKill("2026.10.11-12.00.00", "76561198000000010", "Old", "76561198000000011", "OldVictim", "Weapon_AK47_C [Projectile]", 2000)))
+gameLogFiles.kill_ = "kill_1.log"
+gameLogFiles.violations_, gameLogFiles.admin_ = nil, nil
+start([[return { killRateKills = 3, killRateMinutes = 5 }]])
+check("kill log: old kills before start ignored", not has(acLog(), "Old"))
+check("startup lists aimbot checks", has(acLog(), "killLog, aimSnap."))
+check("aim sampler registered", aimTick ~= nil)
+
+local sniper = Player("Sniper", Pawn("BP_Prisoner_C", 0, 0, 0))
+local victim = Player("Victim", Pawn("BP_Prisoner_C", 100, 0, 0))
+login("76561198000000020", "Sniper")
+login("76561198000000021", "Victim")
+players = { sniper, victim }
+tick()
+
+-- Same kill in JSON and text form counts once; long range with a rifle is flagged.
+write(killLog, utf16(jsonKill("2026.10.11-12.41.00", "76561198000000020", "Sniper", { 0, 0, 0 }, nil, "76561198000000021", "Victim", { 1200, 0, 0 }, "Weapon_M82A1_C [Projectile]")
+    .. textKill("2026.10.11-12.41.00", "76561198000000020", "Sniper", "76561198000000021", "Victim", "Weapon_M82A1_C [Projectile]", 1200)), "a")
+step()
+text = acLog()
+check("long-range rifle kill flagged", has(text, "SUSPECT Sniper (76561198000000020): killed Victim at 1200 m with Weapon_M82A1_C [Projectile] (limit for any weapon: 800 m)"))
+check("JSON + text of one kill counted once", select(2, string.gsub(text, "killed Victim at 1200 m", "")) == 1)
+
+-- Pistol at 300 m: weapon limit. Melee at 20 m: kill aura. Trap far away: fine.
+write(killLog, utf16(textKill("2026.10.11-12.41.10", "76561198000000020", "Sniper", "76561198000000022", "P", "Weapon_M1911_C [Projectile]", 300)
+    .. textKill("2026.10.11-12.41.20", "76561198000000020", "Sniper", "76561198000000023", "M", "1H_KitchenKnife_C [Melee]", 20)
+    .. textKill("2026.10.11-12.41.30", "76561198000000030", "Trapper", "76561198000000024", "T", "Improvised_Mine_C [Explosion]", 900)), "a")
+step()
+text = acLog()
+check("pistol range limit", has(text, "killed P at 300 m with Weapon_M1911_C [Projectile] (limit for 1911: 150 m)"))
+check("melee from afar flagged", has(text, "killed M at 20 m with 1H_KitchenKnife_C [Melee] (limit for melee: 8 m)"))
+check("trap kills not range-checked", not has(text, "Trapper"))
+check("kill rate flagged at the third kill", has(text, "SUSPECT Sniper (76561198000000020): 3 kills within 5 minutes"))
+check("aimbot flags do not strike by default", not has(text, "[strike"))
+
+-- God mode and client/server position mismatch (JSON only).
+write(killLog, utf16(jsonKill("2026.10.11-12.42.00", "76561198000000040", "Godly", { 0, 0, 0 }, { 200, 0, 0 }, "76561198000000021", "Victim", { 10, 0, 0 }, "Weapon_AK47_C [Projectile]", true)), "a")
+step()
+text = acLog()
+check("god mode kill flagged (offline killer named from log)", has(text, "SUSPECT Godly (76561198000000040): had god mode (immortality) while killing Victim"))
+check("position mismatch flagged", has(text, "killed Victim while the client was 200 m from where the server had them"))
+
+-- Aim snaps right before kills, reported once it becomes a pattern.
+local snapper = Player("Snapper", Pawn("BP_Prisoner_C", 0, 0, 0))
+login("76561198000000050", "Snapper")
+players = { snapper, victim }
+tick()
+local function snapKill(n)
+    snapper.yaw = 0
+    clock = clock + 0.1; aimTick()
+    snapper.yaw = 170
+    clock = clock + 0.1; aimTick()
+    write(killLog, utf16(textKill("2026.10.11-12.43.0" .. n, "76561198000000050", "Snapper", "7656119800000006" .. n, "V" .. n, "Weapon_AK47_C [Projectile]", 50)), "a")
+    step()
+end
+snapKill(1)
+check("snap before kill reported", has(acLog(), "Snapper (76561198000000050) snapped 170 degrees in 0.10 s right before killing V1."))
+snapKill(2)
+check("no pattern after two", not has(acLog(), "aim snapped onto the target"))
+snapKill(3)
+check("pattern reported after three snap kills", has(acLog(), "SUSPECT Snapper (76561198000000050): aim snapped onto the target before 3 of 3 kills"))
+
+-- A slow turn is not a snap; an old snap does not count for a later kill.
+local calm = Player("Calm", Pawn("BP_Prisoner_C", 0, 0, 0))
+login("76561198000000070", "Calm")
+players = { calm }
+tick()
+for i = 1, 10 do calm.yaw = i * 17; clock = clock + 0.1; aimTick() end
+calm.yaw = 0; clock = clock + 0.1; aimTick(); calm.yaw = 170; clock = clock + 0.1; aimTick()
+clock = clock + 5
+write(killLog, utf16(textKill("2026.10.11-12.44.00", "76561198000000070", "Calm", "76561198000000071", "W", "Weapon_AK47_C [Projectile]", 50)), "a")
+step()
+check("slow turns and old snaps not counted", not has(acLog(), "Calm (76561198000000070) snapped"))
+
+-- strikeOnKillFlags turns suspicions into strikes.
+start([[return { strikeOnKillFlags = true, strikesToAct = 1, action = "kick", banAfterKicks = 0 }]])
+local far = Player("Far", Pawn("BP_Prisoner_C", 0, 0, 0))
+login("76561198000000080", "Far")
+players = { far }
+tick()
+write(killLog, utf16(textKill("2026.10.11-12.45.00", "76561198000000080", "Far", "76561198000000081", "X", "Weapon_AK47_C [Projectile]", 1500)), "a")
+step()
+check("kill flag can strike and kick", has(acLog(), "Far (76561198000000080): killed X at 1500 m") and has(acLog(), "Kicked Far (76561198000000080)"))
+gameLogFiles.kill_ = nil
+
+-- ------------------------------------------------------------------ scenario 5: broken config
 start("return {")
 check("broken config reported", has(acLog(), "config.lua could not be read, using defaults"))
 check("defaults used", has(acLog(), "action=log"))

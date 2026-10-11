@@ -12,6 +12,13 @@
       - names:      names that impersonate staff
       - watchlist:  announces watched SteamIDs when they join
       - game logs:  shows SCUM's own violation and admin-command logs in the console
+    and, for aimbots, from SCUM's kill log and the players' aim:
+      - long-range kills beyond what the weapon can do (and melee kills from afar)
+      - kills with god mode, or from a position the server disagrees with
+      - too many kills in a short time
+      - aim snaps: the view jumping onto a target right before a kill, kill after kill
+    Aimbot checks only report suspects; nobody is punished for them unless
+    strikeOnKillFlags is turned on.
 
     BattlEye covers the client (aimbots, ESP, injected code). This catches what still shows up
     on the server. Admins in AdminUsers.ini, players the game itself is teleporting, falling or
@@ -44,6 +51,7 @@ local DEFAULTS = {
     checks = {
         speed = true, teleport = true, flying = true, hovering = true, mapBounds = true,
         unauthorizedAdmin = true, names = true, watchlist = true, gameLogs = true,
+        killLog = true, aimSnap = true,
     },
     maxFootSpeed = 15,
     maxVehicleSpeed = 120,
@@ -57,6 +65,18 @@ local DEFAULTS = {
     blockedNames = { "admin", "moderator", "owner", "[staff]" },
     watchlist = {},
     strikeOnGameViolations = false,
+    maxKillDistance = 800,
+    maxMeleeDistance = 8,
+    weaponMaxDistance = {
+        { "bow", 150 }, { "1911", 150 }, { "deagle", 150 }, { "m9", 150 }, { "revolver", 150 },
+        { "pistol", 150 }, { "tec01", 150 }, { "glock", 150 },
+    },
+    killRateKills = 8,
+    killRateMinutes = 5,
+    maxLocationMismatch = 50,
+    aimSnapDegrees = 150,
+    aimSnapPattern = 3,
+    strikeOnKillFlags = false,
     kickReason = "Kicked by anti-cheat.",
 }
 
@@ -257,8 +277,74 @@ local function handleServerLogLine(line)
     end
 end
 
+-- ------------------------------------------------------------------ kill log
+
+local pendingKills = {}   -- parsed on the file thread, analysed on the game thread
+local recentKillKeys = {}
+
+local function number(text) return tonumber(text) end
+
+local function vectorIn(part, key)
+    local vector = part and string.match(part, '"' .. key .. '":(%b{})')
+    if not vector then return nil end
+    local x = number(string.match(vector, '"X":([%-%d%.eE+]+)'))
+    local y = number(string.match(vector, '"Y":([%-%d%.eE+]+)'))
+    local z = number(string.match(vector, '"Z":([%-%d%.eE+]+)'))
+    if not (x and y and z) then return nil end
+    return { x = x / CM_PER_M, y = y / CM_PER_M, z = z / CM_PER_M }
+end
+
+local function distanceBetween(a, b)
+    if not (a and b) then return nil end
+    local dx, dy, dz = a.x - b.x, a.y - b.y, a.z - b.z
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+-- SCUM writes each kill twice: as JSON and as a "Died: ..." line. Either is enough.
+local function parseKill(line)
+    local killer = string.match(line, '"Killer":(%b{})')
+    local victim = string.match(line, '"Victim":(%b{})')
+    if killer and victim then
+        local killerServer = vectorIn(killer, "ServerLocation")
+        return {
+            killerId = string.match(killer, '"UserId":"(%d+)"'),
+            killerName = string.match(killer, '"ProfileName":"(.-)"'),
+            victimId = string.match(victim, '"UserId":"(%d+)"'),
+            victimName = string.match(victim, '"ProfileName":"(.-)"'),
+            weapon = string.match(line, '"Weapon":"(.-)"') or "?",
+            distance = distanceBetween(killerServer, vectorIn(victim, "ServerLocation")),
+            mismatch = distanceBetween(killerServer, vectorIn(killer, "ClientLocation")),
+            immortal = string.find(killer, '"HasImmortality":true', 1, true) ~= nil,
+        }
+    end
+
+    local victimName, victimId, killerName, killerId = string.match(line, "Died: (.-) %((%d+)%), Killer: (.-) %((%d+)%)")
+    if killerId then
+        return {
+            killerId = killerId, killerName = killerName, victimId = victimId, victimName = victimName,
+            weapon = string.match(line, "Weapon: (.-)%s+[SC]%[") or string.match(line, "Weapon: (%S+)") or "?",
+            distance = number(string.match(line, "Distance: ([%d%.]+) m")),
+        }
+    end
+    return nil
+end
+
+local function handleKillLine(line)
+    local kill = parseKill(line)
+    if kill == nil or kill.killerId == nil or kill.killerId == kill.victimId then return end
+    -- The same kill appears in both formats; count it once.
+    local key = kill.killerId .. ">" .. tostring(kill.victimId) .. "@" .. (string.match(line, "^([%d%.%-]+)") or line)
+    if recentKillKeys[key] then return end
+    recentKillKeys[key] = true
+    pendingKills[#pendingKills + 1] = kill
+end
+
 local function handleGameLogLine(kind, line)
     if string.match(line, "^%s*$") then return end
+    if kind == "kill" then
+        handleKillLine(line)
+        return
+    end
     output("SCUM " .. kind .. ": " .. line)
     if kind == "violation" and config.strikeOnGameViolations then
         local id = string.match(line, "(%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d)")
@@ -266,7 +352,12 @@ local function handleGameLogLine(kind, line)
     end
 end
 
-local GAME_LOG_KINDS = { violations_ = "violation", admin_ = "admin command" }
+local GAME_LOG_KINDS = { violations_ = "violation", admin_ = "admin command", kill_ = "kill" }
+
+local function gameLogEnabled(prefix)
+    if prefix == "kill_" then return config.checks.killLog end
+    return config.checks.gameLogs
+end
 
 local function refreshFiles(now)
     for _, line in ipairs(readTail(serverLog)) do
@@ -279,12 +370,13 @@ local function refreshFiles(now)
         lastFileRefresh = now
         adminIds = steamIdsIn(CONFIG_DIR .. "/AdminUsers.ini")
 
-        if config.checks.gameLogs then
-            for prefix in pairs(GAME_LOG_KINDS) do
+        for prefix in pairs(GAME_LOG_KINDS) do
+            if gameLogEnabled(prefix) then
                 local path = newestGameLog(prefix)
                 if path and (gameLogs[prefix] == nil or gameLogs[prefix].path ~= path) then
                     -- Skip what was already in the file when the mod started; read new files in full.
                     gameLogs[prefix] = newTail(path, firstRefresh)
+                    recentKillKeys = {}
                 end
             end
         end
@@ -484,6 +576,136 @@ end
 
 local tracked = {}   -- by controller address
 
+-- ------------------------------------------------------------------ aim snaps
+
+local SNAP_HISTORY = 10   -- seconds of snaps kept per player
+local SNAP_WINDOW = 3     -- seconds before a kill (plus log delay) that count
+
+local function angleDifference(a, b)
+    local d = (a - b + 180) % 360 - 180
+    return math.abs(d)
+end
+
+local function rotation(controller)
+    local rotator = safe(function() return controller:GetControlRotation() end)
+        or safe(function() return controller.ControlRotation end)
+    if rotator == nil then return nil end
+    local yaw, pitch = safe(function() return rotator.Yaw end), safe(function() return rotator.Pitch end)
+    if type(yaw) ~= "number" or type(pitch) ~= "number" then return nil end
+    return yaw, pitch
+end
+
+local lastWorld = nil
+local function sampleAim()
+    local time = now(lastWorld)
+    for _, player in pairs(tracked) do
+        local yaw, pitch = nil, nil
+        if player.controller then yaw, pitch = rotation(player.controller) end
+        if yaw then
+            local last = player.lastAim
+            if last and time > last.time and time - last.time <= 0.3 then
+                local turned = math.sqrt(angleDifference(yaw, last.yaw) ^ 2 + angleDifference(pitch, last.pitch) ^ 2)
+                if turned >= config.aimSnapDegrees then
+                    player.snaps[#player.snaps + 1] = { time = time, degrees = turned, seconds = time - last.time }
+                end
+            end
+            player.lastAim = { yaw = yaw, pitch = pitch, time = time }
+            while player.snaps[1] and time - player.snaps[1].time > SNAP_HISTORY do
+                table.remove(player.snaps, 1)
+            end
+        end
+    end
+end
+
+-- ------------------------------------------------------------------ kill analysis
+
+local killTimes = {}   -- killer SteamID -> times of recent kills
+local killStats = {}   -- killer SteamID -> { kills, snapKills }
+
+local function weaponLimit(weapon)
+    if string.find(weapon, "[Melee]", 1, true) then return config.maxMeleeDistance, "melee" end
+    -- Traps, explosives and vehicles can kill far from their owner.
+    if string.find(weapon, "%[") and not string.find(weapon, "[Projectile]", 1, true) then return nil end
+    local lower = string.lower(weapon)
+    for _, rule in ipairs(config.weaponMaxDistance or {}) do
+        if type(rule) == "table" and rule[1] and string.find(lower, string.lower(rule[1]), 1, true) then
+            return rule[2], rule[1]
+        end
+    end
+    return config.maxKillDistance, "any weapon"
+end
+
+local function analyseKill(kill, byId, time)
+    local player = byId[kill.killerId]
+    local who = player and describe(player) or ((kill.killerName or "?") .. " (" .. kill.killerId .. ")")
+    local victim = kill.victimName or kill.victimId or "?"
+    if config.ignoredIds[kill.killerId] or (player and (player.verifiedAdmin and config.ignoreAdmins)) then return end
+
+    local function suspect(reason)
+        output("SUSPECT " .. who .. ": " .. reason)
+        if config.strikeOnKillFlags and player and player.controller then
+            strike(player, player.controller, reason, time)
+        end
+    end
+
+    local limit, label = weaponLimit(kill.weapon)
+    if limit and kill.distance and kill.distance > limit then
+        suspect(string.format("killed %s at %.0f m with %s (limit for %s: %d m)", victim, kill.distance, kill.weapon, label, limit))
+    end
+
+    if kill.immortal then
+        suspect("had god mode (immortality) while killing " .. victim)
+    end
+
+    if kill.mismatch and kill.mismatch > config.maxLocationMismatch then
+        suspect(string.format("killed %s while the client was %.0f m from where the server had them", victim, kill.mismatch))
+    end
+
+    local recent = {}
+    for _, at in ipairs(killTimes[kill.killerId] or {}) do
+        if time - at <= config.killRateMinutes * 60 then recent[#recent + 1] = at end
+    end
+    recent[#recent + 1] = time
+    killTimes[kill.killerId] = recent
+    if #recent == config.killRateKills then
+        suspect(string.format("%d kills within %d minutes", #recent, config.killRateMinutes))
+    end
+
+    if config.checks.aimSnap and player then
+        local stats = killStats[kill.killerId] or { kills = 0, snapKills = 0 }
+        killStats[kill.killerId] = stats
+        stats.kills = stats.kills + 1
+
+        local biggest = nil
+        for _, snap in ipairs(player.snaps) do
+            if time - snap.time <= SNAP_WINDOW and (biggest == nil or snap.degrees > biggest.degrees) then
+                biggest = snap
+            end
+        end
+        if biggest then
+            stats.snapKills = stats.snapKills + 1
+            output(string.format("%s snapped %.0f degrees in %.2f s right before killing %s.", who, biggest.degrees, biggest.seconds, victim))
+            if stats.snapKills % config.aimSnapPattern == 0 and stats.snapKills * 2 >= stats.kills then
+                suspect(string.format("aim snapped onto the target before %d of %d kills", stats.snapKills, stats.kills))
+            end
+        end
+    end
+end
+
+local function processKills(time)
+    if #pendingKills == 0 then return end
+    local kills = pendingKills
+    pendingKills = {}
+    local byId = {}
+    for _, player in pairs(tracked) do
+        if player.steamId then byId[player.steamId] = player end
+    end
+    for _, kill in ipairs(kills) do
+        local ok, err = pcall(analyseKill, kill, byId, time)
+        if not ok then output("Kill check failed: " .. tostring(err)) end
+    end
+end
+
 local function checkIdentity(player, controller, isAdmin)
     if player.steamId == nil then
         player.steamId = steamIdByName[player.name]
@@ -588,9 +810,10 @@ local function check(controller, time, seen)
 
     local player = tracked[key]
     if player == nil or player.name ~= name then
-        player = { name = name, strikes = {}, lastStrike = {} }
+        player = { name = name, strikes = {}, lastStrike = {}, snaps = {} }
         tracked[key] = player
     end
+    player.controller = controller
 
     checkIdentity(player, controller, isTrue(controller, "IsUserAdmin"))
 
@@ -631,6 +854,7 @@ local playerCount = -1
 
 local function checkAll()
     local world = findFirst({ "World" })
+    lastWorld = world
     local time = now(world)
     local seen = {}
     local controllers = findAll(CONTROLLER_CLASSES)
@@ -646,6 +870,8 @@ local function checkAll()
     for key in pairs(tracked) do
         if not seen[key] then tracked[key] = nil end
     end
+
+    processKills(time)
 
     if #controllers ~= playerCount then
         playerCount = #controllers
@@ -669,8 +895,23 @@ LoopAsync(1000, function()
     return false
 end)
 
+if config.checks.aimSnap then
+    local sampling = false
+    LoopAsync(100, function()
+        if not sampling then
+            sampling = true
+            ExecuteInGameThread(function()
+                local ok, err = pcall(sampleAim)
+                sampling = false
+                if not ok then output("Aim sampling failed: " .. tostring(err)) end
+            end)
+        end
+        return false
+    end)
+end
+
 local enabled = {}
-for _, name in ipairs({ "speed", "teleport", "flying", "hovering", "mapBounds", "unauthorizedAdmin", "names", "watchlist", "gameLogs" }) do
+for _, name in ipairs({ "speed", "teleport", "flying", "hovering", "mapBounds", "unauthorizedAdmin", "names", "watchlist", "gameLogs", "killLog", "aimSnap" }) do
     if config.checks[name] then enabled[#enabled + 1] = name end
 end
 output(string.format("Active. action=%s, %d strikes in %d s. Checks: %s.",
