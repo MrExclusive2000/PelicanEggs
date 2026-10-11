@@ -272,6 +272,23 @@ pilot.pawn.x = pilot.pawn.x + 900
 step()
 check("jump no plane could make flagged", has(acLog(), "Pilot: teleported 900 m"))
 
+-- Vehicles get extra room past the map edge; on foot the edge is where it is.
+local flyer = Player("Flyer", Pawn("BPC_Airplane_C", 6600, 0, 1500))
+local swimmer = Player("Swimmer", Pawn("BP_Prisoner_C", 6690, 0, 0))
+players = { flyer, swimmer }
+tick()
+flyer.pawn.x = 6680; swimmer.pawn.x = 6695
+step()
+flyer.pawn.x = 6760
+step()
+check("plane just past the map edge not flagged", not has(acLog(), "Flyer: outside the map"))
+check("player on foot past the map edge flagged", has(acLog(), "Swimmer: outside the map"))
+flyer.pawn.x = 9700; flyer.teleporting = true
+step()
+flyer.teleporting = false
+for _ = 1, 3 do flyer.pawn.x = flyer.pawn.x + 80 step() end
+check("plane far past the margin flagged", has(acLog(), "Flyer: outside the map"))
+
 -- Admin rights without being in AdminUsers.ini.
 local rogue = Player("Rogue", Pawn("BP_Prisoner_C", 0, 0, 0))
 rogue.admin = true

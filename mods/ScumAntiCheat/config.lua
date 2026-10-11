@@ -45,6 +45,8 @@ return {
 
     -- The playable island, from SCUM's own map bounds. minZ is how deep a player may be.
     mapBounds = { minX = -9548, maxX = 6692, minY = -9548, maxY = 6692, minZ = -300 },
+    -- Extra metres past those bounds allowed in a vehicle (planes and boats can stray off the island).
+    vehicleMapMargin = 3000,
 
     -- Real admins (listed in AdminUsers.ini) are never checked. Neither are these.
     ignoreAdmins = true,

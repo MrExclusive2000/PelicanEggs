@@ -272,6 +272,7 @@ final class ModSettings
                         'maxFootSpeed' => ['int', 'Max speed on foot (m/s)', 21],
                         'maxVehicleSpeed' => ['int', 'Max speed in vehicles (m/s)', 120],
                         'teleportDistance' => ['int', 'Teleport distance (m)', 300],
+                        'vehicleMapMargin' => ['int', 'Extra room past the map edge in vehicles (m)', 3000],
                         'flyingSeconds' => ['int', 'Flying for (s)', 10],
                         'hoverSeconds' => ['int', 'Hovering for (s)', 8],
                     ],

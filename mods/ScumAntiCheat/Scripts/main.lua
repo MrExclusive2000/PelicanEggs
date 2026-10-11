@@ -61,6 +61,7 @@ local DEFAULTS = {
     flyingSeconds = 10,
     hoverSeconds = 8,
     mapBounds = { minX = -9548, maxX = 6692, minY = -9548, maxY = 6692, minZ = -300 },
+    vehicleMapMargin = 3000,
     ignoreAdmins = true,
     ignoreNames = {},
     ignoreSteamIds = {},
@@ -778,7 +779,10 @@ local function checkMovement(player, controller, pawn, position, previous, elaps
     local bounds = config.mapBounds
 
     if config.checks.mapBounds then
-        if position.x < bounds.minX or position.x > bounds.maxX or position.y < bounds.minY or position.y > bounds.maxY then
+        -- Planes and boats can stray past the island's edge; give vehicles extra room.
+        local margin = vehicle and (tonumber(config.vehicleMapMargin) or 0) or 0
+        if position.x < bounds.minX - margin or position.x > bounds.maxX + margin
+            or position.y < bounds.minY - margin or position.y > bounds.maxY + margin then
             strikeOnce(player, controller, "bounds", "outside the map " .. where, time)
         elseif position.z < bounds.minZ then
             strikeOnce(player, controller, "bounds", "below the map " .. where, time)
