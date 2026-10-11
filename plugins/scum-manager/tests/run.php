@@ -339,6 +339,7 @@ throws('commands: unknown command', fn () => AdminCommands::build('nope', []), '
 check('commands: known players from players.tsv', AdminCommands::knownPlayers("76561198000000002\tbob\t0\n76561198000000001\tAlice\t3\nbad line\n"),
     ['76561198000000001' => 'Alice (76561198000000001)', '76561198000000002' => 'bob (76561198000000002)']);
 check('commands: no players file', AdminCommands::knownPlayers(null), []);
+check('commands: item catalog with paths', AdminCommands::itemCatalog("BP_Water_05l_C\t/Game/ConZ_Files/Items/W/BP_Water_05l.BP_Water_05l_C\nBP_Apple_C\t\n"), ['BP_Apple_C' => 'Apple (BP_Apple_C)', 'BP_Water_05l_C' => 'Water 05l (BP_Water_05l_C)']);
 check('commands: item catalog', AdminCommands::itemCatalog("BP_Water_05l_C\r\nBP_Apple_C\nbad name!\n\n"), ['BP_Apple_C' => 'Apple (BP_Apple_C)', 'BP_Water_05l_C' => 'Water 05l (BP_Water_05l_C)']);
 check('commands: no item list yet', AdminCommands::itemCatalog(null), []);
 $catalog = AdminCommands::itemCatalog("BP_Water_05l_C\nBP_Water_1l_C\nBP_Apple_C\nBP_Canned_Water_C\n");

@@ -196,7 +196,8 @@ final class AdminCommands
     {
         $items = [];
         foreach (explode("\n", str_replace("\r\n", "\n", $itemsTxt ?? '')) as $line) {
-            $name = trim($line);
+            // "ClassName<TAB>/Game/...path"; older lists have the class name only.
+            $name = trim(explode("\t", $line)[0]);
             if ($name === '' || !preg_match('/^[A-Za-z0-9_]+$/', $name)) {
                 continue;
             }

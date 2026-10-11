@@ -795,6 +795,26 @@ local function findItemClass(name)
     for _, candidate in ipairs(candidates) do
         if isValid(classesByName[candidate]) then return classesByName[candidate], candidate end
     end
+    -- SCUM loads item types on demand. PelicanConsole's items.txt records where each item type
+    -- seen so far lives, so load it from there.
+    local file = io.open(DIR .. "/../PelicanConsole/items.txt", "r")
+    if file then
+        local paths = {}
+        for line in file:lines() do
+            local itemName, path = string.match(line, "^([%w_]+)\t(%S+)")
+            if itemName then paths[itemName] = path end
+        end
+        file:close()
+        for _, candidate in ipairs(candidates) do
+            if paths[candidate] then
+                local loaded = safe(function() return LoadAsset(paths[candidate]) end)
+                if isValid(loaded) then
+                    classesByName[candidate] = loaded
+                    return loaded, candidate
+                end
+            end
+        end
+    end
     return nil
 end
 

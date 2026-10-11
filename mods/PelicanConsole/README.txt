@@ -29,3 +29,7 @@ Experimental commands (no admin needed; new, try them on yourself first):
  - FindOutposts                          the trader outposts on this map (from the bankers)
  - FindItem <text>                       loaded item class names containing the text
  - GiveItem <player> <item> [amount]     put an item in a player's inventory
+
+Item list: SCUM loads item types on demand, so a scan only sees the ones in memory. items.txt
+keeps every item type seen (with its path), is refreshed every 30 minutes, and grows as
+players meet more items. GiveItem loads an item that is not in memory from its recorded path.

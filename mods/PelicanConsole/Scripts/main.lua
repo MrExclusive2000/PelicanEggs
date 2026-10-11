@@ -313,6 +313,7 @@ local function teleportPlayer(text)
 end
 
 local itemClasses = {}   -- class name -> class, from the last item scan
+local knownItems = {}    -- class name -> object path, every item seen (kept in items.txt)
 local scanItems          -- defined with the item list below
 
 -- Item classes are Blueprints such as BP_Weapon_AK47_C. Look among the classes the game has loaded.
@@ -327,12 +328,35 @@ local function findItemClass(name)
     for _, candidate in ipairs(candidates) do
         if isValid(itemClasses[candidate]) then return itemClasses[candidate], candidate end
     end
+    -- Not loaded right now: SCUM loads item types on demand, so load it from its path.
+    for _, candidate in ipairs(candidates) do
+        local path = knownItems[candidate]
+        if path then
+            local loaded = safe(function() return LoadAsset(path) end) or safe(function() return StaticFindObject(path) end)
+            if isValid(loaded) then
+                itemClasses[candidate] = loaded
+                return loaded, candidate
+            end
+        end
+    end
     return nil
 end
 
--- Writes every item class the game has loaded to items.txt, one class name per line. SCUM
--- Manager reads it to offer item dropdowns.
+-- items.txt lists every item type seen so far ("ClassName<TAB>/Game/...path"). SCUM loads item
+-- types on demand, so one scan only sees what is in memory at that moment; the list grows with
+-- each scan. SCUM Manager reads it to offer item dropdowns.
 local ITEMS_FILE = DIR and (DIR .. "/items.txt") or nil
+
+local function loadKnownItems()
+    local file = ITEMS_FILE and io.open(ITEMS_FILE, "r")
+    if not file then return end
+    for line in file:lines() do
+        local name, path = string.match(line, "^([%w_]+)\t?(%S*)")
+        if name then knownItems[name] = path ~= "" and path or knownItems[name] or "" end
+    end
+    file:close()
+end
+loadKnownItems()
 
 local NOT_AN_ITEM = { "^ABP_", "^WBP_", "^UI_", "^SKEL_", "^REINST_", "^Default__", "Component", "AnimBP", "Widget" }
 
@@ -380,12 +404,20 @@ scanItems = function()
             end
         end
     end
-    table.sort(names)
-    return names, #classes, byParent, byFolder
+    local new = 0
+    for _, name in ipairs(names) do
+        local path = string.match(safe(function() return itemClasses[name]:GetFullName() end) or "", "^%S+%s+(.+)$") or ""
+        if knownItems[name] == nil then new = new + 1 end
+        if path ~= "" or knownItems[name] == nil then knownItems[name] = path end
+    end
+    local all = {}
+    for name in pairs(knownItems) do all[#all + 1] = name end
+    table.sort(all)
+    return all, #classes, byParent, byFolder, #names, new
 end
 
 local function writeItemList(quiet)
-    local names, scanned, byParent, byFolder = scanItems()
+    local names, scanned, byParent, byFolder, loaded, new = scanItems()
     if #names == 0 then
         if not quiet then output("No item classes found (" .. scanned .. " classes checked). Try ListItems again once the server is fully online.") end
         return false
@@ -395,10 +427,14 @@ local function writeItemList(quiet)
         output("Could not write " .. tostring(ITEMS_FILE) .. ".")
         return false
     end
-    file:write(table.concat(names, "\n") .. "\n")
+    local lines = {}
+    for _, name in ipairs(names) do lines[#lines + 1] = name .. "\t" .. (knownItems[name] or "") end
+    file:write(table.concat(lines, "\n") .. "\n")
     file:close()
-    output(string.format("Item list written: %d items from %d classes (%d by parent class, %d by folder). Refresh SCUM Manager to see them.",
-        #names, scanned, byParent, byFolder))
+    if not quiet or new > 0 then
+        output(string.format("Item list: %d items known, %d loaded right now (%d new). %d classes checked (%d by parent class, %d by folder). Refresh SCUM Manager to see them.",
+            #names, loaded, new, scanned, byParent, byFolder))
+    end
     return true
 end
 
@@ -637,12 +673,20 @@ end
 os.remove(COMMANDS_FILE)
 os.remove(PROCESSING_FILE)
 
--- The item list is written once per start, a minute after the world has loaded. Game objects
--- are only touched on the game thread.
-local itemsWritten, itemTries, worldSeenAt, lastItemCheck = false, 0, nil, nil
+-- The item list is written a minute after the world has loaded, then refreshed every 30 minutes
+-- (new item types load as players meet them). Game objects are only touched on the game thread.
+local ITEM_RESCAN = 30 * 60
+local itemsWritten, itemTries, worldSeenAt, lastItemCheck, lastItemScan = false, 0, nil, nil, nil
 
 LoopAsync(1000, function()
     local now = os.time()
+    if itemsWritten and lastItemScan and now - lastItemScan >= ITEM_RESCAN then
+        lastItemScan = now
+        ExecuteInGameThread(function()
+            local ok, err = pcall(writeItemList, true)
+            if not ok then output("Refreshing the item list failed: " .. tostring(err)) end
+        end)
+    end
     if not itemsWritten and itemTries < 10 and (lastItemCheck == nil or now - lastItemCheck >= 10) then
         lastItemCheck = now
         ExecuteInGameThread(function()
@@ -653,6 +697,7 @@ LoopAsync(1000, function()
                 local ok, written = pcall(writeItemList, itemTries < 10)
                 if not ok then output("Writing the item list failed: " .. tostring(written)) end
                 itemsWritten = ok and written
+                if itemsWritten then lastItemScan = now end
             end
         end)
     end

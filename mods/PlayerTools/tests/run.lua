@@ -583,6 +583,19 @@ money = "?"
 chat("76561198000000040", "Gus", "!bounty Hal 200")
 step()
 check("unreadable balance refuses", lastPrivate("Gus") == "You cannot place that bounty: your balance could not be read.")
+-- An item type not in memory is loaded from the path PelicanConsole recorded in items.txt.
+write(mods .. "/PelicanConsole/items.txt", "BP_Apple_C\t/Game/ConZ_Files/Items/Food/BP_Apple.BP_Apple_C\n")
+local appleClass = object()
+local requested = nil
+function LoadAsset(path) requested = path return path == "/Game/ConZ_Files/Items/Food/BP_Apple.BP_Apple_C" and appleClass or nil end
+write(dir .. "/config.lua", (read(dir .. "/config.lua"):gsub('{ item = "Nope", amount = 1 }', '{ item = "Apple", amount = 1 }')))
+step(31)
+login("76561198000000043", "Ola")
+players = { gus, Player("Ola") }
+local before = #spawned
+step(12)
+check("item loaded from items.txt path", requested == "/Game/ConZ_Files/Items/Food/BP_Apple.BP_Apple_C"
+    and spawned[#spawned].class == appleClass and #spawned == before + 3)
 FindFirstOf = oldFindFirst
 players = {}
 

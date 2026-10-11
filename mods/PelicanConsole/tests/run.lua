@@ -237,7 +237,7 @@ function FindObjects(count, className) return { waterClass, otherClass } end
 local statics = object()
 local fits = true
 function statics:BeginDeferredActorSpawnFromClass(w, class, transform, collision)
-    assert(class == waterClass and collision == 1)
+    assert(collision == 1)
     local actor = object({ fits = fits })
     spawned[#spawned + 1] = { actor = actor, at = transform.Translation }
     return actor
@@ -349,22 +349,36 @@ function FindObjects(count, className) assert(className == "Class") return loade
 writeCommands("ListItems\n")
 loopCallback()
 local function itemsFile() local f = io.open(dir .. "/items.txt") local t = f and f:read("a") or "" if f then f:close() end return t end
-check("item list written", string.find(consoleLog(), "Item list written: 2 items from 4 classes (2 by parent class, 0 by folder).", 1, true) ~= nil)
-check("item list contents", itemsFile() == "BP_Water_05l_C\nBP_Weapon_AK47_C\n")
+-- Water was already seen by the FindItem test above; the AK47 is new.
+check("item list written", string.find(consoleLog(), "Item list: 2 items known, 2 loaded right now (1 new). 4 classes checked (2 by parent class, 0 by folder).", 1, true) ~= nil)
+check("item list contents with paths", itemsFile() == "BP_Water_05l_C\t/Game/Other/BP_Water_05l_C\nBP_Weapon_AK47_C\t/Game/Other/BP_Weapon_AK47_C\n")
 -- Without GetSuperStruct: items are recognised by their folder.
 loadedClasses = { Class("Christmas_Headband_01_ES_C", false, "/Game/ConZ_Files/Items/Clothes/"),
     Class("BP_SphereMotionTriggerComponent_C", false, "/Game/ConZ_Files/Items/Traps/"), Class("BP_Door_C", false) }
 writeCommands("ListItems\n")
 loopCallback()
-check("items found by folder", string.find(consoleLog(), "Item list written: 1 items from 3 classes (0 by parent class, 1 by folder).", 1, true) ~= nil
-    and itemsFile() == "Christmas_Headband_01_ES_C\n")
+check("items found by folder, list keeps earlier items", string.find(consoleLog(), "Item list: 3 items known, 1 loaded right now (1 new). 3 classes checked (0 by parent class, 1 by folder).", 1, true) ~= nil
+    and string.find(itemsFile(), "Christmas_Headband_01_ES_C\t/Game/ConZ_Files/Items/Clothes/Christmas_Headband_01_ES_C\n", 1, true) ~= nil
+    and string.find(itemsFile(), "BP_Weapon_AK47_C\t", 1, true) ~= nil)
 writeCommands("FindItem headband\n")
 loopCallback()
 check("find item uses the scan", string.find(consoleLog(), "1 item(s) match \"headband\":", 1, true) ~= nil)
+-- Nothing loaded right now: the known list stays, and an item not in memory is loaded from its path.
 loadedClasses = {}
 writeCommands("ListItems\n")
 loopCallback()
-check("nothing found is reported", string.find(consoleLog(), "No item classes found (0 classes checked).", 1, true) ~= nil)
+check("known items survive a scan that sees none", string.find(consoleLog(), "Item list: 3 items known, 0 loaded right now (0 new).", 1, true) ~= nil)
+local loadedPaths = {}
+function LoadAsset(path)
+    loadedPaths[#loadedPaths + 1] = path
+    if path == "/Game/ConZ_Files/Items/Clothes/Christmas_Headband_01_ES_C" then return Class("Christmas_Headband_01_ES_C", false) end
+end
+online = { ExpPlayer("Bob") }
+writeCommands("GiveItem Bob Christmas_Headband_01_ES\n")
+loopCallback()
+check("item not in memory is loaded from its path", loadedPaths[1] == "/Game/ConZ_Files/Items/Clothes/Christmas_Headband_01_ES_C"
+    and string.find(consoleLog(), "Gave Bob 1 x Christmas_Headband_01_ES_C", 1, true) ~= nil)
+online = {}
 
 -- Started from an unexpected path: disabled with a message instead of erroring.
 log, loopCallback = {}, nil
