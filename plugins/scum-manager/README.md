@@ -4,7 +4,7 @@ Adds five pages to SCUM servers in the Pelican client area:
 
 | Page | What it does |
 |------|--------------|
-| **SCUM Admin Console** | Sends SCUM admin commands (ListPlayers, Announce, Kick...) through the PelicanConsole mod and shows the results |
+| **SCUM Admin Console** | Pick a command (announce, kick, set time, give money, teleport, ban...) and run it through the PelicanConsole mod; shows the results and player reports |
 | **SCUM Settings** | Form editor for `ServerSettings.ini`, with a tab per section and search |
 | **SCUM Player Lists** | Admins, settings admins, whitelist, exclusive, banned and silenced players |
 | **SCUM Mods** | Installs or updates UE4SS and our mods, uploads mods, and turns them on/off or deletes them |
@@ -50,7 +50,7 @@ Changes apply on the next server start.
 
 ### Console commands
 
-To run admin commands, upload the [PelicanConsole](../../mods/PelicanConsole) mod (`mods/dist/PelicanConsole.zip`) on this page and restart. Then use the **SCUM Admin Console** page: it writes the command straight into the mod's `commands.txt`, tells you whether SCUM picked it up, and shows the mod's `console.log`. The SCUM egg also forwards commands typed in the Pelican console to the same mod. See the [egg README](../../scum/README.md#console-commands).
+To run admin commands, upload the [PelicanConsole](../../mods/PelicanConsole) mod (`mods/dist/PelicanConsole.zip`) on this page and restart. Then use the **SCUM Admin Console** page: pick a command from the list (grouped into "works any time" and "needs an admin in game"), fill in the player or value, and run it. The page writes the command straight into the mod's `commands.txt`, tells you whether SCUM picked it up, and shows the mod's `console.log`. The SCUM egg also forwards commands typed in the Pelican console to the same mod. See the [egg README](../../scum/README.md#console-commands).
 
 ## SCUM Mod Settings
 

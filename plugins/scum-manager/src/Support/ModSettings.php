@@ -20,7 +20,7 @@ final class ModSettings
     public const MODS = [
         'PlayerTools' => [
             'label' => 'Player tools',
-            'description' => 'Chat commands, kill feed, stats, AFK kicker, voting and new-player welcome.',
+            'description' => 'Chat commands, kill feed, stats, AFK kicker, voting, new players, rewards, kill streaks, bounties, teleports, info and reports.',
             'sections' => [
                 'Chat commands' => [
                     'description' => 'Players type these in game chat; replies go only to them. !help, !rules, !discord, !online, !stats, !top, !vote',
@@ -76,6 +76,69 @@ final class ModSettings
                         'newPlayers.starterKit' => ['toggle', 'Starter kit on', true],
                         'newPlayers.starterKitCommands' => ['lines', 'Starter kit commands (one per line)', []],
                         'newPlayers.starterKitMessage' => ['text', 'Message when the kit is given', ''],
+                    ],
+                ],
+                'Welcome back' => [
+                    'description' => 'Returning players get their stats when they join. Placeholders: {name} {hours} {kills} {deaths} {bestStreak}',
+                    'fields' => [
+                        'welcomeBack.enabled' => ['toggle', 'Welcome back on', true],
+                        'welcomeBack.message' => ['text', 'Message', 'Welcome back {name}! {hours} played, {kills} kills, {deaths} deaths.'],
+                    ],
+                ],
+                'Playtime rewards' => [
+                    'description' => 'SCUM admin commands (without #) run as an online admin; rewards wait until one is online. Placeholders: {name} {steamId}',
+                    'fields' => [
+                        'playtimeRewards.enabled' => ['toggle', 'Playtime rewards on', true],
+                        'playtimeRewards.everyMinutes' => ['int', 'Reward every (min played)', 60],
+                        'playtimeRewards.commands' => ['lines', 'Reward commands (one per line)', []],
+                        'playtimeRewards.message' => ['text', 'Reward message', ''],
+                        'playtimeRewards.dailyCommands' => ['lines', 'Daily login bonus commands (one per line)', []],
+                        'playtimeRewards.dailyMessage' => ['text', 'Daily bonus message', ''],
+                    ],
+                ],
+                'Kill streaks' => [
+                    'description' => 'Placeholders: {name} {count}, and {killer} {victim} {count} for an ended streak.',
+                    'fields' => [
+                        'killStreaks.enabled' => ['toggle', 'Kill streaks on', true],
+                        'killStreaks.announceAt' => ['ints', 'Announce at (comma separated)', [3, 5, 10, 15, 20]],
+                        'killStreaks.message' => ['text', 'Streak message', '{name} is on a {count} kill streak!'],
+                        'killStreaks.endedMessage' => ['text', 'Streak ended message', '{killer} ended {victim}\'s {count} kill streak!'],
+                        'killStreaks.endedMinimum' => ['int', 'Announce ended streaks from', 3],
+                        'killStreaks.ignoreSameVictimMinutes' => ['int', 'Ignore repeat kills of the same player for (min)', 30],
+                    ],
+                ],
+                'Bounties' => [
+                    'description' => 'The server puts a bounty on players with a kill streak; whoever kills them collects it (paid when an admin is online). Player bounties stay off until the mod can check balances: a broke player could otherwise place a bounty for a friend to collect.',
+                    'fields' => [
+                        'bounties.enabled' => ['toggle', 'Bounties on', true],
+                        'bounties.streakBountyAt' => ['int', 'Bounty from this kill streak (0 = never)', 5],
+                        'bounties.streakBountyAmount' => ['int', 'Starting bounty', 500],
+                        'bounties.streakBountyIncrease' => ['int', 'Added per further kill', 100],
+                        'bounties.playerBounties' => ['toggle', 'Players can place bounties (!bounty <name> <amount>)', false],
+                        'bounties.minAmount' => ['int', 'Smallest player bounty', 100],
+                        'bounties.maxAmount' => ['int', 'Largest player bounty', 5000],
+                        'bounties.payCommand' => ['text', 'Payout command ({amount} {steamId})', 'ChangeCurrencyBalance Normal {amount} {steamId}'],
+                        'bounties.chargeCommand' => ['text', 'Charge command ({amount} {steamId})', 'ChangeCurrencyBalance Normal -{amount} {steamId}'],
+                    ],
+                ],
+                'Teleports' => [
+                    'description' => '!tp <name>: the player stands still, pays and is teleported (needs an admin online). Coordinates are SCUM world units; type !where in game as an admin to get yours.',
+                    'fields' => [
+                        'teleports.enabled' => ['toggle', 'Teleports on', true],
+                        'teleports.cooldownMinutes' => ['int', 'Cooldown (min)', 30],
+                        'teleports.standStillSeconds' => ['int', 'Stand still for (s)', 10],
+                        'teleports.locations' => ['rows', 'Destinations', [], 'numeric' => [1, 2, 3, 4], 'columns' => ['name' => 'Name (!tp name)', 'x' => 'X', 'y' => 'Y', 'z' => 'Z', 'price' => 'Price']],
+                        'teleports.command' => ['text', 'Teleport command ({x} {y} {z} {steamId})', 'Teleport {x} {y} {z} {steamId}'],
+                        'teleports.chargeCommand' => ['text', 'Charge command ({price} {steamId})', 'ChangeCurrencyBalance Normal -{price} {steamId}'],
+                    ],
+                ],
+                'Info and reports' => [
+                    'description' => '!info shows server time, uptime, players online and the next restart (from Messages > Restart warnings), then these lines. !report <name> <what happened> goes to reports.log, the Admin Console page and online admins.',
+                    'fields' => [
+                        'info.enabled' => ['toggle', '!info on', true],
+                        'info.lines' => ['lines', 'Extra !info lines', []],
+                        'reports.enabled' => ['toggle', '!report on', true],
+                        'reports.cooldownSeconds' => ['int', 'Seconds between reports per player', 60],
                     ],
                 ],
             ],

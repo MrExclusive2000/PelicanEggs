@@ -7,14 +7,24 @@
       - AFK kicker:    kicks players who have not moved for a while (warns first)
       - Voting:        players vote to change the time or weather
       - New players:   welcome messages and a one-time starter kit
+      - Welcome back:  a returning player's stats when they join
+      - Playtime:      a reward for every hour played and a daily login bonus
+      - Kill streaks:  "Alice is on a 5 kill streak!" and who ended it
+      - Bounties:      a server bounty on players with a kill streak (and, optionally, bounties
+                       players place with !bounty), paid to whoever kills them
+      - Teleports:     !tp <place> for a price, after standing still for a few seconds
+      - Info:          !info with uptime, players online and the next restart
+      - Reports:       !report <name> <reason>, logged to reports.log and sent to online admins
 
     Chat and kills come from SCUM's own logs (SCUM/Saved/SaveFiles/Logs/chat_*.log and
     kill_*.log). Messages to one player use Prisoner.SendMessageToClient, announcements use
-    ConZGameMode.SendHUDMessageToAll. Votes and starter kits run SCUM admin commands through an
-    online admin's chat command channel, so they need an admin (AdminUsers.ini) online.
+    ConZGameMode.SendHUDMessageToAll. Votes, starter kits, rewards, bounty payouts and
+    teleports run SCUM admin commands through an online admin's chat command channel, so they
+    need an admin (AdminUsers.ini) online; until then they wait (votes and teleports say so).
 
     Settings: config.lua in this mod's folder (re-read every 30 seconds).
-    Data:     players.tsv in this mod's folder (stats and who has had a starter kit).
+    Data:     players.tsv in this mod's folder (stats, rewards, bounties, starter kits),
+              reports.log (player reports).
 ]]
 
 local TAG = "[PlayerTools] "
@@ -36,6 +46,30 @@ local DEFAULTS = {
     afk = { enabled = false, minutes = 20, warnMinutesBefore = 2, onlyWhenPlayersAtLeast = 0, ignoreAdmins = true, kickReason = "Kicked for being AFK." },
     voting = { enabled = true, durationSeconds = 60, cooldownMinutes = 15, percentNeeded = 50, minVotes = 2, options = {} },
     newPlayers = { messages = {}, starterKit = false, starterKitCommands = {}, starterKitMessage = "" },
+    welcomeBack = { enabled = true, message = "Welcome back {name}! {hours} played, {kills} kills, {deaths} deaths." },
+    playtimeRewards = {
+        enabled = false, everyMinutes = 60, commands = {}, message = "",
+        dailyCommands = {}, dailyMessage = "",
+    },
+    killStreaks = {
+        enabled = true, announceAt = { 3, 5, 10, 15, 20 }, message = "{name} is on a {count} kill streak!",
+        endedMessage = "{killer} ended {victim}'s {count} kill streak!", endedMinimum = 3,
+        ignoreSameVictimMinutes = 30,
+    },
+    bounties = {
+        enabled = false, streakBountyAt = 5, streakBountyAmount = 500, streakBountyIncrease = 100,
+        playerBounties = false, minAmount = 100, maxAmount = 5000,
+        payCommand = "ChangeCurrencyBalance Normal {amount} {steamId}",
+        chargeCommand = "ChangeCurrencyBalance Normal -{amount} {steamId}",
+    },
+    teleports = {
+        enabled = false, cooldownMinutes = 30, standStillSeconds = 10,
+        command = "Teleport {x} {y} {z} {steamId}",
+        chargeCommand = "ChangeCurrencyBalance Normal -{price} {steamId}",
+        locations = {},
+    },
+    info = { enabled = true, lines = {} },
+    reports = { enabled = true, cooldownSeconds = 60 },
 }
 
 local function safe(fn, ...)
@@ -60,6 +94,9 @@ local SCUM_DIR = DIR .. "/../../../../.."
 local SERVER_LOG = SCUM_DIR .. "/Saved/Logs/SCUM.log"
 local GAME_LOG_DIR = SCUM_DIR .. "/Saved/SaveFiles/Logs"
 local PLAYERS_FILE = DIR .. "/players.tsv"
+local REPORTS_FILE = DIR .. "/reports.log"
+local RESTARTS_CONFIG = DIR .. "/../ServerMessages/config.lua"
+local STARTED_AT = os.time()
 local LOG_FILES = { DIR .. "/playertools.log", DIR .. "/../PelicanConsole/console.log" }
 
 -- ------------------------------------------------------------------ output and config
@@ -168,10 +205,13 @@ end
 
 -- ------------------------------------------------------------------ player records
 
--- SteamID -> { name, kills, deaths, playtime (s), longest (m), kit ("pending"/"given"), first (os.time) }
+-- SteamID -> { name, kills, deaths, playtime (s), longest (m), kit ("pending"/"given"), first (os.time),
+--   rewarded (playtime already rewarded, s), daily (UTC date of the last daily bonus),
+--   bestStreak, bounty (on this player), owed (bounty cash waiting to be paid to this player) }
+-- Not saved: streak (current kill streak), new (first seen joining this session).
 local records = {}
 local recordsDirty = false
-local FIELDS = { "name", "kills", "deaths", "playtime", "longest", "kit", "first" }
+local FIELDS = { "name", "kills", "deaths", "playtime", "longest", "kit", "first", "rewarded", "daily", "bestStreak", "bounty", "owed" }
 
 local function loadRecords()
     local text = readText(PLAYERS_FILE) or ""
@@ -180,10 +220,15 @@ local function loadRecords()
         for part in string.gmatch(line .. "\t", "([^\t]*)\t") do parts[#parts + 1] = part end
         local id = parts[1]
         if id and string.match(id, "^%d+$") then
+            local playtime = tonumber(parts[5]) or 0
             records[id] = {
                 name = parts[2] or "?", kills = tonumber(parts[3]) or 0, deaths = tonumber(parts[4]) or 0,
-                playtime = tonumber(parts[5]) or 0, longest = tonumber(parts[6]) or 0,
+                playtime = playtime, longest = tonumber(parts[6]) or 0,
                 kit = parts[7] or "", first = tonumber(parts[8]) or 0,
+                -- Records from before playtime rewards existed start counting from now.
+                rewarded = tonumber(parts[9]) or playtime, daily = parts[10] or "",
+                bestStreak = tonumber(parts[11]) or 0, bounty = tonumber(parts[12]) or 0,
+                owed = tonumber(parts[13]) or 0, streak = 0,
             }
         end
     end
@@ -211,7 +256,11 @@ end
 local function record(id, name, joined)
     local entry = records[id]
     if entry == nil then
-        entry = { name = name or "?", kills = 0, deaths = 0, playtime = 0, longest = 0, kit = joined and "pending" or "", first = os.time(), new = joined or nil }
+        entry = {
+            name = name or "?", kills = 0, deaths = 0, playtime = 0, longest = 0, kit = joined and "pending" or "",
+            first = os.time(), rewarded = 0, daily = "", bestStreak = 0, bounty = 0, owed = 0, streak = 0,
+            new = joined or nil,
+        }
         records[id] = entry
         recordsDirty = true
     elseif name and name ~= "" and entry.name ~= name then
@@ -483,16 +532,18 @@ local function weaponName(weapon)
     return (string.gsub(weapon, "_", " "))
 end
 
-local function handleKill(kill)
+local recentVictims = {}   -- "killer>victim" -> time, to stop streak and bounty farming
+
+local function handleKill(kill, time)
+    local streaks, bounties = config.killStreaks, config.bounties
+    local tracked = config.stats.enabled or streaks.enabled or bounties.enabled
+    local killer = tracked and record(kill.killerId, kill.killerName)
+    local victim = tracked and kill.victimId and record(kill.victimId, kill.victimName)
+
     if config.stats.enabled then
-        local killer = record(kill.killerId, kill.killerName)
         killer.kills = killer.kills + 1
         if kill.distance and kill.distance > killer.longest then killer.longest = kill.distance end
-        if kill.victimId then
-            local victim = record(kill.victimId, kill.victimName)
-            victim.deaths = victim.deaths + 1
-        end
-        recordsDirty = true
+        if victim then victim.deaths = victim.deaths + 1 end
     end
 
     local feed = config.killFeed
@@ -506,6 +557,50 @@ local function handleKill(kill)
             }))
         end
     end
+
+    if not tracked then return end
+    recordsDirty = true
+
+    -- Killing the same player again soon after does not count towards streaks or bounties.
+    local key = kill.killerId .. ">" .. tostring(kill.victimId)
+    local window = (tonumber(streaks.ignoreSameVictimMinutes) or 0) * 60
+    local farmed = recentVictims[key] ~= nil and time - recentVictims[key] < window
+    recentVictims[key] = time
+
+    if victim then
+        local ended = victim.streak or 0
+        victim.streak = 0
+        if streaks.enabled and ended >= (tonumber(streaks.endedMinimum) or 1) then
+            announce(fill(streaks.endedMessage, { killer = killer.name, victim = victim.name, count = ended }))
+        end
+        if bounties.enabled and (victim.bounty or 0) > 0 and not farmed then
+            killer.owed = (killer.owed or 0) + victim.bounty
+            announce(string.format("%s collected the %d bounty on %s!", killer.name, victim.bounty, victim.name))
+            output(string.format("Bounty: %s (%s) earned %d for killing %s.", killer.name, kill.killerId, victim.bounty, victim.name))
+            victim.bounty = 0
+        end
+    end
+
+    if farmed then return end
+    killer.streak = (killer.streak or 0) + 1
+    if killer.streak > (killer.bestStreak or 0) then killer.bestStreak = killer.streak end
+
+    if streaks.enabled then
+        for _, count in ipairs(streaks.announceAt or {}) do
+            if tonumber(count) == killer.streak then
+                announce(fill(streaks.message, { name = killer.name, count = killer.streak }))
+            end
+        end
+    end
+
+    local at = tonumber(bounties.streakBountyAt) or 0
+    if bounties.enabled and at > 0 and killer.streak >= at then
+        local add = killer.streak == at and (tonumber(bounties.streakBountyAmount) or 0) or (tonumber(bounties.streakBountyIncrease) or 0)
+        if add > 0 then
+            killer.bounty = (killer.bounty or 0) + add
+            announce(string.format("Bounty on %s is now %d. Kill them to collect!", killer.name, killer.bounty))
+        end
+    end
 end
 
 local function hours(seconds)
@@ -517,7 +612,7 @@ local function statsLines(entry)
     return {
         "Stats for " .. entry.name .. ":",
         string.format("Kills %d, deaths %d, K/D %s", entry.kills, entry.deaths, kd),
-        string.format("Longest kill %d m, playtime %s", math.floor(entry.longest + 0.5), hours(entry.playtime)),
+        string.format("Longest kill %d m, best streak %d, playtime %s", math.floor(entry.longest + 0.5), entry.bestStreak or 0, hours(entry.playtime)),
     }
 end
 
@@ -621,6 +716,194 @@ local function finishVote(time)
     end
 end
 
+-- ------------------------------------------------------------------ info, reports, bounties, teleports
+
+local lastReport = {}   -- SteamID -> time
+
+local function duration(seconds)
+    seconds = math.max(0, math.floor(seconds))
+    local h, m = seconds // 3600, (seconds % 3600) // 60
+    if h > 0 then return string.format("%d h %d min", h, m) end
+    return string.format("%d min", m)
+end
+
+-- Next restart from ServerMessages' restartTimes ("HH:MM" UTC), or nil.
+local function nextRestart(time)
+    local ok, settings = pcall(dofile, RESTARTS_CONFIG)
+    if not ok or type(settings) ~= "table" then return nil end
+    local t = os.date("!*t", time)
+    local now, best = t.hour * 3600 + t.min * 60 + t.sec, nil
+    for _, clockTime in ipairs(settings.restartTimes or {}) do
+        local hour, minute = string.match(tostring(clockTime), "^%s*(%d%d?):(%d%d)%s*$")
+        hour, minute = tonumber(hour), tonumber(minute)
+        if hour and hour <= 23 and minute <= 59 then
+            local delta = hour * 3600 + minute * 60 - now
+            if delta <= 0 then delta = delta + 86400 end
+            if best == nil or delta < best.delta then best = { delta = delta, at = clockTime } end
+        end
+    end
+    return best
+end
+
+local function infoLines(time)
+    local lines = {
+        "Server time " .. os.date("!%H:%M", time) .. " UTC, up for " .. duration(time - STARTED_AT),
+        onlineCount() .. " player(s) online",
+    }
+    local restart = nextRestart(time)
+    if restart then lines[#lines + 1] = "Next restart in " .. duration(restart.delta) .. " (" .. restart.at .. " UTC)" end
+    for _, line in ipairs(config.info.lines or {}) do lines[#lines + 1] = tostring(line) end
+    return lines
+end
+
+local function findPlayerRecord(name)
+    local lowered = string.lower(name or "")
+    if lowered == "" then return nil end
+    for _, session in pairs(sessions) do
+        if string.lower(session.name) == lowered and session.steamId then return session.steamId, records[session.steamId] end
+    end
+    for id, entry in pairs(records) do
+        if string.lower(entry.name) == lowered then return id, entry end
+    end
+    -- Partial match on online players.
+    for _, session in pairs(sessions) do
+        if string.find(string.lower(session.name), lowered, 1, true) and session.steamId then return session.steamId, records[session.steamId] end
+    end
+    return nil
+end
+
+local function report(session, rest, time)
+    local cooldown = tonumber(config.reports.cooldownSeconds) or 60
+    local key = session.steamId or session.name
+    if lastReport[key] and time - lastReport[key] < cooldown then
+        return tell(session, "You can send another report in " .. (cooldown - (time - lastReport[key])) .. " s.")
+    end
+    local target, reason = string.match(rest, "^(%S+)%s+(.+)$")
+    if target == nil then
+        return tell(session, "Usage: " .. config.chatCommands.prefix .. "report <name> <what happened>")
+    end
+    lastReport[key] = time
+
+    local pawn = characterOf(session.controller)
+    local position = pawn and location(pawn)
+    local line = string.format("%s | %s (%s) reported %s: %s%s", os.date("!%Y-%m-%d %H:%M:%S UTC", time), session.name,
+        session.steamId or "?", target, reason,
+        position and string.format(" | at X=%.0f Y=%.0f Z=%.0f", position.x, position.y, position.z) or "")
+    local file = io.open(REPORTS_FILE, "a")
+    if file then
+        file:write(line .. "\n")
+        file:close()
+    end
+    output("REPORT " .. line)
+    for _, other in pairs(sessions) do
+        if other ~= session and isAdmin(other.controller) then
+            tell(other, "Report from " .. session.name .. " about " .. target .. ": " .. reason)
+        end
+    end
+    tell(session, "Thanks, your report was sent to the admins.")
+end
+
+local function bountyCommand(session, rest)
+    local bounties = config.bounties
+    local name, amount = string.match(rest, "^(.-)%s+(%d+)$")
+    if rest == "" or name == nil then
+        local list = {}
+        for _, entry in pairs(records) do
+            if (entry.bounty or 0) > 0 then list[#list + 1] = entry end
+        end
+        table.sort(list, function(a, b) return a.bounty > b.bounty end)
+        local lines = { "Bounties:" }
+        for index = 1, math.min(5, #list) do lines[#lines + 1] = list[index].name .. " - " .. list[index].bounty end
+        if #list == 0 then lines[2] = "No bounties right now." end
+        if bounties.playerBounties then lines[#lines + 1] = "Place one: " .. config.chatCommands.prefix .. "bounty <name> <amount>" end
+        return tell(session, lines)
+    end
+
+    if not bounties.playerBounties then return tell(session, "Players cannot place bounties on this server.") end
+    amount = tonumber(amount)
+    local minimum, maximum = tonumber(bounties.minAmount) or 1, tonumber(bounties.maxAmount) or math.huge
+    if amount < minimum or amount > maximum then
+        return tell(session, string.format("Bounties must be between %d and %d.", minimum, maximum))
+    end
+    local targetId, target = findPlayerRecord(name)
+    if targetId == nil or target == nil then return tell(session, "No player called " .. name .. ".") end
+    if targetId == session.steamId then return tell(session, "You cannot put a bounty on yourself.") end
+
+    local ok, detail = runAdminCommand(fill(bounties.chargeCommand, { amount = amount, steamId = session.steamId, name = session.name }))
+    if not ok then return tell(session, "Bounties cannot be placed right now (" .. detail .. ").") end
+    target.bounty = (target.bounty or 0) + amount
+    recordsDirty = true
+    announce(string.format("%s put a %d bounty on %s. Total: %d.", session.name, amount, target.name, target.bounty))
+    output(string.format("Bounty: %s (%s) placed %d on %s.", session.name, session.steamId or "?", amount, target.name))
+end
+
+local function teleportLocations()
+    local list = {}
+    for _, place in ipairs(config.teleports.locations or {}) do
+        if type(place) == "table" and place.name and tonumber(place.x) and tonumber(place.y) and tonumber(place.z) then
+            list[#list + 1] = place
+        end
+    end
+    return list
+end
+
+local function teleportCommand(session, rest, time)
+    local teleports = config.teleports
+    local places = teleportLocations()
+    local place = nil
+    for _, candidate in ipairs(places) do
+        if string.lower(candidate.name) == string.lower(rest) then place = candidate end
+    end
+    if place == nil then
+        if #places == 0 then return tell(session, "No teleport destinations have been set.") end
+        local lines = { "Teleports (" .. config.chatCommands.prefix .. "tp <name>):" }
+        for _, candidate in ipairs(places) do
+            local price = tonumber(candidate.price) or 0
+            lines[#lines + 1] = candidate.name .. (price > 0 and (" - " .. price) or " - free")
+        end
+        return tell(session, lines)
+    end
+
+    local cooldown = (tonumber(teleports.cooldownMinutes) or 0) * 60
+    if session.steamId and records[session.steamId] and records[session.steamId].lastTeleport
+        and time - records[session.steamId].lastTeleport < cooldown then
+        return tell(session, "You can teleport again in " .. duration(cooldown - (time - records[session.steamId].lastTeleport)) .. ".")
+    end
+    local pawn = characterOf(session.controller)
+    if pawn == nil or session.steamId == nil then return tell(session, "You need to be alive to teleport.") end
+
+    local wait = tonumber(teleports.standStillSeconds) or 0
+    session.teleport = { place = place, at = time + wait, from = location(pawn) }
+    tell(session, string.format("Teleporting to %s in %d s. Do not move.", place.name, wait))
+end
+
+local function teleportCheck(session, time)
+    local pending = session.teleport
+    if pending == nil then return end
+    local pawn = characterOf(session.controller)
+    local position = pawn and location(pawn)
+    if position == nil or (pending.from and math.sqrt((position.x - pending.from.x) ^ 2 + (position.y - pending.from.y) ^ 2) / CM_PER_M > 2) then
+        session.teleport = nil
+        return tell(session, "Teleport cancelled: you moved.")
+    end
+    if time < pending.at then return end
+    session.teleport = nil
+
+    local place, values = pending.place, nil
+    local price = tonumber(place.price) or 0
+    values = { x = place.x, y = place.y, z = place.z, price = price, steamId = session.steamId, name = session.name }
+    if price > 0 then
+        local ok, detail = runAdminCommand(fill(config.teleports.chargeCommand, values))
+        if not ok then return tell(session, "Teleports are not available right now (" .. detail .. ").") end
+    end
+    local ok, detail = runAdminCommand(fill(config.teleports.command, values))
+    if not ok then return tell(session, "Teleports are not available right now (" .. detail .. ").") end
+    local entry = record(session.steamId, session.name, true)
+    entry.lastTeleport = time
+    output(string.format("Teleported %s to %s%s.", session.name, place.name, price > 0 and (" for " .. price) or ""))
+    tell(session, "Teleported to " .. place.name .. (price > 0 and (" (" .. price .. " paid)") or "") .. ".")
+end
+
 -- ------------------------------------------------------------------ chat commands
 
 local function handleChat(chat, time)
@@ -638,6 +921,12 @@ local function handleChat(chat, time)
         if config.chatCommands.discord ~= "" then lines[2] = lines[2] .. ", " .. prefix .. "discord" end
         if config.stats.enabled then lines[#lines + 1] = prefix .. "stats [name], " .. prefix .. "top" end
         if config.voting.enabled then lines[#lines + 1] = prefix .. "vote <option>, " .. prefix .. "yes, " .. prefix .. "no" end
+        local more = {}
+        if config.info.enabled then more[#more + 1] = prefix .. "info" end
+        if config.bounties.enabled then more[#more + 1] = prefix .. "bounty" end
+        if config.teleports.enabled then more[#more + 1] = prefix .. "tp" end
+        if config.reports.enabled then more[#more + 1] = prefix .. "report <name> <what happened>" end
+        if #more > 0 then lines[#lines + 1] = table.concat(more, ", ") end
         tell(session, lines)
     elseif word == "rules" then
         local lines = { "Server rules:" }
@@ -667,6 +956,18 @@ local function handleChat(chat, time)
         startVote(session, rest, time)
     elseif (word == "yes" or word == "no") and config.voting.enabled then
         castVote(session, word)
+    elseif word == "info" and config.info.enabled then
+        tell(session, infoLines(time))
+    elseif word == "report" and config.reports.enabled then
+        report(session, rest, time)
+    elseif word == "bounty" and config.bounties.enabled then
+        bountyCommand(session, rest)
+    elseif word == "tp" and config.teleports.enabled then
+        teleportCommand(session, rest, time)
+    elseif word == "where" and isAdmin(session.controller) then
+        local pawn = characterOf(session.controller)
+        local position = pawn and location(pawn)
+        tell(session, position and string.format("You are at x=%.0f y=%.0f z=%.0f", position.x, position.y, position.z) or "Your position is not known.")
     end
 end
 
@@ -682,12 +983,21 @@ local function newPlayerCheck(session, time)
     local entry = record(session.steamId, session.name, true)
     if entry.new then
         entry.new = nil
+        session.welcomedBack = true
         local lines = {}
         for _, message in ipairs(config.newPlayers.messages or {}) do
             lines[#lines + 1] = fill(message, { name = session.name, steamId = session.steamId })
         end
         if #lines > 0 then tell(session, lines) end
         output("New player: " .. session.name .. " (" .. session.steamId .. ")")
+    elseif not session.welcomedBack then
+        session.welcomedBack = true
+        if config.welcomeBack.enabled and (config.welcomeBack.message or "") ~= "" then
+            tell(session, fill(config.welcomeBack.message, {
+                name = session.name, hours = hours(entry.playtime), kills = entry.kills, deaths = entry.deaths,
+                bestStreak = entry.bestStreak or 0,
+            }))
+        end
     end
 
     if config.newPlayers.starterKit and entry.kit == "pending" then
@@ -719,6 +1029,53 @@ local function newPlayerCheck(session, time)
         output("Gave a starter kit to " .. session.name .. " (run as " .. detail .. ").")
     end
     session.newChecked = true
+end
+
+local function today(time)
+    return os.date("!%Y-%m-%d", time)
+end
+
+local function runAll(commands, values)
+    for _, command in ipairs(commands or {}) do
+        local ok, detail = runAdminCommand(fill(command, values))
+        if not ok then return false, detail end
+    end
+    return true
+end
+
+-- Playtime rewards, the daily bonus and bounty payouts. All need an admin online; until then
+-- they stay owed and are retried every second.
+local function rewardCheck(session, time)
+    if session.steamId == nil or characterOf(session.controller) == nil then return end
+    local entry = records[session.steamId]
+    if entry == nil then return end
+    local values = { name = session.name, steamId = session.steamId }
+
+    local rewards = config.playtimeRewards
+    if rewards.enabled then
+        if #(rewards.dailyCommands or {}) > 0 and entry.daily ~= today(time) and runAll(rewards.dailyCommands, values) then
+            entry.daily = today(time)
+            recordsDirty = true
+            if (rewards.dailyMessage or "") ~= "" then tell(session, fill(rewards.dailyMessage, values)) end
+        end
+        local every = (tonumber(rewards.everyMinutes) or 0) * 60
+        if every > 0 and #(rewards.commands or {}) > 0 and entry.playtime - (entry.rewarded or 0) >= every
+            and runAll(rewards.commands, values) then
+            entry.rewarded = (entry.rewarded or 0) + every
+            recordsDirty = true
+            if (rewards.message or "") ~= "" then tell(session, fill(rewards.message, values)) end
+        end
+    end
+
+    if config.bounties.enabled and (entry.owed or 0) > 0 then
+        local ok = runAdminCommand(fill(config.bounties.payCommand, { amount = entry.owed, steamId = session.steamId, name = session.name }))
+        if ok then
+            tell(session, "Bounty paid: " .. entry.owed .. " added to your account.")
+            output(string.format("Paid %d bounty to %s.", entry.owed, session.name))
+            entry.owed = 0
+            recordsDirty = true
+        end
+    end
 end
 
 local function afkCheck(session, time, online)
@@ -780,7 +1137,7 @@ local function tick()
             session.controller = controller
             session.name = name or session.name
             session.steamId = session.steamId or steamIdByName[session.name]
-            if session.steamId and config.stats.enabled then
+            if session.steamId and (config.stats.enabled or config.playtimeRewards.enabled) then
                 local entry = record(session.steamId, session.name, true)
                 entry.playtime = entry.playtime + elapsed
                 recordsDirty = true
@@ -797,12 +1154,16 @@ local function tick()
         if not ok then output("New player check failed: " .. tostring(err)) end
         ok, err = pcall(afkCheck, session, time, online)
         if not ok then output("AFK check failed: " .. tostring(err)) end
+        ok, err = pcall(rewardCheck, session, time)
+        if not ok then output("Reward check failed: " .. tostring(err)) end
+        ok, err = pcall(teleportCheck, session, time)
+        if not ok then output("Teleport failed: " .. tostring(err)) end
     end
 
     local kills = pendingKills
     pendingKills = {}
     for _, kill in ipairs(kills) do
-        local ok, err = pcall(handleKill, kill)
+        local ok, err = pcall(handleKill, kill, time)
         if not ok then output("Kill handling failed: " .. tostring(err)) end
     end
 
@@ -865,4 +1226,8 @@ if config.stats.enabled then features[#features + 1] = "stats" end
 if config.afk.enabled then features[#features + 1] = "AFK kick after " .. config.afk.minutes .. " min" end
 if config.voting.enabled then features[#features + 1] = "voting" end
 if config.newPlayers.starterKit then features[#features + 1] = "starter kit" end
+if config.playtimeRewards.enabled then features[#features + 1] = "playtime rewards" end
+if config.killStreaks.enabled then features[#features + 1] = "kill streaks" end
+if config.bounties.enabled then features[#features + 1] = "bounties" end
+if config.teleports.enabled then features[#features + 1] = "teleports" end
 output("Active: " .. (#features > 0 and table.concat(features, ", ") or "nothing enabled") .. ".")

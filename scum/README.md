@@ -84,13 +84,13 @@ Our own UE4SS mods ship with the SCUM Manager plugin and are installed together 
 | Mod | What it does |
 |-----|--------------|
 | `PelicanConsole` | Runs admin commands from the SCUM Admin Console page or the Pelican console (above) |
-| `PlayerTools` | Chat commands (`!help`, `!rules`, `!discord`, `!online`, `!stats`, `!top`, `!vote`), kill feed, stats and leaderboard, AFK kicker, votes for time and weather, new-player welcome and starter kit |
+| `PlayerTools` | Chat commands (`!help`, `!rules`, `!discord`, `!online`, `!stats`, `!top`, `!vote`, `!info`, `!bounty`, `!tp`, `!report`), kill feed, stats and leaderboard, kill streaks, streak bounties, AFK kicker, votes for time and weather, new-player welcome and starter kit, welcome back, playtime rewards and a daily bonus, paid teleports, player reports |
 | `ServerMessages` | Welcome message, rotating announcements, join/leave log, restart countdown warnings |
 | `ScumAntiCheat` | Server-side anti-cheat: speed, teleport, fly and hover hacks, out-of-map/under-map, admin rights not in AdminUsers.ini, staff impersonation names, aimbot signs from the kill log and aim snaps (reported as suspects), a watchlist, and SCUM's own violation and admin logs in the console. It can kick or ban (via BannedUsers.ini), but only logs until you change its action |
 
 Change their settings on the **SCUM Mod Settings** page, or in `config.lua` in `SCUM/Binaries/Win64/ue4ss/Mods/<Mod>/`. The mods pick up changes within 30 seconds. They report in the Pelican console and on the Admin Console page.
 
-Votes and starter kits run SCUM admin commands (SetTime, ChangeCurrencyBalance...) as an online admin, so an admin from `AdminUsers.ini` must be online for them to take effect. Restart warnings only announce: add a Pelican schedule (**Schedules**) with a **Restart** power action at the same times.
+Votes, starter kits, rewards, bounty payouts and teleports run SCUM admin commands (SetTime, ChangeCurrencyBalance, Teleport...) as an online admin, so an admin from `AdminUsers.ini` must be online for them to take effect. Restart warnings only announce: add a Pelican schedule (**Schedules**) with a **Restart** power action at the same times.
 
 ## Troubleshooting
 

@@ -115,7 +115,7 @@ local function login(id, name)
     write(scum .. "/Saved/Logs/SCUM.log", "LogSCUM: '1.2.3.4 " .. id .. ":" .. name .. "(2)' logged in at: X=1 Y=2 Z=3\n", "a")
 end
 local function chat(id, name, text)
-    write(gameLogDir .. "/chat_1.log", utf16("2026.10.11-13.00.00: '" .. id .. ":" .. name .. "(2)' 'Global: " .. text .. "'\n"), "a")
+    write(gameLogDir .. "/" .. gameLogFiles.chat_, utf16("2026.10.11-13.00.00: '" .. id .. ":" .. name .. "(2)' 'Global: " .. text .. "'\n"), "a")
 end
 local function lastPrivate(name)
     for index = #private, 1, -1 do
@@ -151,7 +151,7 @@ write(dir .. "/config.lua", [[return {
 }]])
 dofile(dir .. "/Scripts/main.lua")
 check("loop registered", loop ~= nil)
-check("startup summary", has(read(dir .. "/playertools.log"), "Active: chat commands, kill feed, stats, AFK kick after 3 min, voting, starter kit."))
+check("startup summary", has(read(dir .. "/playertools.log"), "Active: chat commands, kill feed, stats, AFK kick after 3 min, voting, starter kit, kill streaks."))
 check("startup in Pelican console", has(read(mods .. "/PelicanConsole/console.log"), "[PlayerTools] Active"))
 
 step()
@@ -211,7 +211,7 @@ check("no errors so far", not has(read(dir .. "/playertools.log"), "failed"))
 private = {}
 chat("76561198000000001", "Alice", "!stats")
 step()
-check("own stats", has(lastPrivate("Alice"), "Kills 1, deaths 0, K/D 1") and has(lastPrivate("Alice"), "Longest kill 250 m"))
+check("own stats", has(lastPrivate("Alice"), "Kills 1, deaths 0, K/D 1") and has(lastPrivate("Alice"), "Longest kill 250 m, best streak 1"))
 chat("76561198000000002", "Bob", "!stats veteran")
 step()
 check("stats by name", has(lastPrivate("Bob"), "Stats for Veteran:") and has(lastPrivate("Bob"), "Kills 10, deaths 2, K/D 5.00"))
@@ -314,6 +314,147 @@ write(gameLogDir .. "/chat_2.log", utf16("2026.10.11-15.00.00: '7656119800000000
 private = {}
 step(61)
 check("new chat log read", lastPrivate("Bob") == "No Discord link has been set.")
+
+
+-- ================================================================== rewards, streaks, bounties, teleports, info, reports
+private, hud, adminCommands, kicks = {}, {}, {}, {}
+write(dir .. "/players.tsv", "76561198000000010\tDave\t5\t0\t3600\t100\t\t1\n")   -- older 8-column format
+os.execute("mkdir -p '" .. mods .. "/ServerMessages'")
+write(mods .. "/ServerMessages/config.lua", 'return { restartTimes = { "06:00" } }')
+write(dir .. "/config.lua", [[return {
+    playtimeRewards = { enabled = true, everyMinutes = 1, commands = { "Pay {steamId}" }, message = "+cash",
+        dailyCommands = { "Daily {steamId}" }, dailyMessage = "Daily bonus for {name}" },
+    killStreaks = { announceAt = { 2, 3 }, endedMinimum = 2, ignoreSameVictimMinutes = 10 },
+    bounties = { enabled = true, streakBountyAt = 3, streakBountyAmount = 500, streakBountyIncrease = 100,
+        playerBounties = true, minAmount = 100, maxAmount = 1000 },
+    teleports = { enabled = true, standStillSeconds = 5, cooldownMinutes = 10,
+        locations = { { name = "trader", x = 100, y = 200, z = 300, price = 50 }, { name = "bad" } } },
+    info = { lines = { "Have fun" } },
+    reports = { cooldownSeconds = 60 },
+}]])
+dofile(dir .. "/Scripts/main.lua")
+check("new features in startup summary", has(read(dir .. "/playertools.log"), "playtime rewards, kill streaks, bounties, teleports."))
+
+login("76561198000000010", "Dave")
+login("76561198000000011", "Eve")
+local dave, eve = Player("Dave"), Player("Eve", true)
+players = { dave, eve }
+step(11)
+check("welcome back with stats", lastPrivate("Dave") == "Welcome back Dave! 1.0 h played, 5 kills, 0 deaths.")
+local function ran(command)
+    for _, entry in ipairs(adminCommands) do
+        if entry.command == command then return entry end
+    end
+    return nil
+end
+check("daily bonus run as the admin", ran("#Daily 76561198000000010") and ran("#Daily 76561198000000010").by == "Eve")
+check("daily bonus message", has(table.concat((function() local t = {} for _, m in ipairs(private) do if m.to == "Dave" then t[#t + 1] = m.text end end return t end)(), "|"), "Daily bonus for Dave"))
+check("old records do not get back pay", ran("#Pay 76561198000000010") == nil)
+step(60)
+check("hourly reward after the interval", ran("#Pay 76561198000000010") ~= nil)
+local pays = 0
+for _, entry in ipairs(adminCommands) do if entry.command == "#Pay 76561198000000010" then pays = pays + 1 end end
+step(10)
+local paysLater = 0
+for _, entry in ipairs(adminCommands) do if entry.command == "#Pay 76561198000000010" then paysLater = paysLater + 1 end end
+check("reward once per interval", pays == 1 and paysLater == 1)
+check("daily bonus once a day", (function() local n = 0 for _, e in ipairs(adminCommands) do if e.command == "#Daily 76561198000000010" then n = n + 1 end end return n end)() == 1)
+
+-- Kill streaks and the streak bounty.
+local killTime = 0
+local function kill(killerId, killerName, victimId, victimName)
+    killTime = killTime + 1
+    write(gameLogDir .. "/kill_1.log", string.format("2026.10.11-16.00.%02d: Died: %s (%s), Killer: %s (%s) Weapon: AK47 S[Distance: 50.00 m]\n",
+        killTime, victimName, victimId, killerName, killerId), "a")
+    step()
+end
+hud = {}
+kill("76561198000000010", "Dave", "76561198000000021", "V1")
+kill("76561198000000010", "Dave", "76561198000000022", "V2")
+check("streak announced", anyHud("Dave is on a 2 kill streak!"))
+kill("76561198000000010", "Dave", "76561198000000023", "V3")
+check("streak 3 announced", anyHud("Dave is on a 3 kill streak!"))
+check("streak bounty placed", anyHud("Bounty on Dave is now 500. Kill them to collect!"))
+local hudCount = #hud
+kill("76561198000000010", "Dave", "76561198000000023", "V3")
+check("same victim again does not count", #hud == hudCount + 1)   -- only the kill feed line
+kill("76561198000000011", "Eve", "76561198000000010", "Dave")
+check("streak end announced", anyHud("Eve ended Dave's 3 kill streak!"))
+check("bounty collected", anyHud("Eve collected the 500 bounty on Dave!"))
+step()
+check("bounty paid to the killer", ran("#ChangeCurrencyBalance Normal 500 76561198000000011") ~= nil and lastPrivate("Eve") == "Bounty paid: 500 added to your account.")
+
+-- Player bounties.
+chat("76561198000000010", "Dave", "!bounty Eve 5000")
+step()
+check("bounty limits", lastPrivate("Dave") == "Bounties must be between 100 and 1000.")
+chat("76561198000000010", "Dave", "!bounty Dave 200")
+step()
+check("no bounty on yourself", lastPrivate("Dave") == "You cannot put a bounty on yourself.")
+chat("76561198000000010", "Dave", "!bounty Eve 200")
+step()
+check("bounty charged to the placer", ran("#ChangeCurrencyBalance Normal -200 76561198000000010") ~= nil)
+check("bounty announced", anyHud("Dave put a 200 bounty on Eve. Total: 200."))
+chat("76561198000000010", "Dave", "!bounty")
+step()
+check("bounty list", lastPrivate("Dave") == "Bounties:\nEve - 200\nPlace one: !bounty <name> <amount>")
+
+-- Teleports.
+chat("76561198000000010", "Dave", "!tp")
+step()
+check("teleport list skips incomplete places", lastPrivate("Dave") == "Teleports (!tp <name>):\ntrader - 50")
+chat("76561198000000010", "Dave", "!tp trader")
+step()
+check("teleport waits", lastPrivate("Dave") == "Teleporting to trader in 5 s. Do not move." and ran("#Teleport 100 200 300 76561198000000010") == nil)
+step(5)
+check("teleport charged", ran("#ChangeCurrencyBalance Normal -50 76561198000000010") ~= nil)
+check("teleported", ran("#Teleport 100 200 300 76561198000000010") ~= nil and lastPrivate("Dave") == "Teleported to trader (50 paid).")
+chat("76561198000000010", "Dave", "!tp trader")
+step()
+check("teleport cooldown", has(lastPrivate("Dave"), "You can teleport again in"))
+chat("76561198000000011", "Eve", "!tp trader")
+step()
+eve.pawn.x = eve.pawn.x + 5
+step()
+check("moving cancels the teleport", lastPrivate("Eve") == "Teleport cancelled: you moved.")
+
+-- Info, where, reports.
+chat("76561198000000010", "Dave", "!info")
+step()
+local info = lastPrivate("Dave")
+check("info", has(info, "UTC, up for") and has(info, "2 player(s) online") and has(info, "Next restart in") and has(info, "(06:00 UTC)") and has(info, "Have fun"))
+chat("76561198000000011", "Eve", "!where")
+step()
+check("admins get their position", has(lastPrivate("Eve"), "You are at x="))
+local before = lastPrivate("Dave")
+chat("76561198000000010", "Dave", "!where")
+step()
+check("players do not", lastPrivate("Dave") == before)
+chat("76561198000000010", "Dave", "!report Bob was flying around")
+step()
+check("report acknowledged", lastPrivate("Dave") == "Thanks, your report was sent to the admins.")
+check("report sent to online admins", lastPrivate("Eve") == "Report from Dave about Bob: was flying around")
+check("report logged", has(read(dir .. "/reports.log"), "Dave (76561198000000010) reported Bob: was flying around | at X="))
+check("report in the console", has(read(mods .. "/PelicanConsole/console.log"), "REPORT"))
+chat("76561198000000010", "Dave", "!report Bob again")
+step()
+check("report cooldown", has(lastPrivate("Dave"), "You can send another report in"))
+
+-- Without an admin online, paid actions say so and rewards wait.
+players = { dave }
+chat("76561198000000010", "Dave", "!bounty Eve 200")
+step()
+check("bounty needs an admin", lastPrivate("Dave") == "Bounties cannot be placed right now (no admin is online).")
+
+step(60)
+local saved = read(dir .. "/players.tsv")
+local fields = {}
+for field in string.gmatch(string.match(saved, "76561198000000010[^\n]*") .. "\t", "([^\t]*)\t") do fields[#fields + 1] = field end
+check("saved with the new columns", #fields == 13)
+check("daily date saved", fields[10] == "1970-01-01")
+check("best streak saved", fields[11] == "3")
+check("bounty on Dave cleared", fields[12] == "0")
+check("no errors", not has(read(dir .. "/playertools.log"), "failed"))
 
 os.execute("rm -rf '" .. tmp .. "'")
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))

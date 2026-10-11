@@ -67,4 +67,72 @@ return {
         },
         starterKitMessage = "Welcome gift: 500 cash has been added to your account. Spend it at a trader.",
     },
+
+    -- Returning players get their stats when they join. {name} {hours} {kills} {deaths} {bestStreak}
+    welcomeBack = {
+        enabled = true,
+        message = "Welcome back {name}! {hours} played, {kills} kills, {deaths} deaths.",
+    },
+
+    -- Rewards for playing, run as SCUM admin commands (needs an admin online; owed rewards wait).
+    playtimeRewards = {
+        enabled = true,
+        everyMinutes = 60,
+        commands = { "ChangeCurrencyBalance Normal 100 {steamId}" },
+        message = "+100 cash for an hour on the server. Thanks for playing!",
+        -- Once per day (UTC), the first time the player is online.
+        dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" },
+        dailyMessage = "Daily login bonus: +200 cash.",
+    },
+
+    -- {name} {count} / {killer} {victim} {count}
+    killStreaks = {
+        enabled = true,
+        announceAt = { 3, 5, 10, 15, 20 },
+        message = "{name} is on a {count} kill streak!",
+        endedMessage = "{killer} ended {victim}'s {count} kill streak!",
+        endedMinimum = 3,
+        -- Killing the same player again within this many minutes does not count (stops farming).
+        ignoreSameVictimMinutes = 30,
+    },
+
+    -- The server puts a bounty on players with a kill streak; whoever kills them collects it.
+    bounties = {
+        enabled = true,
+        streakBountyAt = 5,          -- kill streak that starts a bounty (0 = never)
+        streakBountyAmount = 500,
+        streakBountyIncrease = 100,  -- added for each further kill
+        -- Let players place bounties with !bounty <name> <amount>. Off: the mod cannot check a
+        -- player's balance yet, so a broke player could place a bounty for a friend to collect.
+        playerBounties = false,
+        minAmount = 100,
+        maxAmount = 5000,
+        payCommand = "ChangeCurrencyBalance Normal {amount} {steamId}",
+        chargeCommand = "ChangeCurrencyBalance Normal -{amount} {steamId}",
+    },
+
+    -- !tp <name>: the player stands still for standStillSeconds, pays the price and is teleported.
+    -- Coordinates are SCUM world units (centimetres); admins can type !where to get theirs.
+    teleports = {
+        enabled = true,
+        cooldownMinutes = 30,
+        standStillSeconds = 10,
+        command = "Teleport {x} {y} {z} {steamId}",
+        chargeCommand = "ChangeCurrencyBalance Normal -{price} {steamId}",
+        locations = {
+            -- { name = "trader", x = 0, y = 0, z = 0, price = 500 },
+        },
+    },
+
+    -- !info: server time, uptime, players online, next restart (from ServerMessages), plus these lines.
+    info = {
+        enabled = true,
+        lines = {},
+    },
+
+    -- !report <name> <what happened>: written to reports.log, the Admin Console and online admins.
+    reports = {
+        enabled = true,
+        cooldownSeconds = 60,
+    },
 }

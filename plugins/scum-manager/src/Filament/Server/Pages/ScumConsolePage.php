@@ -8,15 +8,20 @@ use App\Traits\Filament\BlockAccessInConflict;
 use Exception;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\HtmlString;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Services\ScumServerService;
+use MrExclusive\ScumManager\Support\AdminCommands;
 
 class ScumConsolePage extends Page
 {
@@ -37,6 +42,9 @@ class ScumConsolePage extends Page
 
     #[Locked]
     public string $output = '';
+
+    #[Locked]
+    public string $reports = '';
 
     public static function canAccess(): bool
     {
@@ -61,6 +69,7 @@ class ScumConsolePage extends Page
 
         $this->modInstalled = $service->consoleModDir($server) !== null;
         $this->output = $this->modInstalled ? $service->consoleOutput($server) : '';
+        $this->reports = $service->playerReports($server);
     }
 
     public function content(Schema $schema): Schema
@@ -68,48 +77,93 @@ class ScumConsolePage extends Page
         return $schema->components([
             Section::make('Output')
                 ->description(fn () => $this->modInstalled
-                    ? 'Runs SCUM admin commands through the PelicanConsole mod. Announce, ListPlayers and Kick <name> work any time; other commands need an admin from AdminUsers.ini online and run as if they typed them in chat. Type commands without the #.'
-                    : 'Install the PelicanConsole mod on the SCUM Mods page and restart the server to use this page.')
-                ->schema([
-                    TextEntry::make('console_output')
-                        ->hiddenLabel()
-                        ->state(fn () => new HtmlString(
-                            '<pre style="white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace; font-size: 0.8rem; max-height: 32rem; overflow-y: auto;">'
-                            . e($this->output !== '' ? $this->output : 'No output yet.')
-                            . '</pre>'
-                        )),
-                ]),
+                    ? 'Click "Run a command" and pick what to do. "Works any time" commands need nobody in game. "Needs an admin in game" commands only run while an admin from AdminUsers.ini is online, as if that admin typed them in chat.'
+                    : 'Install the PelicanConsole mod on the SCUM Mods page ("Install our mods") and restart the server to use this page.')
+                ->schema([$this->logEntry('console_output', fn () => $this->output, 'No output yet.')]),
+            Section::make('Player reports')
+                ->description('Sent by players with !report <name> <what happened> (PlayerTools mod), newest first.')
+                ->collapsible()
+                ->schema([$this->logEntry('player_reports', fn () => $this->reports, 'No reports.')]),
         ]);
+    }
+
+    private function logEntry(string $name, \Closure $text, string $empty): TextEntry
+    {
+        return TextEntry::make($name)
+            ->hiddenLabel()
+            ->state(fn () => new HtmlString(
+                '<pre style="white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace; font-size: 0.8rem; max-height: 32rem; overflow-y: auto;">'
+                . e($text() !== '' ? $text() : $empty)
+                . '</pre>'
+            ));
+    }
+
+    /** @return list<Component> the command picker and each command's fields */
+    private function commandForm(): array
+    {
+        $players = app(ScumServerService::class)->knownPlayers($this->getServer());
+        $names = array_combine(
+            array_map(fn (string $label) => preg_replace('/ \(\d+\)$/', '', $label), array_values($players)),
+            array_map(fn (string $label) => preg_replace('/ \(\d+\)$/', '', $label), array_values($players)),
+        ) ?: [];
+
+        $components = [
+            Select::make('command')
+                ->label('Command')
+                ->options(AdminCommands::options())
+                ->searchable()
+                ->required()
+                ->live(),
+        ];
+
+        foreach (AdminCommands::COMMANDS as $key => $command) {
+            $visible = fn (Get $get) => $get('command') === $key;
+
+            $components[] = Text::make(($command['anytime'] === false ? 'Needs an admin in game. ' : '') . $command['help'])
+                ->color($command['anytime'] === false ? 'warning' : 'gray')
+                ->visible($visible);
+
+            foreach ($command['fields'] as $field => $definition) {
+                $name = AdminCommands::fieldName($key, $field);
+                [$type, $label] = $definition;
+
+                $component = match (true) {
+                    $type === 'player' && $players !== [] => Select::make($name)->options($players)->searchable(),
+                    $type === 'playerName' && $names !== [] => Select::make($name)->options($names)->searchable(),
+                    $type === 'select' => Select::make($name)->options($definition[2])->selectablePlaceholder(false),
+                    $type === 'int' => TextInput::make($name)->integer()->minValue($definition[2])->maxValue($definition[3]),
+                    $type === 'player' => TextInput::make($name)->placeholder('76561198000000000')->helperText('No players known yet (PlayerTools lists everyone who has joined). Enter a SteamID64.'),
+                    default => TextInput::make($name)->maxLength(400),
+                };
+
+                $components[] = $component->label($label)->visible($visible)->required($visible);
+            }
+        }
+
+        return $components;
     }
 
     protected function getHeaderActions(): array
     {
         return [
             Action::make('send')
-                ->label('Send command')
-                ->icon('tabler-send')
+                ->label('Run a command')
+                ->icon('tabler-player-play')
                 ->visible(fn () => $this->modInstalled)
                 ->authorize(fn () => user()?->can(SubuserPermission::ControlConsole, $this->getServer())
                     && user()?->can(SubuserPermission::FileUpdate, $this->getServer()))
-                ->modalHeading('Send a SCUM admin command')
-                ->modalSubmitActionLabel('Send')
-                ->schema([
-                    TextInput::make('command')
-                        ->label('Command')
-                        ->placeholder('Announce Hello')
-                        ->helperText('Examples: ListPlayers, Announce <message>, Kick <SteamID>, Ban <SteamID>, SetWeather 0, SetTime 12')
-                        ->required()
-                        ->maxLength(500)
-                        ->autofocus(),
-                ])
+                ->modalHeading('Run a SCUM admin command')
+                ->modalSubmitActionLabel('Run')
+                ->schema(fn () => $this->commandForm())
                 ->action(function (array $data, ScumServerService $service) {
                     $server = $this->getServer();
 
                     try {
-                        $pickedUp = $service->sendConsoleCommand($server, (string) $data['command']);
+                        $line = AdminCommands::build((string) ($data['command'] ?? ''), $data);
+                        $pickedUp = $service->sendConsoleCommand($server, $line);
 
                         if ($pickedUp) {
-                            Notification::make()->title('Sent to SCUM')->success()->send();
+                            Notification::make()->title('Sent to SCUM: ' . $line)->success()->send();
                         } else {
                             Notification::make()
                                 ->title('Queued, but SCUM has not picked it up yet')

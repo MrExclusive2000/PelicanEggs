@@ -10,6 +10,7 @@ use App\Repositories\Daemon\DaemonServerRepository;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
+use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\ConsoleCommand;
 use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
@@ -625,6 +626,27 @@ class ScumServerService
         }
 
         return false;
+    }
+
+    /** @return array<string, string> SteamID => "Name (SteamID)" for players PlayerTools has seen */
+    public function knownPlayers(Server $server): array
+    {
+        $ue4ss = $this->ue4ss($server);
+
+        return $ue4ss['installed'] ? AdminCommands::knownPlayers($this->read($server, $ue4ss['mods'] . '/PlayerTools/players.tsv')) : [];
+    }
+
+    /** The newest player reports from PlayerTools' reports.log, newest first. */
+    public function playerReports(Server $server, int $lines = 30): string
+    {
+        $ue4ss = $this->ue4ss($server);
+        if (!$ue4ss['installed']) {
+            return '';
+        }
+
+        $log = ConsoleCommand::tail($this->read($server, $ue4ss['mods'] . '/PlayerTools/reports.log'), $lines);
+
+        return $log === '' ? '' : implode("\n", array_reverse(explode("\n", $log)));
     }
 
     /** The end of PelicanConsole's console.log (command results and mod messages). */

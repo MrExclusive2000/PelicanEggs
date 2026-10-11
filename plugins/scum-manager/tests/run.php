@@ -12,6 +12,7 @@ spl_autoload_register(function (string $class) {
     }
 });
 
+use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\ConsoleCommand;
 use MrExclusive\ScumManager\Support\IniDocument;
 use MrExclusive\ScumManager\Support\LuaTable;
@@ -311,6 +312,33 @@ $state['ServerMessages__restartTimes'] = "06:00\n18:00";
 $updated = ModSettings::apply('ServerMessages', [], $state);
 check('settings: number list', $updated['restartWarnings'], [10, 2]);
 check('settings: missing config gets every field', $updated['restartTimes'], ['06:00', '18:00']);
+
+// ---------------------------------------------------------------- AdminCommands
+$options = AdminCommands::options();
+check('commands: grouped', array_keys($options), ['Works any time', 'Needs an admin in game', 'Other']);
+check('commands: any-time ones are the ones the mod handles itself', array_keys($options['Works any time']), ['announce', 'listplayers', 'kick']);
+check('commands: announce', AdminCommands::build('announce', ['announce__message' => '  Restart in 5 min ']), 'Announce Restart in 5 min');
+check('commands: no fields', AdminCommands::build('listplayers', []), 'ListPlayers');
+check('commands: kick by name with spaces', AdminCommands::build('kick', ['kick__name' => 'Mr Exclusive']), 'Kick Mr Exclusive');
+check('commands: money', AdminCommands::build('money', ['money__steamId' => '76561198081802669', 'money__amount' => '-250']), 'ChangeCurrencyBalance Normal -250 76561198081802669');
+check('commands: select value', AdminCommands::build('setweather', ['setweather__weather' => '0.5']), 'SetWeather 0.5');
+check('commands: other commands\' fields ignored', AdminCommands::build('settime', ['settime__hour' => '12', 'announce__message' => 'x']), 'SetTime 12');
+check('commands: custom', AdminCommands::build('custom', ['custom__command' => '#SpawnVehicle BPC_Dirtbike']), '#SpawnVehicle BPC_Dirtbike');
+throws('commands: hour range', fn () => AdminCommands::build('settime', ['settime__hour' => '24']), 'from 0 to 23');
+throws('commands: not a number', fn () => AdminCommands::build('settime', ['settime__hour' => '1e3']), 'whole number');
+throws('commands: bad SteamID', fn () => AdminCommands::build('ban', ['ban__steamId' => '123']), 'SteamID64');
+throws('commands: unknown weather', fn () => AdminCommands::build('setweather', ['setweather__weather' => '7']), 'Pick a Weather');
+throws('commands: item without spaces', fn () => AdminCommands::build('spawnitem', ['spawnitem__item' => 'A B', 'spawnitem__amount' => '1']), 'cannot contain spaces');
+throws('commands: missing field', fn () => AdminCommands::build('money', ['money__steamId' => '76561198081802669']), 'Amount is required');
+throws('commands: one line only', fn () => AdminCommands::build('announce', ['announce__message' => "a\nShutdownServer"]), 'one line');
+throws('commands: unknown command', fn () => AdminCommands::build('nope', []), 'Pick a command');
+check('commands: known players from players.tsv', AdminCommands::knownPlayers("76561198000000002\tbob\t0\n76561198000000001\tAlice\t3\nbad line\n"),
+    ['76561198000000001' => 'Alice (76561198000000001)', '76561198000000002' => 'bob (76561198000000002)']);
+check('commands: no players file', AdminCommands::knownPlayers(null), []);
+
+$state = ModSettings::toState('PlayerTools', ['teleports' => ['locations' => [['name' => 'trader', 'x' => 1, 'y' => -2, 'z' => 3, 'price' => 50]]]]);
+check('settings: teleport rows', $state['PlayerTools__teleports__locations'], [['name' => 'trader', 'x' => '1', 'y' => '-2', 'z' => '3', 'price' => '50']]);
+check('settings: teleport numbers saved as numbers', ModSettings::apply('PlayerTools', [], $state)['teleports']['locations'], [['name' => 'trader', 'x' => 1, 'y' => -2, 'z' => 3, 'price' => 50]]);
 
 // ---------------------------------------------------------------- bundled mods
 $bundled = MrExclusive\ScumManager\Services\ScumServerService::bundledMods();
