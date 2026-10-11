@@ -248,6 +248,25 @@ class ScumModsPage extends Page implements HasTable
                         Notification::make()->title('Could not install UE4SS')->body($exception->getMessage())->danger()->persistent()->send();
                     }
                 }),
+            Action::make('safe_settings')
+                ->label('SCUM-safe UE4SS settings')
+                ->icon('tabler-shield-check')
+                ->color('gray')
+                ->visible(fn () => $this->ue4ss['installed'] ?? false)
+                ->authorize(fn () => user()?->can(SubuserPermission::FileUpdate, $this->getServer()))
+                ->requiresConfirmation()
+                ->modalHeading('Apply SCUM-safe UE4SS settings?')
+                ->modalDescription('UE4SS turns on about sixteen engine hooks by default, and on SCUM 1.3 those crash the server as soon as a player joins. This turns off every hook except HookCallFunctionByNameWithArguments and HookEngineTick, and disables the UE4SS console window. Fresh installs already get these settings. Restart the server to apply.')
+                ->action(function (ScumServerService $service) {
+                    try {
+                        $service->applyScumSafeUe4ssSettings($this->getServer());
+
+                        Notification::make()->title('UE4SS-settings.ini updated')->body('Restart the server to apply.')->success()->send();
+                    } catch (Exception $exception) {
+                        report($exception);
+                        Notification::make()->title('Could not update UE4SS-settings.ini')->body($exception->getMessage())->danger()->send();
+                    }
+                }),
             Action::make('open_folder')
                 ->label('Open folder')
                 ->icon('tabler-folder-open')

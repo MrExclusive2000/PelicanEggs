@@ -37,6 +37,7 @@ One SteamID64 per line. Admin lists check that each line is a 17-digit ID; permi
 SCUM has no official mod support yet. Server-side mods run through [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS). Players don't install anything, and BattlEye stays on for them.
 
 - **Install UE4SS:** downloads the latest UE4SS build from GitHub into `SCUM/Binaries/Win64` and extracts it. The default is the *experimental* build, which SCUM mod authors use. **Update** keeps your `mods.txt`, `mods.json` and `UE4SS-settings.ini`. The server must be stopped.
+- **SCUM-safe settings:** UE4SS turns on about sixteen engine hooks by default, and on SCUM 1.3 these crash the server as soon as a player joins. A fresh install therefore turns off every hook except `HookCallFunctionByNameWithArguments` and `HookEngineTick`, and disables the UE4SS console window. The **SCUM-safe UE4SS settings** button re-applies this to an existing install. If a mod's instructions say it needs another hook, turn that hook back on in `ue4ss/UE4SS-settings.ini`.
 - **Upload mod:** takes the mod's `.zip` as downloaded. Any folder inside that contains `Scripts/main.lua` (Lua) or `dlls/main.dll` (C++) is installed into `ue4ss/Mods/<name>` and enabled. Paths are checked, so nothing can be written outside the mod folder.
 - **Enable/Disable:** updates `mods.txt` and `mods.json` together, and keeps `Keybinds` last, as UE4SS requires.
 - **Delete:** removes the mod's folder. UE4SS's own built-in mods can be disabled but not deleted.

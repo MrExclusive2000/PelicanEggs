@@ -151,6 +151,21 @@ $fresh = ModList::parse(null);
 $fresh->setEnabled('ModA', true);
 check('mods: missing file', $fresh->renderTxt(), "ModA : 1\n");
 
+// ---------------------------------------------------------------- Ue4ssSettings
+// Excerpt of the UE4SS-settings.ini shipped in UE4SS v3.0.1 experimental (CRLF, double spaces kept).
+$ue4ssIni = "[Debug]\r\nConsoleEnabled = 0\r\nGuiConsoleEnabled = 1\r\nGuiConsoleVisible = 1\r\n\r\n[Hooks]\r\nHookProcessInternal = 1\r\nHookBeginPlay  = 1\r\nHookCallFunctionByNameWithArguments = 1\r\nHookEngineTick = 1\r\nEngineTickResolveMethod = Scan\r\nHookUObjectProcessEvent = 1\r\n\r\n[CrashDump]\r\nEnableDumping = 1\r\n";
+$safe = IniDocument::parse(\MrExclusive\ScumManager\Support\Ue4ssSettings::applyScumDefaults($ue4ssIni));
+check('ue4ss: process internal off', $safe->get('Hooks', 'HookProcessInternal'), '0');
+check('ue4ss: begin play off (double-spaced key)', $safe->get('Hooks', 'HookBeginPlay'), '0');
+check('ue4ss: engine tick kept', $safe->get('Hooks', 'HookEngineTick'), '1');
+check('ue4ss: call function kept', $safe->get('Hooks', 'HookCallFunctionByNameWithArguments'), '1');
+check('ue4ss: process event off', $safe->get('Hooks', 'HookUObjectProcessEvent'), '0');
+check('ue4ss: unrelated key untouched', $safe->get('Hooks', 'EngineTickResolveMethod'), 'Scan');
+check('ue4ss: missing hook added', $safe->get('Hooks', 'HookUStructLink'), '0');
+check('ue4ss: gui console off', $safe->get('Debug', 'GuiConsoleVisible'), '0');
+check('ue4ss: other sections untouched', $safe->get('CrashDump', 'EnableDumping'), '1');
+check('ue4ss: keeps CRLF and spacing', str_contains($safe->render(), "HookBeginPlay  = 0\r\n"), true);
+
 // ---------------------------------------------------------------- ModArchive
 $tmp = sys_get_temp_dir() . '/scum-manager-tests-' . getmypid();
 @mkdir($tmp);

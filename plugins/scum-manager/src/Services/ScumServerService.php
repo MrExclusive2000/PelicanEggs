@@ -12,6 +12,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
+use MrExclusive\ScumManager\Support\Ue4ssSettings;
 use RuntimeException;
 
 class ScumServerService
@@ -328,12 +329,29 @@ class ScumServerService
             $this->files($server)->putContent($path, $contents);
         }
 
+        // A fresh install ships UE4SS's default hooks, which crash SCUM when a player joins.
+        if (!isset($preserved[$current['root'] . '/UE4SS-settings.ini'])) {
+            $this->applyScumSafeUe4ssSettings($server);
+        }
+
         Activity::event('server:file.pull')
             ->property('directory', $binaries)
             ->property('url', $url)
             ->log();
 
         return $url;
+    }
+
+    /** Rewrite UE4SS-settings.ini with the hooks SCUM tolerates and no console window. */
+    public function applyScumSafeUe4ssSettings(Server $server): void
+    {
+        $ue4ss = $this->ue4ss($server);
+        if (!$ue4ss['installed']) {
+            throw new RuntimeException('UE4SS is not installed.');
+        }
+
+        $path = $ue4ss['root'] . '/UE4SS-settings.ini';
+        $this->write($server, $path, Ue4ssSettings::applyScumDefaults($this->read($server, $path) ?? ''));
     }
 
     // ------------------------------------------------------------------ mods
