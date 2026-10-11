@@ -800,7 +800,17 @@ local function canAfford(session, price, check)
     return true
 end
 
-local classesByName = nil   -- every loaded class by short name, built on the first miss
+-- Never keep game objects between calls: SCUM unloads item classes it is not using, and touching
+-- an unloaded class crashes the server. Classes are remembered by path and looked up again.
+local classPaths = nil   -- every loaded class's path by short name, built on the first miss
+
+local function classAt(path)
+    if path == nil or path == "" then return nil end
+    local found = safe(function() return StaticFindObject(path) end)
+    if not isValid(found) then found = safe(function() return LoadAsset(path) end) end
+    if isValid(found) then return found end
+    return nil
+end
 
 local function findItemClass(name)
     local candidates = { name, name .. "_C", "BP_" .. name .. "_C", "BP_" .. name }
@@ -809,35 +819,27 @@ local function findItemClass(name)
         if isValid(found) then return found, candidate end
     end
     -- FindObject by short name does not work on every UE4SS build: look through the classes.
-    if classesByName == nil then
-        classesByName = {}
+    if classPaths == nil then
+        classPaths = {}
         for _, class in pairs(safe(function() return FindObjects(0, "Class", nil, 0, 0, false) end) or {}) do
             local short = safe(function() return class:GetFName():ToString() end)
-            if short then classesByName[short] = class end
+            local path = string.match(safe(function() return class:GetFullName() end) or "", "^%S+%s+(.+)$")
+            if short and path then classPaths[short] = path end
         end
-    end
-    for _, candidate in ipairs(candidates) do
-        if isValid(classesByName[candidate]) then return classesByName[candidate], candidate end
     end
     -- SCUM loads item types on demand. PelicanConsole's items.txt records where each item type
     -- seen so far lives, so load it from there.
     local file = io.open(DIR .. "/../PelicanConsole/items.txt", "r")
     if file then
-        local paths = {}
         for line in file:lines() do
             local itemName, path = string.match(line, "^([%w_]+)\t(%S+)")
-            if itemName then paths[itemName] = path end
+            if itemName and classPaths[itemName] == nil then classPaths[itemName] = path end
         end
         file:close()
-        for _, candidate in ipairs(candidates) do
-            if paths[candidate] then
-                local loaded = safe(function() return LoadAsset(paths[candidate]) end)
-                if isValid(loaded) then
-                    classesByName[candidate] = loaded
-                    return loaded, candidate
-                end
-            end
-        end
+    end
+    for _, candidate in ipairs(candidates) do
+        local found = classAt(classPaths[candidate])
+        if found then return found, candidate end
     end
     return nil
 end

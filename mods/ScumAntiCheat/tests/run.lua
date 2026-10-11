@@ -474,6 +474,17 @@ function leaver:GetControlRotation() error("called into a destroyed controller")
 clock = clock + 0.1
 aimTick()
 check("aim sampler skips destroyed controllers", not has(acLog(), "Aim sampling failed"))
+-- Once the game has freed it, even IsValid on it would crash: the sampler must not keep it at all.
+local gone = Player("Gone", Pawn("BP_Prisoner_C", 0, 0, 0))
+players = { gone }
+tick()
+players = {}
+local touched = false
+function gone:IsValid() touched = true error("freed memory") end
+function gone:GetControlRotation() touched = true error("freed memory") end
+clock = clock + 0.1
+aimTick()
+check("aim sampler never touches a controller from an earlier tick", not touched)
 check("no game world is used for timing", not string.find(source, "GetRealTimeSeconds", 1, true))
 
 -- ------------------------------------------------------------------ scenario 5: broken config

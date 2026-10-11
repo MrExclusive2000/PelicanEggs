@@ -312,7 +312,8 @@ local function teleportPlayer(text)
     end
 end
 
-local itemClasses = {}   -- class name -> class, from the last item scan
+-- Never keep game objects between calls: SCUM unloads item classes it is not using, and touching
+-- an unloaded class crashes the server. Item types are remembered by path and looked up again.
 local knownItems = {}    -- class name -> object path, every item seen (kept in items.txt)
 local scanItems          -- defined with the item list below
 
@@ -323,20 +324,15 @@ local function findItemClass(name)
         local found = safe(function() return FindObject("BlueprintGeneratedClass", candidate) end)
         if isValid(found) then return found, candidate end
     end
-    -- FindObject by short name does not work on every UE4SS build: use the item scan.
-    if next(itemClasses) == nil then scanItems() end
-    for _, candidate in ipairs(candidates) do
-        if isValid(itemClasses[candidate]) then return itemClasses[candidate], candidate end
-    end
-    -- Not loaded right now: SCUM loads item types on demand, so load it from its path.
+    -- FindObject by short name does not work on every UE4SS build: use the item scan's paths.
+    if next(knownItems) == nil then scanItems() end
     for _, candidate in ipairs(candidates) do
         local path = knownItems[candidate]
-        if path then
-            local loaded = safe(function() return LoadAsset(path) end) or safe(function() return StaticFindObject(path) end)
-            if isValid(loaded) then
-                itemClasses[candidate] = loaded
-                return loaded, candidate
-            end
+        if path and path ~= "" then
+            -- Already loaded, or SCUM loads item types on demand: load it from its path.
+            local found = safe(function() return StaticFindObject(path) end)
+            if not isValid(found) then found = safe(function() return LoadAsset(path) end) end
+            if isValid(found) then return found, candidate end
         end
     end
     return nil
@@ -382,7 +378,7 @@ end
 scanItems = function()
     local classes = safe(function() return FindObjects(0, "Class", nil, 0, 0, false) end) or {}
     local names, byParent, byFolder = {}, 0, 0
-    itemClasses = {}
+    local itemClasses = {}
     for _, class in pairs(classes) do
         local name = safe(function() return class:GetFName():ToString() end)
         local path = safe(function() return class:GetFullName() end) or ""

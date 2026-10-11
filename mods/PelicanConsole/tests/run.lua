@@ -386,6 +386,19 @@ writeCommands("GiveItem Bob Christmas_Headband_01_ES\n")
 loopCallback()
 check("item not in memory is loaded from its path", loadedPaths[1] == "/Game/ConZ_Files/Items/Clothes/Christmas_Headband_01_ES_C"
     and string.find(consoleLog(), "Gave Bob 1 x Christmas_Headband_01_ES_C", 1, true) ~= nil)
+-- A class seen by an earlier scan may have been unloaded since: it is looked up again by path,
+-- never touched through the old object.
+local unloaded = Class("BP_Unloaded_C", itemBase, "/Game/ConZ_Files/Items/")
+loadedClasses = { unloaded }
+writeCommands("ListItems\n")
+loopCallback()
+local touchedUnloaded = false
+function unloaded:IsValid() touchedUnloaded = true error("freed memory") end
+function unloaded:GetFName() touchedUnloaded = true error("freed memory") end
+loadedClasses = {}
+writeCommands("GiveItem Bob BP_Unloaded_C\n")
+loopCallback()
+check("unloaded item class not touched", not touchedUnloaded)
 online = {}
 
 -- Started from an unexpected path: disabled with a message instead of erroring.

@@ -622,13 +622,12 @@ end
 
 local function sampleAim()
     local time = now()
-    for _, player in pairs(tracked) do
+    -- Find the controllers again every time: one kept from an earlier tick may have been
+    -- destroyed since, and touching a destroyed object crashes the server.
+    for _, controller in ipairs(findAll(CONTROLLER_CLASSES)) do
+        local player = tracked[address(controller)]
         local yaw, pitch = nil, nil
-        -- The controller is from the last full check; a player who left since may be gone.
-        if player.controller and not isValid(player.controller) then
-            player.controller = nil
-        end
-        if player.controller then yaw, pitch = rotation(player.controller) end
+        if player then yaw, pitch = rotation(controller) end
         if yaw then
             local last = player.lastAim
             if last and time > last.time and time - last.time <= 0.3 then
@@ -900,6 +899,9 @@ local function checkAll()
     end
 
     processKills(time)
+
+    -- Controllers are only good for this tick.
+    for _, player in pairs(tracked) do player.controller = nil end
 
     if #controllers ~= playerCount then
         playerCount = #controllers
