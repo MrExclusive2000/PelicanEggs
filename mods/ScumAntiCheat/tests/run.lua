@@ -153,7 +153,7 @@ for _ = 1, 3 do
 end
 local text = acLog()
 check("walker never flagged", not has(text, "Walker"))
-check("speeder flagged with SteamID from SCUM.log", has(text, "Speeder (76561198000000002): moving 40.0 m/s on foot (limit 15)"))
+check("speeder flagged with SteamID from SCUM.log", has(text, "Speeder (76561198000000002): moving 40.0 m/s on foot (limit 21)"))
 check("strikes counted", has(text, "[strike 3/3]"))
 check("log mode does not kick", #kicks == 0 and has(text, "reached 3 strikes. action = \"log\", so nothing was done."))
 check("watching count logged", has(table.concat(log), "Watching 2 player(s)."))

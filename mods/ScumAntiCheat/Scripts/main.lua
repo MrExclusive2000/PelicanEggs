@@ -55,7 +55,7 @@ local DEFAULTS = {
         unauthorizedAdmin = true, names = true, watchlist = true, gameLogs = true,
         killLog = true, aimSnap = true,
     },
-    maxFootSpeed = 15,
+    maxFootSpeed = 21,
     maxVehicleSpeed = 120,
     teleportDistance = 300,
     flyingSeconds = 10,

@@ -269,7 +269,7 @@ final class ModSettings
                 'Movement limits' => [
                     'description' => 'Metres, metres per second and seconds.',
                     'fields' => [
-                        'maxFootSpeed' => ['int', 'Max speed on foot (m/s)', 15],
+                        'maxFootSpeed' => ['int', 'Max speed on foot (m/s)', 21],
                         'maxVehicleSpeed' => ['int', 'Max speed in vehicles (m/s)', 120],
                         'teleportDistance' => ['int', 'Teleport distance (m)', 300],
                         'flyingSeconds' => ['int', 'Flying for (s)', 10],

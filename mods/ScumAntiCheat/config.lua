@@ -32,7 +32,7 @@ return {
     },
 
     -- Speed limits. Sprinting is about 7 m/s; the fastest vehicles stay well under 100.
-    maxFootSpeed = 15,
+    maxFootSpeed = 21,
     maxVehicleSpeed = 120,
 
     -- A jump of at least this many metres between two checks counts as a teleport.
