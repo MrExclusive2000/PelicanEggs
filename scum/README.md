@@ -102,5 +102,6 @@ For restart warnings, use a Pelican schedule: a **Send command** task with `Anno
 - **"App '3792580' state is 0x6 after update job":** steamcmd failed the update. Restart again, or delete `steamapps/appmanifest_3792580.acf` and restart.
 - **Version mismatch when joining:** the server is behind the client. Make sure Auto Update is on and restart.
 - **Typed console commands do nothing:**
+  - Updating the egg doesn't change servers that already exist: each server keeps its own copy of the start command. Go to **Admin → Servers → (your server) → Startup**, set **Startup Command** to **Default**, save and restart. The first line of the console after a start (`:/home/container$ wine …`) must contain `CMD_DIR=`.
   - Check that the console shows `[PelicanConsole] Ready.` after a start. If it doesn't, check that UE4SS is installed and the mod is enabled on the Mods page.
   - If you see `Ran: #…` but nothing happens in game, change `COMMAND_PREFIX` near the top of `ue4ss/Mods/PelicanConsole/Scripts/main.lua` from `"#"` to `""` and restart.
