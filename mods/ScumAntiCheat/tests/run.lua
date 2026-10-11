@@ -55,6 +55,7 @@ local log = {}
 
 function print(text) log[#log + 1] = text end
 os.time = function() return clock end   -- file refreshes use os.time
+os.clock = function() return clock end  -- movement and aim timing
 local world = object()
 local gameMode = object()
 function gameMode:KickPlayer(controller, reason)
@@ -454,6 +455,19 @@ write(killLog, utf16(textKill("2026.10.11-12.45.00", "76561198000000080", "Far",
 step()
 check("kill flag can strike and kick", has(acLog(), "Far (76561198000000080): killed X at 1500 m") and has(acLog(), "Kicked Far (76561198000000080)"))
 gameLogFiles.kill_ = nil
+
+-- ------------------------------------------------------------------ crash regression
+-- A player who disconnects between full checks must not be touched by the aim sampler.
+start([[return {}]])
+local leaver = Player("Leaver", Pawn("BP_Prisoner_C", 0, 0, 0))
+players = { leaver }
+tick()
+leaver.valid = false
+function leaver:GetControlRotation() error("called into a destroyed controller") end
+clock = clock + 0.1
+aimTick()
+check("aim sampler skips destroyed controllers", not has(acLog(), "Aim sampling failed"))
+check("no game world is used for timing", not string.find(source, "GetRealTimeSeconds", 1, true))
 
 -- ------------------------------------------------------------------ scenario 5: broken config
 start("return {")

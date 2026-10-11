@@ -479,16 +479,11 @@ local function location(pawn)
     return { x = x / CM_PER_M, y = y / CM_PER_M, z = z / CM_PER_M }
 end
 
-local gameplayStatics = nil
-local function now(world)
-    if gameplayStatics == nil then
-        gameplayStatics = safe(function() return StaticFindObject("/Script/Engine.Default__GameplayStatics") end) or false
-    end
-    if gameplayStatics and world then
-        local seconds = safe(function() return gameplayStatics:GetRealTimeSeconds(world) end)
-        if type(seconds) == "number" then return seconds end
-    end
-    return os.time()
+-- Seconds since the server started. On Windows (and Wine) os.clock() is wall-clock time.
+-- Never pass game objects in here: a UWorld can be destroyed between two calls (map change),
+-- and calling into a destroyed object crashes the server.
+local function now()
+    return os.clock()
 end
 
 local function kick(controller, name)
@@ -595,11 +590,14 @@ local function rotation(controller)
     return yaw, pitch
 end
 
-local lastWorld = nil
 local function sampleAim()
-    local time = now(lastWorld)
+    local time = now()
     for _, player in pairs(tracked) do
         local yaw, pitch = nil, nil
+        -- The controller is from the last full check; a player who left since may be gone.
+        if player.controller and not isValid(player.controller) then
+            player.controller = nil
+        end
         if player.controller then yaw, pitch = rotation(player.controller) end
         if yaw then
             local last = player.lastAim
@@ -853,9 +851,7 @@ end
 local playerCount = -1
 
 local function checkAll()
-    local world = findFirst({ "World" })
-    lastWorld = world
-    local time = now(world)
+    local time = now()
     local seen = {}
     local controllers = findAll(CONTROLLER_CLASSES)
 
