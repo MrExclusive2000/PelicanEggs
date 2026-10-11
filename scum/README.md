@@ -97,7 +97,7 @@ For restart warnings, use a Pelican schedule: a **Send command** task with `Anno
   4. Check whether Steam can see the server: open `https://api.steampowered.com/ISteamApps/GetServersAtAddress/v1/?addr=<public IP>`. It should list the server, with `gameport` set to the primary port.
   5. Try **Direct Connect** to `<public IP>:<primary + 2>`. If that works, the network is fine and only the browser listing is missing. A new server can take 10-15 minutes to appear, so search for it by name.
 
-- **The panel stays on "Starting":** the server is marked running when the log prints `Config entry: GameID scum` (BattlEye) or `Engine is initialized.`. If your build logs neither, edit the egg's startup "done" strings to a line from your `SCUM.log`.
+- **The panel stays on "Starting":** the server is marked running when the log prints `Config entry: GameID scum` (BattlEye) or the first `LogSCUM: Global Stats:` line. Both appear once the map has finished loading, about two minutes after start. If your build logs neither, edit the egg's startup "done" strings to a line from your `SCUM.log`.
 - **The server crashes at start with missing DLL errors:** set **Winetricks** to `vcrun2022` and restart. It installs on every start, so the first boot takes longer.
 - **"App '3792580' state is 0x6 after update job":** steamcmd failed the update. Restart again, or delete `steamapps/appmanifest_3792580.acf` and restart.
 - **Version mismatch when joining:** the server is behind the client. Make sure Auto Update is on and restart.

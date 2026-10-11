@@ -35,7 +35,7 @@ config:
   startup:
     done:
       - 'Config entry: GameID scum'
-      - 'LogInit: Display: Engine is initialized.'
+      - 'LogSCUM: Global Stats:'
   logs: {  }
   stop: ^C
 scripts:
