@@ -396,12 +396,14 @@ local function handleChatLine(line)
     local prefix = config.chatCommands.prefix or "!"
     if string.sub(chat.text, 1, #prefix) == prefix then
         chat.text = string.sub(chat.text, #prefix + 1)
+        output("Chat command from " .. tostring(chat.name) .. ": " .. prefix .. chat.text)
         pendingChats[#pendingChats + 1] = chat
     end
 end
 
 local LOG_HANDLERS = { kill_ = handleKillLine, chat_ = handleChatLine }
 local lastLogRefresh = nil
+local missingLogs = {}       -- prefix -> already reported missing
 
 local function refreshLogs(time)
     for _, line in ipairs(readTail(serverLog)) do handleServerLogLine(line) end
@@ -415,6 +417,11 @@ local function refreshLogs(time)
                 -- Skip what was already in the file when the mod started; read new files in full.
                 gameLogs[prefix] = newTail(path, firstRefresh)
                 if prefix == "kill_" then recentKillKeys = {} end
+                output("Reading " .. path)
+            elseif path == nil and not missingLogs[prefix] then
+                missingLogs[prefix] = true
+                output("No " .. prefix .. "*.log found in " .. GAME_LOG_DIR .. " yet; " .. (prefix == "chat_" and "chat commands" or "the kill feed")
+                    .. " will start once SCUM writes one.")
             end
         end
     end
@@ -513,20 +520,32 @@ local function sessionById(id)
     return nil
 end
 
+-- The chat log names the Steam profile; the game may know the player by another name, so
+-- fall back to a case-insensitive match and then to the only player online.
 local function sessionForChat(chat)
     local session = sessionById(chat.steamId)
     if session then return session end
+    local wanted = chat.name and string.lower((string.gsub(chat.name, "^%s*(.-)%s*$", "%1")))
+    local only, count = nil, 0
     for _, candidate in pairs(sessions) do
-        if chat.name and candidate.name == chat.name then return candidate end
+        if wanted and candidate.name and string.lower(candidate.name) == wanted then return candidate end
+        count = count + 1
+        if candidate.steamId == nil then only = candidate end
     end
+    if count == 1 then return only end
     return nil
 end
 
 local function tell(session, lines)
     if type(lines) == "string" then lines = { lines } end
     local pawn = characterOf(session.controller)
-    if pawn == nil then return false end
-    return pcall(function() pawn:SendMessageToClient(table.concat(lines, "\n"), nil) end)
+    if pawn == nil then
+        output("Could not message " .. tostring(session.name) .. ": their character was not found.")
+        return false
+    end
+    local ok, err = pcall(function() pawn:SendMessageToClient(table.concat(lines, "\n"), nil) end)
+    if not ok then output("Could not message " .. tostring(session.name) .. ": " .. tostring(err)) end
+    return ok
 end
 
 local function onlineCount()
@@ -1503,8 +1522,15 @@ end
 local function handleChat(chat, time)
     if not config.chatCommands.enabled then return end
     local session = sessionForChat(chat)
-    if session == nil then return end
+    if session == nil then
+        local names = {}
+        for _, candidate in pairs(sessions) do names[#names + 1] = tostring(candidate.name) end
+        output("Ignored " .. (config.chatCommands.prefix or "!") .. chat.text .. " from " .. tostring(chat.name) .. " (" .. chat.steamId
+            .. "): they do not match a player online (" .. (#names > 0 and table.concat(names, ", ") or "nobody found online") .. ").")
+        return
+    end
     if session.steamId == nil then session.steamId = chat.steamId end
+    if chat.name and session.name ~= chat.name then steamIdByName[session.name] = chat.steamId end
 
     local prefix = config.chatCommands.prefix
     local word, rest = string.match(chat.text, "^(%S+)%s*(.-)%s*$")
