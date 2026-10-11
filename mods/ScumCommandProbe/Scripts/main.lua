@@ -35,6 +35,12 @@ local ENGINE_CLASSES_OF_INTEREST = {
     "GameStateBase", "KismetSystemLibrary",
 }
 
+-- Looked up by path if FindObjects returns nothing.
+local FALLBACK_CLASSES = {
+    "/Script/Engine.PlayerController", "/Script/Engine.GameModeBase", "/Script/Engine.GameMode",
+    "/Script/Engine.CheatManager", "/Script/Engine.GameSession", "/Script/Engine.GameStateBase",
+}
+
 -- EFunctionFlags (Engine/Source/Runtime/CoreUObject/Public/UObject/Script.h)
 local FLAGS = {
     { 0x00000040, "Net" },
@@ -183,14 +189,37 @@ local function scan()
     local classes = {}
     local allClasses = {}
 
-    -- Native classes ("Class") and Blueprint classes ("BlueprintGeneratedClass").
-    for _, shortName in ipairs({ "Class", "BlueprintGeneratedClass" }) do
-        local found = safe(function() return FindAllOf(shortName) end)
-        if type(found) == "table" then
-            for _, class in ipairs(found) do
-                allClasses[#allClasses + 1] = class
+    -- FindObjects searches GUObjectArray on the C++ side. Class "Class" (not exact) covers
+    -- native classes and Blueprint classes, which derive from it.
+    local noFlags = (type(EObjectFlags) == "table" and EObjectFlags.RF_NoFlags) or 0
+    local seen = {}
+    local function add(class)
+        local key = safe(function() return class:GetAddress() end) or class
+        if class ~= nil and not seen[key] then
+            seen[key] = true
+            allClasses[#allClasses + 1] = class
+        end
+    end
+
+    local found = safe(function() return FindObjects(0, "Class", nil, noFlags, noFlags, false) end)
+    local viaFindObjects = 0
+    if type(found) == "table" then
+        for _, class in pairs(found) do
+            add(class)
+            viaFindObjects = viaFindObjects + 1
+        end
+    end
+    print(TAG .. string.format("FindObjects returned %d classes.\n", viaFindObjects))
+
+    -- Fallback: look up the Unreal classes that matter most by their full path.
+    if #allClasses == 0 then
+        for _, path in ipairs(FALLBACK_CLASSES) do
+            local class = safe(function() return StaticFindObject(path) end)
+            if class ~= nil and safe(function() return class:IsValid() end) then
+                add(class)
             end
         end
+        print(TAG .. string.format("Fallback lookup found %d of %d known classes.\n", #allClasses, #FALLBACK_CLASSES))
     end
 
     local skipped = 0

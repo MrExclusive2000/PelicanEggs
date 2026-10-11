@@ -97,10 +97,23 @@ function print(text)
     if string.find(text, "scanning reflection data", 1, true) then scannedAtTick = loopTicks end
 end
 function ForEachUObject() error("the probe must not walk every object") end
-function FindAllOf(name)
-    if name == "Class" then return nativeClasses end
-    if name == "BlueprintGeneratedClass" then return blueprintClasses end
-    return nil
+-- Real UE4SS: FindAllOf never returns class definitions, only live instances.
+function FindAllOf() return nil end
+local findObjectsWorks = true
+function FindObjects(count, className, objectName, banned, required, exact)
+    if not findObjectsWorks then return {} end
+    assert(count == 0 and className == "Class" and objectName == nil and exact == false)
+    local all = {}
+    for _, c in ipairs(nativeClasses) do all[#all + 1] = c end
+    for _, c in ipairs(blueprintClasses) do all[#all + 1] = c end
+    return all
+end
+function StaticFindObject(path)
+    for _, c in ipairs(nativeClasses) do
+        local ok, full = pcall(function() return c:GetFullName() end)
+        if ok and full == "Class " .. path then return c end
+    end
+    return { IsValid = function() return false end }
 end
 local gameModeAvailableAfter = 2
 local findCalls = 0
@@ -149,6 +162,7 @@ check("broken class still listed by name, others unaffected", string.find(report
 check("counts", string.find(report, "Classes scanned: 10, matching functions: 4, matching classes: 3", 1, true) ~= nil)
 
 local logText = table.concat(log)
+check("FindObjects count logged", string.find(logText, "FindObjects returned 10 classes", 1, true) ~= nil)
 check("summary logged", string.find(logText, "4 matching functions, 3 matching classes", 1, true) ~= nil)
 check("class names are not false matches (playeRCONtroller)", string.find(report, "== Classes ==\n/Game/ConZ/BP_AdminTools.BP_AdminTools_C\n/Script/ConZ.AdminCommandManager\n/Script/ConZ.BrokenChatThing\n", 1, true) ~= nil)
 check("report path logged", string.find(logText, "probe-output.txt", 1, true) ~= nil)
@@ -158,6 +172,13 @@ log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick = {}, 0, 0, mat
 dofile(copy)
 check("fallback scan after 12 ticks (2 minutes)", scannedAtTick == 12)
 check("fallback scan ran", string.find(table.concat(log), "scanning reflection data", 1, true) ~= nil)
+
+-- Third scenario: FindObjects returns nothing, so the fallback looks classes up by path.
+log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick, findObjectsWorks = {}, 0, 0, 1, nil, false
+dofile(copy)
+local fallbackReport = assert(io.open(tmp .. "/ScumCommandProbe/probe-output.txt")):read("a")
+check("fallback lookup logged", string.find(table.concat(log), "Fallback lookup found 1 of 6 known classes", 1, true) ~= nil)
+check("fallback still reports PlayerController functions", string.find(fallbackReport, "/Script/Engine.PlayerController:ServerExec", 1, true) ~= nil)
 
 os.execute("rm -rf '" .. tmp .. "'")
 print = _G.print
