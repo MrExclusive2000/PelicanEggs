@@ -48,8 +48,11 @@ local DEFAULTS = {
     newPlayers = { messages = {}, starterKit = false, starterKitCommands = {}, starterKitMessage = "" },
     welcomeBack = { enabled = true, message = "Welcome back {name}! {hours} played, {kills} kills, {deaths} deaths." },
     playtimeRewards = {
-        enabled = false, everyMinutes = 60, commands = {}, message = "",
-        dailyCommands = {}, dailyMessage = "",
+        enabled = true, everyMinutes = 60,
+        commands = { "ChangeCurrencyBalance Normal 100 {steamId}" },
+        message = "+100 cash for an hour on the server. Thanks for playing!",
+        dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" },
+        dailyMessage = "Daily login bonus: +200 cash.",
     },
     killStreaks = {
         enabled = true, announceAt = { 3, 5, 10, 15, 20 }, message = "{name} is on a {count} kill streak!",
@@ -57,13 +60,13 @@ local DEFAULTS = {
         ignoreSameVictimMinutes = 30,
     },
     bounties = {
-        enabled = false, streakBountyAt = 5, streakBountyAmount = 500, streakBountyIncrease = 100,
+        enabled = true, streakBountyAt = 5, streakBountyAmount = 500, streakBountyIncrease = 100,
         playerBounties = false, minAmount = 100, maxAmount = 5000,
         payCommand = "ChangeCurrencyBalance Normal {amount} {steamId}",
         chargeCommand = "ChangeCurrencyBalance Normal -{amount} {steamId}",
     },
     teleports = {
-        enabled = false, cooldownMinutes = 30, standStillSeconds = 10,
+        enabled = true, cooldownMinutes = 30, standStillSeconds = 10,
         command = "Teleport {x} {y} {z} {steamId}",
         chargeCommand = "ChangeCurrencyBalance Normal -{price} {steamId}",
         locations = {},

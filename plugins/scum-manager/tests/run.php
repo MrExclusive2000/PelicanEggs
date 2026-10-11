@@ -340,6 +340,13 @@ $state = ModSettings::toState('PlayerTools', ['teleports' => ['locations' => [['
 check('settings: teleport rows', $state['PlayerTools__teleports__locations'], [['name' => 'trader', 'x' => '1', 'y' => '-2', 'z' => '3', 'price' => '50']]);
 check('settings: teleport numbers saved as numbers', ModSettings::apply('PlayerTools', [], $state)['teleports']['locations'], [['name' => 'trader', 'x' => 1, 'y' => -2, 'z' => 3, 'price' => 50]]);
 
+// The page's defaults for a missing setting must match what the mod does without it.
+$shipped = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/PlayerTools/config.lua'));
+$fromDefaults = ModSettings::apply('PlayerTools', [], ModSettings::toState('PlayerTools', []));
+foreach (['welcomeBack', 'playtimeRewards', 'killStreaks', 'bounties', 'info', 'reports'] as $section) {
+    check("settings: page defaults match shipped PlayerTools $section", $fromDefaults[$section], $shipped[$section]);
+}
+
 // ---------------------------------------------------------------- bundled mods
 $bundled = MrExclusive\ScumManager\Services\ScumServerService::bundledMods();
 check('bundled: our four mods ship with the plugin', array_keys($bundled), ['PelicanConsole', 'PlayerTools', 'ScumAntiCheat', 'ServerMessages']);

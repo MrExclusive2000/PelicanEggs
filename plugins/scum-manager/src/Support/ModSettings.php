@@ -90,10 +90,10 @@ final class ModSettings
                     'fields' => [
                         'playtimeRewards.enabled' => ['toggle', 'Playtime rewards on', true],
                         'playtimeRewards.everyMinutes' => ['int', 'Reward every (min played)', 60],
-                        'playtimeRewards.commands' => ['lines', 'Reward commands (one per line)', []],
-                        'playtimeRewards.message' => ['text', 'Reward message', ''],
-                        'playtimeRewards.dailyCommands' => ['lines', 'Daily login bonus commands (one per line)', []],
-                        'playtimeRewards.dailyMessage' => ['text', 'Daily bonus message', ''],
+                        'playtimeRewards.commands' => ['lines', 'Reward commands (one per line)', ['ChangeCurrencyBalance Normal 100 {steamId}']],
+                        'playtimeRewards.message' => ['text', 'Reward message', '+100 cash for an hour on the server. Thanks for playing!'],
+                        'playtimeRewards.dailyCommands' => ['lines', 'Daily login bonus commands (one per line)', ['ChangeCurrencyBalance Normal 200 {steamId}']],
+                        'playtimeRewards.dailyMessage' => ['text', 'Daily bonus message', 'Daily login bonus: +200 cash.'],
                     ],
                 ],
                 'Kill streaks' => [

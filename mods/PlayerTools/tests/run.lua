@@ -141,6 +141,7 @@ write(dir .. "/players.tsv", "76561198000000005\tVeteran\t10\t2\t7200\t350\t\t1\
 
 -- ------------------------------------------------------------------ start with a test config
 write(dir .. "/config.lua", [[return {
+    playtimeRewards = { enabled = false }, bounties = { enabled = false }, teleports = { enabled = false },
     chatCommands = { rules = { "Be nice." }, discord = "discord.gg/test" },
     afk = { enabled = true, minutes = 3, warnMinutesBefore = 1 },
     voting = { minVotes = 1, percentNeeded = 50, durationSeconds = 30, cooldownMinutes = 5,
