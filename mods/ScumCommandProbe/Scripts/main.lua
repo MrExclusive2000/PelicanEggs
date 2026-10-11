@@ -18,7 +18,7 @@ local TAG = "[ScumCommandProbe] "
 -- Case-insensitive name fragments worth reporting.
 local KEYWORDS = {
     "admin", "command", "cheat", "chat", "console", "exec", "kick", "ban",
-    "teleport", "announce", "broadcast", "message", "say", "whisper", "rcon",
+    "teleport", "announce", "broadcast", "message", "say", "whisper",
 }
 
 -- Engine modules that are noise for this purpose, except for the classes listed below.
@@ -108,17 +108,29 @@ local function describeFlags(flags)
     return string.format("flags=0x%08X %s", flags, table.concat(names, ","))
 end
 
+-- UE4SS invokes iteration callbacks from C++. Keep those callbacks to a bare table insert
+-- and do all the inspection afterwards, each item inside its own pcall, so one broken
+-- entry is skipped instead of taking the whole scan down.
+local function collect(owner, method)
+    local items = {}
+    local ok = pcall(function()
+        owner[method](owner, function(item)
+            items[#items + 1] = item
+        end)
+    end)
+    return items, ok
+end
+
 -- "StrProperty /Script/ConZ.Foo:Bar:Message" -> "Message: StrProperty"
 local function describeParameters(func)
     local params = {}
+    local properties = collect(func, "ForEachProperty")
 
-    safe(function()
-        func:ForEachProperty(function(property)
-            local full = safe(function() return property:GetFullName() end) or ""
-            local propertyType = string.match(full, "^(%S+)%s") or "?"
-            table.insert(params, fname(property) .. ": " .. propertyType)
-        end)
-    end)
+    for _, property in ipairs(properties) do
+        local full = safe(function() return property:GetFullName() end) or ""
+        local propertyType = string.match(full, "^(%S+)%s") or "?"
+        params[#params + 1] = fname(property) .. ": " .. propertyType
+    end
 
     return "(" .. table.concat(params, ", ") .. ")"
 end
@@ -133,36 +145,65 @@ local function outputPath()
     return modDir .. "/probe-output.txt"
 end
 
+local progress = "start"
+
+local function inspectClass(class, functions, classes)
+    local full = safe(function() return class:GetFullName() end)
+    if full == nil then
+        return 0
+    end
+
+    local classPath = string.match(full, "^%S+%s+(.+)$") or full
+    progress = classPath
+    if isNoisy(classPath) then
+        return 0
+    end
+
+    if matchesKeyword(fname(class)) then
+        classes[#classes + 1] = classPath
+    end
+
+    local found = 0
+    local classFunctions = collect(class, "ForEachFunction")
+    for _, func in ipairs(classFunctions) do
+        local name = fname(func)
+        if matchesKeyword(name) then
+            progress = classPath .. ":" .. name
+            local flags = safe(function() return func:GetFunctionFlags() end)
+            functions[#functions + 1] = string.format("%s:%s %s\n    %s", classPath, name, describeParameters(func), describeFlags(flags))
+            found = found + 1
+        end
+    end
+
+    return found
+end
+
 local function scan()
     local functions = {}
     local classes = {}
-    local objectCount = 0
+    local allClasses = {}
 
-    ForEachUObject(function(object)
-        objectCount = objectCount + 1
-
-        local className = safe(function() return object:GetClass():GetFName():ToString() end)
-        if className ~= "Function" and className ~= "Class" and className ~= "BlueprintGeneratedClass" then
-            return
-        end
-
-        local name = fname(object)
-        if not matchesKeyword(name) then
-            return
-        end
-
-        local full = safe(function() return object:GetFullName() end) or name
-        local path = string.match(full, "^%S+%s+(.+)$") or full
-
-        if className == "Function" then
-            if not isNoisy(path) then
-                local flags = safe(function() return object:GetFunctionFlags() end)
-                table.insert(functions, string.format("%s %s\n    %s", path, describeParameters(object), describeFlags(flags)))
+    -- Native classes ("Class") and Blueprint classes ("BlueprintGeneratedClass").
+    for _, shortName in ipairs({ "Class", "BlueprintGeneratedClass" }) do
+        local found = safe(function() return FindAllOf(shortName) end)
+        if type(found) == "table" then
+            for _, class in ipairs(found) do
+                allClasses[#allClasses + 1] = class
             end
-        elseif not isNoisy(path) then
-            table.insert(classes, path)
         end
-    end)
+    end
+
+    local skipped = 0
+    for _, class in ipairs(allClasses) do
+        local ok = pcall(inspectClass, class, functions, classes)
+        if not ok then
+            skipped = skipped + 1
+        end
+    end
+    local objectCount = #allClasses
+    if skipped > 0 then
+        print(TAG .. string.format("Skipped %d classes that could not be read.\n", skipped))
+    end
 
     table.sort(functions)
     table.sort(classes)
@@ -170,7 +211,7 @@ local function scan()
     local lines = {
         "ScumCommandProbe report",
         "Generated: " .. os.date("!%Y-%m-%d %H:%M:%S UTC"),
-        string.format("Objects scanned: %d, matching functions: %d, matching classes: %d", objectCount, #functions, #classes),
+        string.format("Classes scanned: %d, matching functions: %d, matching classes: %d", objectCount, #functions, #classes),
         "",
         "== Functions (Net/NetServer = callable over the network to the server; Exec = console command) ==",
     }
@@ -192,7 +233,7 @@ local function scan()
         end
     end
 
-    print(TAG .. string.format("Scanned %d objects: %d matching functions, %d matching classes.\n", objectCount, #functions, #classes))
+    print(TAG .. string.format("Scanned %d classes: %d matching functions, %d matching classes.\n", objectCount, #functions, #classes))
     if written then
         print(TAG .. "Full report written to " .. path .. "\n")
     else
@@ -239,7 +280,7 @@ LoopAsync(10000, function()
             print(TAG .. "World loaded, scanning reflection data (read-only)...\n")
             local ok, err = pcall(scan)
             if not ok then
-                print(TAG .. "Scan failed: " .. tostring(err) .. "\n")
+                print(TAG .. "Scan failed while reading " .. tostring(progress) .. ": " .. tostring(err) .. "\n")
             end
         end)
     end

@@ -45,19 +45,47 @@ local function Function(fullPath, flags, params)
     })
 end
 
-local objects = {
-    Function("/Script/ConZ.ConZPlayerController:Server_ProcessAdminCommand", 0x00220CC0, { { "Command", "StrProperty" } }),
-    Function("/Script/ConZ.ConZGameMode:BroadcastServerMessage", 0x04000400, { { "Message", "StrProperty" }, { "Duration", "FloatProperty" } }),
-    Function("/Script/Engine.PlayerController:ServerExec", 0x00220CC0, { { "Msg", "StrProperty" } }),
-    Function("/Script/Engine.Actor:ReceiveTick", 0x08020800),               -- no keyword
-    Function("/Script/Engine.Pawn:GetController", 0x54020401),              -- no keyword
-    Function("/Script/UMG.Widget:ExecuteSomething", 0x04000400),            -- noisy module
-    Function("/Script/Engine.SkeletalMeshComponent:ExecCommand", 0x400),    -- engine class not of interest
-    Object("Class", "/Script/ConZ.AdminCommandManager"),
-    Object("Class", "/Script/ConZ.Weapon"),                                 -- no keyword
-    Object("Package", "/Script/ConZ"),                                      -- not a class/function
-    -- A broken object: every call errors. The probe must survive it.
+local function Class(className, fullPath, functions)
+    return Object(className, fullPath, {
+        ForEachFunction = function(_, callback)
+            for _, f in ipairs(functions or {}) do
+                if callback(f) then break end
+            end
+        end,
+    })
+end
+
+local nativeClasses = {
+    Class("Class", "/Script/ConZ.ConZPlayerController", {
+        Function("/Script/ConZ.ConZPlayerController:Server_ProcessAdminCommand", 0x00220CC0, { { "Command", "StrProperty" } }),
+        Function("/Script/ConZ.ConZPlayerController:GetInventory", 0x04020401),   -- no keyword
+    }),
+    Class("Class", "/Script/ConZ.ConZGameMode", {
+        Function("/Script/ConZ.ConZGameMode:BroadcastServerMessage", 0x04000400, { { "Message", "StrProperty" }, { "Duration", "FloatProperty" } }),
+    }),
+    Class("Class", "/Script/Engine.PlayerController", {
+        Function("/Script/Engine.PlayerController:ServerExec", 0x00220CC0, { { "Msg", "StrProperty" } }),
+    }),
+    Class("Class", "/Script/UMG.Widget", {                                         -- noisy module
+        Function("/Script/UMG.Widget:ExecuteSomething", 0x04000400),
+    }),
+    Class("Class", "/Script/Engine.SkeletalMeshComponent", {                       -- engine class not of interest
+        Function("/Script/Engine.SkeletalMeshComponent:ExecCommand", 0x400),
+    }),
+    Class("Class", "/Script/ConZ.AdminCommandManager", {}),
+    Class("Class", "/Script/ConZ.Weapon", {}),                                     -- no keyword
+    -- A class whose function list throws mid-iteration: must be skipped, not fatal.
+    Object("Class", "/Script/ConZ.BrokenChatThing", {
+        ForEachFunction = function() error("access violation") end,
+    }),
+    -- A completely unreadable object.
     setmetatable({}, { __index = function() error("access violation") end }),
+}
+
+local blueprintClasses = {
+    Class("BlueprintGeneratedClass", "/Game/ConZ/BP_AdminTools.BP_AdminTools_C", {
+        Function("/Game/ConZ/BP_AdminTools.BP_AdminTools_C:KickPlayer", 0x00020400, { { "PlayerId", "StrProperty" } }),
+    }),
 }
 
 -- ------------------------------------------------------------------ fake UE4SS globals
@@ -68,8 +96,11 @@ function print(text)
     table.insert(log, text)
     if string.find(text, "scanning reflection data", 1, true) then scannedAtTick = loopTicks end
 end
-function ForEachUObject(callback)
-    for index, object in ipairs(objects) do callback(object, 0, index) end
+function ForEachUObject() error("the probe must not walk every object") end
+function FindAllOf(name)
+    if name == "Class" then return nativeClasses end
+    if name == "BlueprintGeneratedClass" then return blueprintClasses end
+    return nil
 end
 local gameModeAvailableAfter = 2
 local findCalls = 0
@@ -113,10 +144,13 @@ check("noisy module skipped", string.find(report, "/Script/UMG", 1, true) == nil
 check("uninteresting engine class skipped", string.find(report, "SkeletalMeshComponent", 1, true) == nil)
 check("matching class listed", string.find(report, "/Script/ConZ.AdminCommandManager", 1, true) ~= nil)
 check("non-matching class skipped", string.find(report, "ConZ.Weapon", 1, true) == nil)
-check("counts", string.find(report, "Objects scanned: 11, matching functions: 3, matching classes: 1", 1, true) ~= nil)
+check("blueprint function listed", string.find(report, "/Game/ConZ/BP_AdminTools.BP_AdminTools_C:KickPlayer (PlayerId: StrProperty)", 1, true) ~= nil)
+check("broken class still listed by name, others unaffected", string.find(report, "/Script/ConZ.BrokenChatThing", 1, true) ~= nil)
+check("counts", string.find(report, "Classes scanned: 10, matching functions: 4, matching classes: 3", 1, true) ~= nil)
 
 local logText = table.concat(log)
-check("summary logged", string.find(logText, "3 matching functions, 1 matching classes", 1, true) ~= nil)
+check("summary logged", string.find(logText, "4 matching functions, 3 matching classes", 1, true) ~= nil)
+check("class names are not false matches (playeRCONtroller)", string.find(report, "== Classes ==\n/Game/ConZ/BP_AdminTools.BP_AdminTools_C\n/Script/ConZ.AdminCommandManager\n/Script/ConZ.BrokenChatThing\n", 1, true) ~= nil)
 check("report path logged", string.find(logText, "probe-output.txt", 1, true) ~= nil)
 
 -- Second scenario: the game mode never appears, so the probe scans after 2 minutes anyway.
