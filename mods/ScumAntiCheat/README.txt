@@ -5,7 +5,7 @@ injected code), which no server mod can see. This catches what cheats leave behi
 
 Every second, for each player:
   - speed        faster than config.maxFootSpeed on foot / config.maxVehicleSpeed in a vehicle
-  - teleport     a jump of config.teleportDistance metres or more between two checks
+  - teleport     a jump config.teleportDistance metres further than the speed limit allows between two checks
   - flying       in flying movement mode for config.flyingSeconds (fly hack)
   - hovering     in the air without coming down for config.hoverSeconds (hover / airwalk)
   - map bounds   outside the island, or below config.mapBounds.minZ (noclip, under-map)

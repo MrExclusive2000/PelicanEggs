@@ -19,7 +19,7 @@ return {
     -- Turn individual checks on or off.
     checks = {
         speed = true,             -- faster than maxFootSpeed / maxVehicleSpeed
-        teleport = true,          -- jumping teleportDistance or more between two checks
+        teleport = true,          -- jumping teleportDistance further than the speed limit allows between two checks
         flying = true,            -- in flying movement mode for flyingSeconds (fly hack)
         hovering = true,          -- in the air without falling for hoverSeconds (hover / airwalk)
         mapBounds = true,         -- outside the map or below mapBounds.minZ (noclip, under-map)

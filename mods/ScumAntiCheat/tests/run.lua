@@ -259,6 +259,19 @@ rider.pawn.x = 1000
 step()
 check("teleport on foot after settling still flagged", has(acLog(), "Rider: teleported 5015 m"))
 
+-- A pilot possesses the plane: high up and fast is fine, and so is the ground covered while the
+-- server stalls for a few seconds. A jump no plane could make still counts.
+local pilot = Player("Pilot", Pawn("BPC_Airplane_C", 0, 0, 1500))
+players = { pilot }
+tick()
+for _ = 1, 3 do pilot.pawn.x = pilot.pawn.x + 80 step() end
+pilot.pawn.x = pilot.pawn.x + 320
+step(4)
+check("plane flying fast and high not flagged", not has(acLog(), "Pilot"))
+pilot.pawn.x = pilot.pawn.x + 900
+step()
+check("jump no plane could make flagged", has(acLog(), "Pilot: teleported 900 m"))
+
 -- Admin rights without being in AdminUsers.ini.
 local rogue = Player("Rogue", Pawn("BP_Prisoner_C", 0, 0, 0))
 rogue.admin = true

@@ -816,7 +816,10 @@ local function checkMovement(player, controller, pawn, position, previous, elaps
         end
     end
 
-    if config.checks.teleport and distance >= config.teleportDistance then
+    -- A teleport is a jump further than the fastest legal movement could cover since the last
+    -- check (a plane covers a lot of ground when the server stalls for a few seconds).
+    local fastest = vehicle and config.maxVehicleSpeed or config.maxFootSpeed
+    if config.checks.teleport and distance >= config.teleportDistance + fastest * elapsed then
         strike(player, controller, string.format("teleported %.0f m in %.1f s %s", distance, elapsed, where), time)
         return
     end
