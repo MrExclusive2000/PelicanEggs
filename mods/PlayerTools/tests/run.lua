@@ -27,12 +27,14 @@ local stepCount = 0   -- loop ticks so far; a reply sent in parts shares one
 local private = {}   -- messages to one player: { to = name, text = ... }
 local hud = {}       -- announcements
 local kicks, adminCommands = {}, {}
+local notices = {}   -- on-screen notices to one player: { to = name, text = ... }
 
 local function Pawn(owner, x, y, z)
     local pawn = object({ owner = owner, x = x or 0, y = y or 0, z = z or 0 })
     function pawn:GetClass() return { GetFName = function() return { ToString = function() return "BP_Prisoner_C" end } end } end
     function pawn:K2_GetActorLocation() return { X = self.x * 100, Y = self.y * 100, Z = self.z * 100 } end
     function pawn:SendMessageToClient(message) private[#private + 1] = { to = self.owner, text = message, step = stepCount } end
+    function pawn:GetSquad() return self.squad end
     return pawn
 end
 
@@ -43,6 +45,7 @@ local function Player(name, admin)
     function controller:K2_GetPawn() return self.pawn end
     function controller:IsUserAdmin() return self.admin end
     function controller:GetControlRotation() return { Yaw = self.yaw, Pitch = 0 } end
+    function controller:SendHUDMessageToClient(message, sound) assert(sound == nil) notices[#notices + 1] = { to = self.name, text = message } end
     local channel = object({ owner = controller })
     function channel:GetOwner() return self.owner end
     function channel:Chat_Server_ProcessAdminCommand(command) adminCommands[#adminCommands + 1] = { by = controller.name, command = command } end
@@ -451,6 +454,30 @@ check("streak end announced", anyHud("Eve ended Dave's 3 kill streak!"))
 check("bounty collected", anyHud("Eve collected the 500 bounty on Dave!"))
 step()
 check("bounty paid to the killer", ran("ChangeCurrencyBalance Normal 500 76561198000000011") ~= nil and lastPrivate("Eve") == "Bounty paid: 500 added to your account.")
+
+-- Squadmates killing each other: no streak and no bounty (bounty farming with friends).
+local squad = object({})
+dave.pawn.squad, eve.pawn.squad = squad, squad
+step(31)   -- squads are looked up every 30 s
+hud = {}
+kill("76561198000000010", "Dave", "76561198000000011", "Eve")
+check("squad kill logged and not counted", has(read(dir .. "/playertools.log"), "Squad kill: Dave killed squadmate Eve; not counted for streaks or bounties."))
+kill("76561198000000010", "Dave", "76561198000000024", "V4")
+check("squad kill did not start a streak", not anyHud("Dave is on a 2 kill streak!"))
+dave.pawn.squad, eve.pawn.squad = nil, nil
+step(31)
+
+-- A player without a character (driving or dead) gets replies as an on-screen notice.
+local eveCharacter = eve.pawn
+local bike = object({})
+function bike:GetClass() return { GetFName = function() return { ToString = function() return "BPC_Dirtbike_C" end } end } end
+function bike:K2_GetActorLocation() return { X = 0, Y = 0, Z = 0 } end
+eve.pawn = bike
+notices = {}
+chat("76561198000000011", "Eve", "!info")
+step()
+check("reply reaches a driving player as a notice", notices[1] and notices[1].to == "Eve" and has(notices[1].text, "Have fun"))
+eve.pawn = eveCharacter
 
 -- Player bounties.
 chat("76561198000000010", "Dave", "!bounty Eve 5000")

@@ -25,6 +25,7 @@ use Filament\Schemas\Schema;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\IniDocument;
+use MrExclusive\ScumManager\Support\SettingChoices;
 use MrExclusive\ScumManager\Support\SettingLabel;
 use MrExclusive\ScumManager\Support\SettingType;
 use MrExclusive\ScumManager\Support\Brand;
@@ -175,15 +176,9 @@ class ScumSettingsPage extends ServerFormPage
         ]);
     }
 
-    /** @param  array{section: string, key: string, type: string, value: string, state: mixed, managed: ?string}  $setting */
-    private function makeField(string $id, array $setting): Component
+    private function plainField(SettingType $type, string $name, bool $isPassword): Component
     {
-        $type = SettingType::from($setting['type']);
-        $name = "fields.$id";
-        $label = SettingLabel::fromKey($setting['key']);
-        $isPassword = str_contains(strtolower($setting['key']), 'password');
-
-        $field = match ($type) {
+        return match ($type) {
             SettingType::Toggle => Toggle::make($name)->inline(false),
             SettingType::Integer => TextInput::make($name)->integer(),
             SettingType::Decimal => TextInput::make($name)->numeric(),
@@ -192,6 +187,25 @@ class ScumSettingsPage extends ServerFormPage
             SettingType::Text => $isPassword
                 ? TextInput::make($name)->password()->revealable()
                 : TextInput::make($name),
+        };
+    }
+
+    /** @param  array{section: string, key: string, type: string, value: string, state: mixed, managed: ?string}  $setting */
+    private function makeField(string $id, array $setting): Component
+    {
+        $type = SettingType::from($setting['type']);
+        $name = "fields.$id";
+        $label = SettingLabel::fromKey($setting['key']);
+        $isPassword = str_contains(strtolower($setting['key']), 'password');
+
+        $choices = SettingChoices::for($setting['key']);
+        if ($choices !== null && !array_key_exists(trim($setting['value']), $choices)) {
+            $choices = null; // a value SCUM added later: keep the plain number box
+        }
+
+        $field = match (true) {
+            $choices !== null => Select::make($name)->options($choices)->selectablePlaceholder(false),
+            default => $this->plainField($type, $name, $isPassword),
         };
 
         $field

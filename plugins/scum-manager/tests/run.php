@@ -512,5 +512,10 @@ check('online: player actions build commands', [
     AdminCommands::build('teleportplayer', ['teleportplayer__name' => 'Alice', 'teleportplayer__x' => '1', 'teleportplayer__y' => '2', 'teleportplayer__z' => '3']),
 ], ['GiveItem Alice Water_05l 2', 'ChangeCurrencyBalance Normal -500 76561198000000001', 'TeleportPlayer Alice 1 2 3']);
 
+// ---------------------------------------------------------------- setting choices
+use MrExclusive\ScumManager\Support\SettingChoices;
+check('choices: raid protection labelled from SCUM\'s enum', array_keys(SettingChoices::for('scum.RaidProtectionType')), [0, 1, 2, 3]);
+check('choices: other keys stay plain', SettingChoices::for('scum.MaxPlayers'), null);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

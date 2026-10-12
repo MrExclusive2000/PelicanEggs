@@ -67,6 +67,10 @@ Good to know:
    water, tuna, beans, 2 apples, 3 bandages, a knife and a small backpack. Items need "Give
    items" on, and an item type is only given once SCUM has loaded it on the server (the log
    names any that were skipped: spawn one with SpawnItem as an admin).
+ - Kills between squadmates still count in stats but not for kill streaks or bounties
+   (stops bounty farming with friends). Squads are checked every 30 seconds.
+ - Replies to a player who is driving or dead arrive as an on-screen notice instead of a
+   chat line.
  - online.tsv lists who is online, where and for how long, rewritten every 15 seconds. The
    panel's ExclsvSCUM Overview page shows it.
  - players.tsv is copied once a day to players.backup-<date>.tsv; the last 7 are kept. To

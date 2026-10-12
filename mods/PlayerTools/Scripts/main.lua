@@ -601,12 +601,22 @@ local function chatSafe(text)
     return (string.gsub(string.gsub(tostring(text), "<", "["), ">", "]"))
 end
 
+-- Players who are driving or dead have no character to receive chat lines; SCUM's own
+-- on-screen notice (ConZPlayerController.SendHUDMessageToClient, sent to that player only)
+-- reaches them instead.
+local function notice(session, text)
+    local ok, err = pcall(function() session.controller:SendHUDMessageToClient(text, nil) end)
+    if not ok then output("Could not message " .. tostring(session.name) .. ": " .. tostring(err)) end
+    return ok
+end
+
 local function tell(session, lines)
     if type(lines) == "string" then lines = { lines } end
     local pawn = characterOf(session.controller)
     if pawn == nil then
-        output("Could not message " .. tostring(session.name) .. ": their character was not found.")
-        return false
+        local text = {}
+        for _, line in ipairs(lines) do text[#text + 1] = chatSafe(line) end
+        return notice(session, table.concat(text, "\n"))
     end
     -- Whole lines per message, at most MESSAGE_MAX characters each (a longer line goes alone).
     local parts, current = {}, nil
@@ -700,6 +710,30 @@ local function weaponName(weapon)
 end
 
 local recentVictims = {}   -- "killer>victim" -> time, to stop streak and bounty farming
+
+-- Which squad each player is in (steamId -> squad object address, "" for none), refreshed
+-- every 30 s while their character exists and kept after death, so a kill between squadmates
+-- can be told apart. Prisoner.GetSquad only reads; the squad object is not kept.
+local squadOf = {}
+local SQUAD_EVERY = 30
+local lastSquadCheck = 0
+
+local function squadTick(time)
+    if time - lastSquadCheck < SQUAD_EVERY then return end
+    lastSquadCheck = time
+    for _, session in pairs(sessions) do
+        local pawn = session.steamId and characterOf(session.controller)
+        if pawn then
+            local squad = safe(function() return pawn:GetSquad() end)
+            squadOf[session.steamId] = isValid(squad) and (address(squad) or "") or ""
+        end
+    end
+end
+
+local function sameSquad(killerId, victimId)
+    local a, b = killerId and squadOf[killerId], victimId and squadOf[victimId]
+    return a ~= nil and a ~= "" and a == b
+end
 local events = {}          -- filled in further down: onKill(kill, time)
 
 local function handleKill(kill, time)
@@ -730,11 +764,16 @@ local function handleKill(kill, time)
     if not tracked then return end
     recordsDirty = true
 
-    -- Killing the same player again soon after does not count towards streaks or bounties.
+    -- Killing the same player again soon after, or a squadmate, does not count towards
+    -- streaks or bounties (the server rules forbid bounty farming with friends).
     local key = kill.killerId .. ">" .. tostring(kill.victimId)
     local window = (tonumber(streaks.ignoreSameVictimMinutes) or 0) * 60
     local farmed = recentVictims[key] ~= nil and time - recentVictims[key] < window
     recentVictims[key] = time
+    if sameSquad(kill.killerId, kill.victimId) then
+        farmed = true
+        output(string.format("Squad kill: %s killed squadmate %s; not counted for streaks or bounties.", killer.name, victim and victim.name or "?"))
+    end
 
     if victim then
         local ended = victim.streak or 0
@@ -2105,6 +2144,9 @@ local function tick()
     for key in pairs(sessions) do
         if not seen[key] then sessions[key] = nil end
     end
+
+    local squads, squadError = pcall(squadTick, time)
+    if not squads then output("Checking squads failed: " .. tostring(squadError)) end
 
     local wrote, writeError = pcall(writeOnline, time)
     if not wrote then output("Writing online.tsv failed: " .. tostring(writeError)) end
