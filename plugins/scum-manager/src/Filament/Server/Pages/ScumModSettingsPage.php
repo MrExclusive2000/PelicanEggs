@@ -131,18 +131,24 @@ class ScumModSettingsPage extends ServerFormPage
             }
 
             // Themed sub-tabs; a switched-off section starts collapsed.
-            $groups = ModSettings::groups($mod);
-            $subTabs = [];
-            foreach ($groups as $group => $titles) {
-                $sections = [];
-                foreach ($titles as $title) {
-                    $sections[] = $this->section($mod, $title, $definition['sections'][$title]);
-                }
-                $subTabs[] = Tab::make($group)->schema($sections);
+            // Sections are built first and only wrapped in tabs when there is more than one
+            // group (reading components back out of an unattached Tab fails in Filament).
+            $grouped = [];
+            foreach (ModSettings::groups($mod) as $group => $titles) {
+                $grouped[$group] = array_map(
+                    fn (string $title) => $this->section($mod, $title, $definition['sections'][$title]),
+                    $titles,
+                );
             }
-            $components[] = count($subTabs) === 1
-                ? Grid::make(1)->schema($subTabs[0]->getChildComponents())
-                : Tabs::make($mod . '_groups')->tabs($subTabs)->contained(false);
+            if (count($grouped) === 1) {
+                array_push($components, ...array_values($grouped)[0]);
+            } else {
+                $subTabs = [];
+                foreach ($grouped as $group => $sections) {
+                    $subTabs[] = Tab::make($group)->schema($sections);
+                }
+                $components[] = Tabs::make($mod . '_groups')->tabs($subTabs)->contained(false);
+            }
 
             $tabs[] = Tab::make($definition['label'])->schema($components);
         }
