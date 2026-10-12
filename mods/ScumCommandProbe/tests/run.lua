@@ -73,6 +73,14 @@ local nativeClasses = {
         Function("/Script/Engine.SkeletalMeshComponent:ExecCommand", 0x400),
     }),
     Class("Class", "/Script/ConZ.AdminCommandManager", {}),
+    -- Stored values: admin rights are reported, unrelated ones are not.
+    Object("Class", "/Script/ConZ.ConZPlayerState", {
+        ForEachFunction = function() end,
+        ForEachProperty = function(_, callback)
+            callback(Property("BoolProperty", "/Script/ConZ.ConZPlayerState", "bIsServerAdmin"))
+            callback(Property("FloatProperty", "/Script/ConZ.ConZPlayerState", "Health"))
+        end,
+    }),
     Class("Class", "/Script/ConZ.Weapon", {}),                                     -- no keyword
     -- A class whose function list throws mid-iteration: must be skipped, not fatal.
     Object("Class", "/Script/ConZ.BrokenChatThing", {
@@ -156,13 +164,15 @@ check("non-matching function skipped", string.find(report, "ReceiveTick", 1, tru
 check("noisy module skipped", string.find(report, "/Script/UMG", 1, true) == nil)
 check("uninteresting engine class skipped", string.find(report, "SkeletalMeshComponent", 1, true) == nil)
 check("matching class listed", string.find(report, "/Script/ConZ.AdminCommandManager", 1, true) ~= nil)
+check("admin rights property listed", string.find(report, "/Script/ConZ.ConZPlayerState.bIsServerAdmin: BoolProperty", 1, true) ~= nil)
+check("unrelated property skipped", string.find(report, ".Health:", 1, true) == nil)
 check("non-matching class skipped", string.find(report, "ConZ.Weapon", 1, true) == nil)
 check("blueprint function listed", string.find(report, "/Game/ConZ/BP_AdminTools.BP_AdminTools_C:KickPlayer (PlayerId: StrProperty)", 1, true) ~= nil)
 check("broken class still listed by name, others unaffected", string.find(report, "/Script/ConZ.BrokenChatThing", 1, true) ~= nil)
-check("counts", string.find(report, "Classes scanned: 10, matching functions: 4, matching classes: 3", 1, true) ~= nil)
+check("counts", string.find(report, "Classes scanned: 11, matching functions: 4, matching classes: 3", 1, true) ~= nil)
 
 local logText = table.concat(log)
-check("FindObjects count logged", string.find(logText, "FindObjects returned 10 classes", 1, true) ~= nil)
+check("FindObjects count logged", string.find(logText, "FindObjects returned 11 classes", 1, true) ~= nil)
 check("summary logged", string.find(logText, "4 matching functions, 3 matching classes", 1, true) ~= nil)
 check("class names are not false matches (playeRCONtroller)", string.find(report, "== Classes ==\n/Game/ConZ/BP_AdminTools.BP_AdminTools_C\n/Script/ConZ.AdminCommandManager\n/Script/ConZ.BrokenChatThing\n", 1, true) ~= nil)
 check("report path logged", string.find(logText, "probe-output.txt", 1, true) ~= nil)

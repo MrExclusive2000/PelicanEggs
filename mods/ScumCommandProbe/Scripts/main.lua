@@ -3,7 +3,7 @@
 
     Once the server has loaded its world, it lists every game function whose name looks
     related to admin commands, chat or console input, with its class, network flags and
-    parameters. Nothing in the game is called or changed: it only reads the reflection data
+    parameters, and every stored value (property) whose name looks related to admin rights. Nothing in the game is called or changed: it only reads the reflection data
     Unreal keeps about its own classes.
 
     Output:
@@ -175,7 +175,18 @@ end
 
 local progress = "start"
 
-local function inspectClass(class, functions, classes)
+-- Stored values (properties) worth reporting: how the game decides who may run admin commands.
+local PROPERTY_KEYWORDS = { "admin", "rights", "privilege", "permission", "godmode", "cheat", "whitelist" }
+
+local function matchesPropertyKeyword(name)
+    local lowered = lower(name)
+    for _, word in ipairs(PROPERTY_KEYWORDS) do
+        if string.find(lowered, word, 1, true) then return true end
+    end
+    return false
+end
+
+local function inspectClass(class, functions, classes, properties)
     local full = safe(function() return class:GetFullName() end)
     if full == nil then
         return 0
@@ -208,12 +219,25 @@ local function inspectClass(class, functions, classes)
         end
     end
 
+    -- Properties are only read from the class description: no object's value is touched.
+    if properties then
+        for _, property in ipairs(collect(class, "ForEachProperty")) do
+            local name = fname(property)
+            if matchesPropertyKeyword(name) then
+                local full = safe(function() return property:GetFullName() end) or ""
+                local propertyType = string.match(full, "^(%S+)%s") or "?"
+                properties[#properties + 1] = string.format("%s.%s: %s", classPath, name, propertyType)
+            end
+        end
+    end
+
     return found
 end
 
 local function scan()
     local functions = {}
     local classes = {}
+    local properties = {}
     local allClasses = {}
 
     -- FindObjects searches GUObjectArray on the C++ side. Class "Class" (not exact) covers
@@ -251,7 +275,7 @@ local function scan()
 
     local skipped = 0
     for _, class in ipairs(allClasses) do
-        local ok = pcall(inspectClass, class, functions, classes)
+        local ok = pcall(inspectClass, class, functions, classes, properties)
         if not ok then
             skipped = skipped + 1
         end
@@ -272,6 +296,10 @@ local function scan()
         "== Functions (Net/NetServer = callable over the network to the server; Exec = console command) ==",
     }
     for _, line in ipairs(functions) do table.insert(lines, line) end
+    table.insert(lines, "")
+    table.insert(lines, "== Properties (stored values about admin rights and permissions; read from class descriptions only) ==")
+    table.sort(properties)
+    for _, line in ipairs(properties) do table.insert(lines, line) end
     table.insert(lines, "")
     table.insert(lines, "== Classes ==")
     for _, line in ipairs(classes) do table.insert(lines, line) end
