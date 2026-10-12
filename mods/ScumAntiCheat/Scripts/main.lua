@@ -531,12 +531,12 @@ end
 
 local MOVE_NONE = 0   -- no movement of its own, e.g. a ragdolling body
 
--- SCUM's own flags where this build has them, and otherwise a character with no movement mode.
+-- A character with no movement mode of its own: a ragdolling body (passed out, knocked out).
+-- Only real properties are read here: looking up names an object does not have (SCUM's own
+-- "unconscious" flags were guessed) goes through UE4SS's least-tested path, and every server
+-- crash so far happened inside UE4SS shortly after players used vehicles.
 local function knockedOut(pawn)
     if not isCharacter(pawn) then return false end
-    for _, method in ipairs({ "IsUnconscious", "IsKnockedOut", "IsRagdolling", "IsInRagdoll" }) do
-        if isTrue(pawn, method) then return true end
-    end
     return movementMode(pawn) == MOVE_NONE
 end
 
@@ -837,7 +837,8 @@ local function exempt(player, controller, pawn)
     if config.ignoreAdmins and player.verifiedAdmin then return true end
     local allowed = allowedTeleports[player.name]
     if allowed and os.time() - allowed <= ALLOWED_TELEPORT_SECONDS then return true end
-    return isTrue(controller, "IsTeleportInProgress") or isTrue(pawn, "IsTeleportInProgress")
+    -- Vehicles have no IsTeleportInProgress: only characters are asked.
+    return isTrue(controller, "IsTeleportInProgress") or (isCharacter(pawn) and isTrue(pawn, "IsTeleportInProgress"))
 end
 
 local function checkMovement(player, controller, pawn, position, previous, elapsed, time, vehicle)

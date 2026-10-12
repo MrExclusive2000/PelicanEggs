@@ -289,6 +289,18 @@ flyer.teleporting = false
 for _ = 1, 3 do flyer.pawn.x = flyer.pawn.x + 80 step() end
 check("plane far past the margin flagged", has(acLog(), "Flyer: outside the map"))
 
+-- Vehicles are never asked for functions only characters have (UE4SS name lookups on objects
+-- that lack the name are its least-tested path).
+local driverCar = Pawn("BPC_WolfsWagen_C", 0, -5000, 0)
+local askedCar = false
+driverCar.IsTeleportInProgress = function() askedCar = true return false end
+local driver = Player("Driver", driverCar)
+players = { driver }
+tick()
+driverCar.x = 10
+step()
+check("vehicle not asked IsTeleportInProgress", not askedCar)
+
 -- A glitching car jumps about: reported, but not a strike unless vehicleMovementStrikes is on.
 local glitcher = Player("Glitcher", Pawn("BPC_Rager_C", 0, -3000, 0))
 players = { glitcher }
