@@ -957,7 +957,11 @@ local function check(controller, time, seen)
     end
 
     local position = location(pawn)
-    local pawnKey = address(pawn)
+    -- A respawned body can land at the address the dead one just freed, which looked like the
+    -- same character jumping across the map. The time the body was created tells them apart
+    -- (AActor.CreationTime: a plain property every actor has).
+    local created = safe(function() return pawn.CreationTime end)
+    local pawnKey = tostring(address(pawn)) .. "@" .. tostring(type(created) == "number" and created or "")
     local vehicle = inVehicle(pawn)
     local previous, previousTime = player.position, player.time
     if player.pawn ~= pawnKey or player.vehicle ~= vehicle then

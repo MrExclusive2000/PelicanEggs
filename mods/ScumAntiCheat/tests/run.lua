@@ -289,6 +289,22 @@ flyer.teleporting = false
 for _ = 1, 3 do flyer.pawn.x = flyer.pawn.x + 80 step() end
 check("plane far past the margin flagged", has(acLog(), "Flyer: outside the map"))
 
+-- Dying and respawning: the new body can sit at the very address the dead one had. Its
+-- creation time differs, so it is a new character, not a teleport.
+local reborn = Player("Reborn", Pawn("BP_Prisoner_C", -2000, -2000, 0))
+reborn.pawn.CreationTime = 100
+players = { reborn }
+tick()
+step()
+reborn.pawn.x, reborn.pawn.y, reborn.pawn.CreationTime = 4000, 3000, 900   -- same object/address, new body
+step()
+step()
+check("respawn at the same address not a teleport", not has(acLog(), "Reborn"))
+step(6)
+reborn.pawn.x = 6000
+step()
+check("teleport after respawning still flagged", has(acLog(), "Reborn: teleported"))
+
 -- Vehicles are never asked for functions only characters have (UE4SS name lookups on objects
 -- that lack the name are its least-tested path).
 local driverCar = Pawn("BPC_WolfsWagen_C", 0, -5000, 0)
