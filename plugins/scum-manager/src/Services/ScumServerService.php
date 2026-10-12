@@ -721,13 +721,27 @@ class ScumServerService
     /** The newest player reports from PlayerTools' reports.log, newest first. */
     public function playerReports(Server $server, int $lines = 30): string
     {
+        $path = $this->reportsLogPath($server);
+
+        return $path === null ? '' : $this->newestFirst($this->tailOf($server, $path, $lines));
+    }
+
+    /** Where PlayerTools writes player reports, or null without UE4SS. */
+    public function reportsLogPath(Server $server): ?string
+    {
         $ue4ss = $this->ue4ss($server);
-        if (!$ue4ss['installed']) {
-            return '';
-        }
 
-        $log = ConsoleCommand::tail($this->read($server, $ue4ss['mods'] . '/PlayerTools/reports.log'), $lines);
+        return $ue4ss['installed'] ? $ue4ss['mods'] . '/PlayerTools/reports.log' : null;
+    }
 
+    /** The last lines of a file on the server ('' when it does not exist). */
+    public function tailOf(Server $server, string $path, int $lines): string
+    {
+        return ConsoleCommand::tail($this->read($server, $path), $lines);
+    }
+
+    public function newestFirst(string $log): string
+    {
         return $log === '' ? '' : implode("\n", array_reverse(explode("\n", $log)));
     }
 

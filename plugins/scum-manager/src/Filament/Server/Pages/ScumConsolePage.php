@@ -48,6 +48,16 @@ class ScumConsolePage extends Page
     #[Locked]
     public string $reports = '';
 
+    /** Re-read the output and reports every few seconds while the page is open. */
+    public bool $live = true;
+
+    /** Where the two logs are, found once so live updates only read the files. */
+    #[Locked]
+    public ?string $consoleLog = null;
+
+    #[Locked]
+    public ?string $reportsLog = null;
+
     public static function canAccess(): bool
     {
         /** @var Server $server */
@@ -69,15 +79,41 @@ class ScumConsolePage extends Page
         $service = app(ScumServerService::class);
         $server = $this->getServer();
 
-        $this->modInstalled = $service->consoleModDir($server) !== null;
+        $consoleDir = $service->consoleModDir($server);
+        $this->modInstalled = $consoleDir !== null;
+        $this->consoleLog = $consoleDir === null ? null : "$consoleDir/console.log";
+        $this->reportsLog = $service->reportsLogPath($server);
         $this->output = $this->modInstalled ? $service->consoleOutput($server) : '';
         $this->reports = $service->playerReports($server);
+    }
+
+    /** Called every few seconds by the page while live updates are on. */
+    public function pollOutput(): void
+    {
+        if (!$this->live) {
+            return;
+        }
+
+        $service = app(ScumServerService::class);
+        $server = $this->getServer();
+
+        try {
+            if ($this->consoleLog !== null) {
+                $this->output = $service->tailOf($server, $this->consoleLog, 60);
+            }
+            if ($this->reportsLog !== null) {
+                $this->reports = $service->newestFirst($service->tailOf($server, $this->reportsLog, 30));
+            }
+        } catch (Exception) {
+            // The server's files are briefly out of reach (e.g. restarting): keep what is shown.
+        }
     }
 
     public function content(Schema $schema): Schema
     {
         return $schema->components([
             Section::make('Output')
+                ->extraAttributes(fn () => $this->live && $this->modInstalled ? ['wire:poll.5s' => 'pollOutput'] : [])
                 ->description(fn () => $this->modInstalled
                     ? 'Click "Run a command" and pick what to do. "Works any time" commands need nobody in game. "Needs an admin in game" commands only run while an admin from AdminUsers.ini is online, as if that admin typed them in chat.'
                     : 'Install the PelicanConsole mod on the SCUM Mods page ("Install our mods") and restart the server to use this page.')
@@ -265,6 +301,17 @@ class ScumConsolePage extends Page
                         Notification::make()->title('Could not add the destination')->body($exception->getMessage())->danger()->persistent()->send();
                     }
                     $this->refreshOutput();
+                }),
+            Action::make('live')
+                ->label(fn () => $this->live ? 'Live updates: on' : 'Live updates: off')
+                ->icon(fn () => $this->live ? 'tabler-player-pause' : 'tabler-player-play')
+                ->color(fn () => $this->live ? 'success' : 'gray')
+                ->tooltip('Re-read the output and player reports every 5 seconds while this page is open.')
+                ->action(function () {
+                    $this->live = !$this->live;
+                    if ($this->live) {
+                        $this->refreshOutput();
+                    }
                 }),
             Action::make('refresh')
                 ->label('Refresh')
