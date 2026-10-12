@@ -65,6 +65,13 @@ class ScumOverviewPage extends Page
     #[Locked]
     public int $knownPlayers = 0;
 
+    /** null: the egg has no Discord variable (older egg); otherwise whether a webhook is set. */
+    #[Locked]
+    public ?bool $discord = null;
+
+    #[Locked]
+    public string $discordFeed = '';
+
     /** @var list<string> */
     #[Locked]
     public array $flags = [];
@@ -91,7 +98,10 @@ class ScumOverviewPage extends Page
         /** @var Server $server */
         $server = Filament::getTenant();
 
-        return parent::canAccess()
+        // The trait's canAccess() is replaced by this one, so its check is repeated here: no access
+        // while the server is suspended, installing, restoring a backup or being transferred.
+        return !$server->isInConflictState()
+            && parent::canAccess()
             && user()?->can(SubuserPermission::FileReadContent, $server)
             && app(ScumServerService::class)->isScumServer($server);
     }
@@ -110,6 +120,9 @@ class ScumOverviewPage extends Page
         $ue4ss = $service->ue4ss($server);
         $this->ue4ss = ['installed' => $ue4ss['installed'], 'layout' => $ue4ss['layout']];
         $this->knownPlayers = count($service->knownPlayers($server));
+        $webhook = $service->variable($server, 'DISCORD_WEBHOOK_URL');
+        $this->discord = $webhook === null ? null : trim($webhook) !== '';
+        $this->discordFeed = str_replace(',', ', ', trim((string) $service->variable($server, 'DISCORD_FEED')) ?: 'status,flags,reports');
 
         try {
             $latest = $service->modSource() !== null ? $service->latestModManifest() : null;
@@ -123,7 +136,11 @@ class ScumOverviewPage extends Page
         foreach (array_keys(Brand::MODS) as $mod) {
             $installed = $present->has($mod);
             $build = $installed ? $service->installedBuild($server, $mod) : null;
-            $newest = $latest['mods'][$mod]['build'] ?? ScumServerService::bundledBuilds()[$mod]['build'] ?? null;
+            // With a source set but unreachable there is nothing to compare with: a mod installed from
+            // GitHub earlier can be newer than the bundled copy.
+            $newest = $service->modSource() === null
+                ? (ScumServerService::bundledBuilds()[$mod]['build'] ?? null)
+                : ($latest['mods'][$mod]['build'] ?? null);
             [$label, $color] = Overview::modStatus($installed, (bool) ($present[$mod]['enabled'] ?? false), $build, $newest);
             if ($mod === 'ScumCommandProbe' && !$installed) {
                 continue; // the probe is a tool, not something every server needs
@@ -173,6 +190,13 @@ class ScumOverviewPage extends Page
                             ->color(fn () => $this->ue4ss['installed'] ? null : 'warning'),
                         TextEntry::make('players')->label('Players seen')
                             ->state(fn () => $this->knownPlayers > 0 ? (string) $this->knownPlayers : 'None yet (' . Brand::mod('PlayerTools') . ' records everyone who joins)'),
+                        TextEntry::make('discord')->label('Discord feed')
+                            ->state(fn () => match ($this->discord) {
+                                true => 'On (' . $this->discordFeed . ')',
+                                false => 'Off: paste a channel webhook into "[Exclsv] Discord webhook URL" on the Startup page',
+                                null => 'Re-import the SCUM egg to get the Discord feed',
+                            })
+                            ->color(fn () => $this->discord === true ? 'success' : 'gray'),
                         TextEntry::make('manager')->label(Brand::MANAGER)
                             ->state(fn () => ScumServerService::managerVersion() . ($this->newerManager !== null ? '  →  ' . $this->newerManager . ' available (import the new plugin zip)' : ''))
                             ->color(fn () => $this->newerManager !== null ? 'info' : null),
@@ -269,9 +293,14 @@ class ScumOverviewPage extends Page
                 ->visible(fn () => ScumServerService::isStoppedState($this->serverState))
                 ->authorize(fn () => user()?->can(SubuserPermission::ControlStart, $server))
                 ->action(function (ScumServerService $service) use ($server) {
-                    $service->power($server, 'start');
-                    $this->serverState = ContainerStatus::Starting->value;
-                    Notification::make()->title('Server starting')->success()->send();
+                    try {
+                        $service->power($server, 'start');
+                        $this->serverState = ContainerStatus::Starting->value;
+                        Notification::make()->title('Server starting')->success()->send();
+                    } catch (Exception $exception) {
+                        report($exception);
+                        Notification::make()->title('Could not start')->body($exception->getMessage())->danger()->send();
+                    }
                 }),
             Action::make('mods')
                 ->label('Update mods')

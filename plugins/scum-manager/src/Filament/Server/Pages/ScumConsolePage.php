@@ -70,7 +70,10 @@ class ScumConsolePage extends Page
         /** @var Server $server */
         $server = Filament::getTenant();
 
-        return parent::canAccess()
+        // The trait's canAccess() is replaced by this one, so its check is repeated here: no access
+        // while the server is suspended, installing, restoring a backup or being transferred.
+        return !$server->isInConflictState()
+            && parent::canAccess()
             && user()?->can(SubuserPermission::ControlConsole, $server)
             && user()?->can(SubuserPermission::FileReadContent, $server)
             && app(ScumServerService::class)->isScumServer($server);

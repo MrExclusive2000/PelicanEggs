@@ -22,7 +22,7 @@ docker_images:
   'Wine Latest': 'ghcr.io/pelican-eggs/yolks:wine_latest'
 file_denylist: {  }
 startup_commands:
-  Default: 'cp -f ./SCUM/Binaries/Win64/ue4ss/UE4SS.log ./SCUM/Binaries/Win64/ue4ss/UE4SS.previous.log 2>/dev/null; wine ./SCUM/Binaries/Win64/SCUMServer.exe -log -port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -MaxPlayers={{MAX_PLAYERS}} {{ADDITIONAL_ARGS}} & SCUM_PID=$!; trap ''kill -INT $SCUM_PID'' INT TERM; CMD_DIR=./SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole; tail -q -c0 -F ./SCUM/Saved/Logs/SCUM.log $CMD_DIR/console.log --pid=$SCUM_PID 2>/dev/null & while kill -0 $SCUM_PID 2>/dev/null; do read -r -t 1 CMD; RC=$?; if [ $RC -eq 0 ] && [ -n "$CMD" ]; then if [ -d $CMD_DIR ]; then printf ''%s\n'' "$CMD" >> $CMD_DIR/commands.txt; else echo "Console commands need the ExclsvConsole mod (ExclsvSCUM Manager > ExclsvSCUM Mods)."; fi; elif [ $RC -eq 1 ]; then sleep 1; fi; done; wait $SCUM_PID'
+  Default: 'cp -f ./SCUM/Binaries/Win64/ue4ss/UE4SS.log ./SCUM/Binaries/Win64/ue4ss/UE4SS.previous.log 2>/dev/null; wine ./SCUM/Binaries/Win64/SCUMServer.exe -log -port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -MaxPlayers={{MAX_PLAYERS}} {{ADDITIONAL_ARGS}} & SCUM_PID=$!; trap ''kill -INT $SCUM_PID'' INT TERM; CMD_DIR=./SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole; RELAY_PID=; if [ -n "$DISCORD_WEBHOOK_URL" ] && [ -f $CMD_DIR/discord-relay.sh ]; then bash $CMD_DIR/discord-relay.sh $SCUM_PID & RELAY_PID=$!; fi; tail -q -c0 -F ./SCUM/Saved/Logs/SCUM.log $CMD_DIR/console.log --pid=$SCUM_PID 2>/dev/null & while kill -0 $SCUM_PID 2>/dev/null; do read -r -t 1 CMD; RC=$?; if [ $RC -eq 0 ] && [ -n "$CMD" ]; then if [ -d $CMD_DIR ]; then printf ''%s\n'' "$CMD" >> $CMD_DIR/commands.txt; else echo "Console commands need the ExclsvConsole mod (ExclsvSCUM Manager > ExclsvSCUM Mods)."; fi; elif [ $RC -eq 1 ]; then sleep 1; fi; done; wait $SCUM_PID; SCUM_RC=$?; if [ -n "$RELAY_PID" ]; then for i in 1 2 3 4 5 6 7 8; do kill -0 $RELAY_PID 2>/dev/null || break; sleep 1; done; fi; exit $SCUM_RC'
 config:
   files:
     SCUM/Saved/Config/WindowsServer/ServerSettings.ini:
@@ -261,3 +261,27 @@ variables:
       - required
       - boolean
     sort: 13
+  -
+    name: '[Exclsv] Discord webhook URL'
+    description: 'Optional. A Discord channel webhook (Channel settings > Integrations > Webhooks > Copy URL). When set, the server posts when it starts, comes online and stops, plus anti-cheat flags and player reports. Needs the ExclsvConsole mod. Treat the URL like a password.'
+    env_variable: DISCORD_WEBHOOK_URL
+    default_value: ''
+    user_viewable: true
+    user_editable: true
+    rules:
+      - nullable
+      - string
+      - 'regex:/^https:\/\/(ptb\.)?(canary\.)?discord(app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/'
+    sort: 20
+  -
+    name: '[Exclsv] Discord feed'
+    description: 'What the Discord webhook posts, comma separated: status (starting, online, stopped), flags (anti-cheat strikes, kicks, bans, spectate flags), reports (!report messages).'
+    env_variable: DISCORD_FEED
+    default_value: 'status,flags,reports'
+    user_viewable: true
+    user_editable: true
+    rules:
+      - nullable
+      - string
+      - 'regex:/^[a-z,]*$/'
+    sort: 21

@@ -92,6 +92,16 @@ Change their settings on the **SCUM Mod Settings** page, or in `config.lua` in `
 
 Votes, starter kits, rewards, bounty payouts and teleports run SCUM admin commands (SetTime, ChangeCurrencyBalance, Teleport...) as an online admin, so an admin from `AdminUsers.ini` must be online for them to take effect. Restart warnings only announce: add a Pelican schedule (**Schedules**) with a **Restart** power action at the same times.
 
+## Discord feed
+
+Paste a channel webhook into **[Exclsv] Discord webhook URL** on the Startup page (Discord: channel settings → Integrations → Webhooks → New webhook → Copy webhook URL) and restart. The server then posts:
+
+- **status:** starting, online and stopped
+- **flags:** anti-cheat strikes, kicks, bans and spectate flags
+- **reports:** `!report` messages from players
+
+**[Exclsv] Discord feed** picks which, e.g. `flags,reports`. Messages are batched every few seconds to stay within Discord's limits, and `@everyone` or other mentions in player text never ping anyone. The relay (`discord-relay.sh` in the PelicanConsole mod) runs next to the game, only reads the mods' log files and stops with the server. Treat the webhook URL like a password: anyone who has it can post to the channel.
+
 ## Troubleshooting
 
 - **The server runs but doesn't show in the server browser:**

@@ -17,12 +17,14 @@ Use:
  1. Upload this zip on ExclsvSCUM > Mods. Once it is installed, "Install / update our mods"
     keeps it up to date.
  2. Restart the server. The first report is written about 2-3 minutes after it is online,
-    the census a minute after that.
- 3. For the best report, let people play for 45 minutes: the probe scans again then and
-    picks up vehicles, airdrops and events that only load once they appear.
+    the census (object counts) a few minutes after that.
+ 3. Optional, for vehicles, airdrops and events that only load once they appear: create
+    probe-settings.lua next to this file with   return { lateScanMinutes = 45 }
+    and the probe scans again 45 minutes later. That scan freezes the server for a few
+    seconds, so do it when few people are on.
  4. Download ue4ss/Mods/ScumCommandProbe/probe-output.txt from the File Manager.
  5. Disable or delete the mod afterwards.
 
 Optional: a probe-settings.lua next to this file (an old probe.lua is ignored) narrows the search to one topic, e.g.
   return { title = "Item probe", keywords = { "item", "inventory" }, nativeOnly = true,
-           wholeClasses = { "inventory" }, lateScanMinutes = 0 }
+           wholeClasses = { "inventory" } }

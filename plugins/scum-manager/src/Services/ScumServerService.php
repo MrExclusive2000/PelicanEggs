@@ -537,6 +537,9 @@ class ScumServerService
         return $installed;
     }
 
+    /** Exception code: an update from the source failed after some of the mod's files were written. */
+    private const PARTLY_INSTALLED = 2;
+
     /** Where the latest mod zips and manifest.json are published, or null to use the bundled copies only. */
     public function modSource(): ?string
     {
@@ -554,15 +557,29 @@ class ScumServerService
     {
         $source = $this->modSource() ?? throw new RuntimeException('No mod source is set.');
         $key = 'scum-manager:mod-manifest:' . sha1($source);
-        $fetch = fn () => ModManifest::parse(
-            Http::timeout(15)->connectTimeout(5)->throw()->get(ModManifest::url($source, 'manifest.json'))->body()
-        );
 
-        if ($fresh) {
-            Cache::forget($key);
+        if (!$fresh && is_array($cached = Cache::get($key))) {
+            if (isset($cached['error'])) {
+                // A recent attempt failed: do not make every page load wait on GitHub again.
+                throw new RuntimeException($cached['error']);
+            }
+
+            return $cached;
         }
 
-        return Cache::remember($key, 300, $fetch);
+        try {
+            $manifest = ModManifest::parse(
+                Http::timeout(15)->connectTimeout(5)->throw()->get(ModManifest::url($source, 'manifest.json'))->body()
+            );
+        } catch (Throwable $exception) {
+            Cache::put($key, ['error' => $exception->getMessage()], 120);
+
+            throw $exception;
+        }
+
+        Cache::put($key, $manifest, 300);
+
+        return $manifest;
     }
 
     /** @return array<string, array{file: string, build: string, sha256: string, bytes: int}> builds of the bundled zips */
@@ -588,7 +605,11 @@ class ScumServerService
     public function installedBuild(Server $server, string $mod): ?string
     {
         $this->assertModName($mod);
-        $build = $this->read($server, $this->ue4ss($server)['mods'] . "/$mod/" . ModManifest::BUILD_FILE);
+        try {
+            $build = $this->read($server, $this->ue4ss($server)['mods'] . "/$mod/" . ModManifest::BUILD_FILE);
+        } catch (Throwable) {
+            return null; // files briefly out of reach: shown as unknown
+        }
 
         return $build === null ? null : (trim($build) ?: null);
     }
@@ -642,6 +663,9 @@ class ScumServerService
                 } catch (Throwable $exception) {
                     report($exception);
                     $notes[] = Brand::mod($name) . ': ' . $exception->getMessage();
+                    if ($exception->getCode() === self::PARTLY_INSTALLED) {
+                        continue; // neither kept nor replaced by an older copy: the note asks for a retry
+                    }
                 }
             }
 
@@ -682,6 +706,8 @@ class ScumServerService
         try {
             file_put_contents($zip, $contents);
             $this->installModArchive($server, $zip, $entry['file'], keepSettings: true);
+        } catch (Throwable $exception) {
+            throw new RuntimeException('was only partly updated (' . $exception->getMessage() . '). Press "Install / update our mods" again before restarting.', self::PARTLY_INSTALLED, $exception);
         } finally {
             @unlink($zip);
         }

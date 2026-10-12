@@ -148,9 +148,14 @@ function FindAllOf(name)
     return nil
 end
 local findObjectsWorks = true
-function FindObjects(count, className, objectName, banned, required, exact)
+local flagFilterWorks = true
+local bannedSeen = {}
+-- UE4SS: FindObjects(NumObjectsToFind, ClassName, ObjectShortName, RequiredFlags, BannedFlags, bExactClass)
+function FindObjects(count, className, objectName, required, banned, exact)
     if not findObjectsWorks then return {} end
-    assert(count == 0 and objectName == nil and exact == false)
+    assert(count == 0 and objectName == nil and exact == false and required == 0)
+    bannedSeen[#bannedSeen + 1] = banned
+    if banned ~= 0 and not flagFilterWorks then return {} end
     if className == "Enum" then return enums end
     if className == "ScriptStruct" then return structs end
     if className == "DataTable" then return dataTables end
@@ -237,8 +242,18 @@ local logText = table.concat(log)
 check("FindObjects count logged", string.find(logText, "FindObjects returned 13 classes", 1, true) ~= nil)
 check("summary logged", string.find(logText, "5 matching functions, 4 matching classes", 1, true) ~= nil)
 check("census logged", string.find(logText, "Census done: 3 world objects across 1 classes", 1, true) ~= nil)
-check("no second scan within 100 ticks by default", string.find(logText, "second scan", 1, true) == nil)
 check("report path logged", string.find(logText, "probe-output.txt", 1, true) ~= nil)
+
+check("still-loading and destroyed objects left out", bannedSeen[1] == 0x400 | 0x1000 | 0x8000 | 0x10000)
+check("no second scan by default", string.find(table.concat(log), "second scan", 1, true) == nil)
+
+-- A UE4SS build that does not take the flag filter: searched again without it.
+log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick, flagFilterWorks = {}, 0, 0, 1, nil, false
+dofile(copy)
+local unfilteredReport = assert(io.open(tmp .. "/ScumCommandProbe/probe-output.txt")):read("a")
+check("filter ignored: searched without it", string.find(unfilteredReport, "Classes scanned: 13,", 1, true) ~= nil
+    and string.find(table.concat(log), "ignored the loading/destroyed filter for Class", 1, true) ~= nil)
+flagFilterWorks = true
 
 -- Second scenario: the game mode never appears, so the probe scans after 2 minutes anyway.
 log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick = {}, 0, 0, math.huge, nil

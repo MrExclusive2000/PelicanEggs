@@ -63,7 +63,10 @@ class ScumModsPage extends Page implements HasTable
         /** @var Server $server */
         $server = Filament::getTenant();
 
-        return parent::canAccess()
+        // The trait's canAccess() is replaced by this one, so its check is repeated here: no access
+        // while the server is suspended, installing, restoring a backup or being transferred.
+        return !$server->isInConflictState()
+            && parent::canAccess()
             && user()?->can(SubuserPermission::FileRead, $server)
             && app(ScumServerService::class)->isScumServer($server);
     }
@@ -201,7 +204,11 @@ class ScumModsPage extends Page implements HasTable
         $lines = [];
         foreach ($wanted as $mod) {
             $build = in_array($mod, $installed, true) ? $service->installedBuild($server, $mod) : null;
-            $newest = $latest['mods'][$mod]['build'] ?? ScumServerService::bundledBuilds()[$mod]['build'] ?? null;
+            // With a source set but unreachable there is nothing to compare with: a mod installed from
+            // GitHub earlier can be newer than the bundled copy.
+            $newest = $service->modSource() === null
+                ? (ScumServerService::bundledBuilds()[$mod]['build'] ?? null)
+                : ($latest['mods'][$mod]['build'] ?? null);
             $lines[] = Brand::mod($mod) . ': ' . match (true) {
                 !in_array($mod, $installed, true) => 'will be installed',
                 $newest === null => 'kept as it is',

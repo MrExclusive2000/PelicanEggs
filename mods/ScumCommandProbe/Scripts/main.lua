@@ -18,8 +18,9 @@
       ue4ss/Mods/ScumCommandProbe/probe-output.txt   (full report)
       ue4ss/UE4SS.log                                (summary, lines start with [ExclsvProbe])
 
-    It scans when the world has loaded and again later (things such as vehicles and airdrops
-    load their classes only once they appear). Disable or delete it after you have the report.
+    It scans once the world has loaded (and, if probe-settings.lua asks for it, again later:
+    vehicles and airdrops load their classes only once they appear). Disable or delete it
+    after you have the report.
 ]]
 
 local TAG = "[ExclsvProbe] "
@@ -95,7 +96,7 @@ local FLAGS = {
 local MAX_ENUM_VALUES = 200
 local MAX_STRUCT_FIELDS = 60
 local MAX_CENSUS_CLASSES = 200
-local CENSUS_PER_SECOND = 10
+local CENSUS_PER_SECOND = 2
 
 local function safe(fn, ...)
     local ok, result = pcall(fn, ...)
@@ -107,10 +108,11 @@ end
 --   return { title = "...", keywords = { ... }, nativeOnly = true, wholeClasses = { ... },
 --            lateScanMinutes = 45 }
 -- nativeOnly skips Blueprint (/Game/) classes; wholeClasses lists every function of classes
--- whose name contains one of these words; lateScanMinutes = 0 turns the second scan off.
+-- whose name contains one of these words; lateScanMinutes = 45 scans again 45 minutes later
+-- (off by default: the scan briefly freezes the server, which players would notice).
 local TITLE = "ExclsvProbe report"
 local NATIVE_ONLY = false
-local LATE_SCAN_MINUTES = 45
+local LATE_SCAN_MINUTES = 0
 do
     local source = string.gsub(debug.getinfo(1, "S").source or "", "^@", "")
     local dir = string.match(source, "^(.*)[/\\]Scripts[/\\]main%.lua$")
@@ -339,10 +341,25 @@ local function inspectStruct(struct, report)
     table.insert(report.topics[topic].structs, path .. " " .. describeFields(struct, MAX_STRUCT_FIELDS))
 end
 
+-- Objects that are still loading or already being destroyed can have half-built member lists;
+-- reading those crashes natively (pcall cannot catch it), so FindObjects leaves them out.
+local function unsafeFlags()
+    local flags = type(EObjectFlags) == "table" and EObjectFlags or {}
+    return (flags.RF_NeedLoad or 0x400) | (flags.RF_NeedPostLoad or 0x1000)
+        | (flags.RF_BeginDestroyed or 0x8000) | (flags.RF_FinishDestroyed or 0x10000)
+end
+
 -- Every object of a type (non-exact, so subclasses count too), searched on the C++ side.
 local function findAll(className)
     local noFlags = (type(EObjectFlags) == "table" and EObjectFlags.RF_NoFlags) or 0
-    local found = safe(function() return FindObjects(0, className, nil, noFlags, noFlags, false) end)
+    local found = safe(function() return FindObjects(0, className, nil, noFlags, unsafeFlags(), false) end)
+    if type(found) ~= "table" or next(found) == nil then
+        -- Some UE4SS builds may not take the flag filter; then search without it.
+        found = safe(function() return FindObjects(0, className, nil, noFlags, noFlags, false) end)
+        if type(found) == "table" and next(found) ~= nil then
+            print(TAG .. "FindObjects ignored the loading/destroyed filter for " .. className .. "; searched without it.\n")
+        end
+    end
     local list = {}
     if type(found) == "table" then
         for _, object in pairs(found) do list[#list + 1] = object end
