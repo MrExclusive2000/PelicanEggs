@@ -1,4 +1,4 @@
-# SCUM Manager (Pelican plugin)
+# ExclsvSCUM Manager (Pelican plugin, id scum-manager)
 
 Adds five pages to SCUM servers in the Pelican client area:
 

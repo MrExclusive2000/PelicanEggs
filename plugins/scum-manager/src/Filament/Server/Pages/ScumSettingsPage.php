@@ -27,6 +27,7 @@ use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\IniDocument;
 use MrExclusive\ScumManager\Support\SettingLabel;
 use MrExclusive\ScumManager\Support\SettingType;
+use MrExclusive\ScumManager\Support\Brand;
 
 class ScumSettingsPage extends ServerFormPage
 {
@@ -36,9 +37,9 @@ class ScumSettingsPage extends ServerFormPage
 
     protected static ?int $navigationSort = 31;
 
-    protected static ?string $navigationLabel = 'SCUM Settings';
+    protected static ?string $navigationLabel = Brand::PAGE_SETTINGS;
 
-    protected static ?string $title = 'SCUM Settings';
+    protected static ?string $title = Brand::PAGE_SETTINGS;
 
     /**
      * One entry per setting in the file, keyed by a form-safe id (INI keys contain dots,

@@ -16,6 +16,7 @@ use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Services\ScumServerService;
+use MrExclusive\ScumManager\Support\Brand;
 
 class ScumPlayerListsPage extends ServerFormPage
 {
@@ -25,9 +26,9 @@ class ScumPlayerListsPage extends ServerFormPage
 
     protected static ?int $navigationSort = 32;
 
-    protected static ?string $navigationLabel = 'SCUM Player Lists';
+    protected static ?string $navigationLabel = Brand::PAGE_PLAYERS;
 
-    protected static ?string $title = 'SCUM Player Lists';
+    protected static ?string $title = Brand::PAGE_PLAYERS;
 
     /** File => [label, description, requires SteamID64 at the start of each line] */
     private const LISTS = [

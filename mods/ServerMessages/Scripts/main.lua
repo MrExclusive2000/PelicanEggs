@@ -11,7 +11,7 @@
     Settings: config.lua in this mod's folder (re-read every 30 seconds).
 ]]
 
-local TAG = "[ServerMessages] "
+local TAG = "[ExclsvMessages] "
 local CONTROLLER_CLASSES = { "ConZPlayerController", "BP_ConZPlayerController_C", "PlayerController" }
 local PROCESSOR_PATH = "/Script/SCUM.Default__MiscStatics"
 local SCAN_SECONDS = 5
@@ -44,7 +44,7 @@ end
 
 local DIR = modDir()
 if DIR == nil then
-    print(TAG .. "Could not work out the mod folder; ServerMessages is disabled.\n")
+    print(TAG .. "Could not work out the mod folder; ExclsvMessages is disabled.\n")
     return
 end
 

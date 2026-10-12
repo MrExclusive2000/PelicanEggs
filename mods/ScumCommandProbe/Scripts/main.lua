@@ -13,7 +13,7 @@
     It runs once per server start. Disable or delete it after you have the report.
 ]]
 
-local TAG = "[ScumCommandProbe] "
+local TAG = "[ExclsvProbe] "
 
 -- Case-insensitive name fragments worth reporting.
 local KEYWORDS = {
@@ -65,7 +65,7 @@ end
 --   return { title = "...", keywords = { ... }, nativeOnly = true, wholeClasses = { ... } }
 -- nativeOnly skips Blueprint (/Game/) classes; wholeClasses lists every function of classes
 -- whose name contains one of these words.
-local TITLE = "ScumCommandProbe report"
+local TITLE = "ExclsvProbe report"
 local NATIVE_ONLY = false
 local WHOLE_CLASSES = {}
 do

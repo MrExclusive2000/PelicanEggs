@@ -24,6 +24,7 @@ use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\ItemSelect;
 use MrExclusive\ScumManager\Support\TeleportDestinations;
+use MrExclusive\ScumManager\Support\Brand;
 
 class ScumConsolePage extends Page
 {
@@ -35,9 +36,9 @@ class ScumConsolePage extends Page
 
     protected static ?int $navigationSort = 30;
 
-    protected static ?string $navigationLabel = 'SCUM Admin Console';
+    protected static ?string $navigationLabel = Brand::PAGE_CONSOLE;
 
-    protected static ?string $title = 'SCUM Admin Console';
+    protected static ?string $title = Brand::PAGE_CONSOLE;
 
     #[Locked]
     public bool $modInstalled = false;
@@ -116,10 +117,10 @@ class ScumConsolePage extends Page
                 ->extraAttributes(fn () => $this->live && $this->modInstalled ? ['wire:poll.5s' => 'pollOutput'] : [])
                 ->description(fn () => $this->modInstalled
                     ? 'Click "Run a command" and pick what to do. "Works any time" commands need nobody in game. "Needs an admin in game" commands only run while an admin from AdminUsers.ini is online, as if that admin typed them in chat.'
-                    : 'Install the PelicanConsole mod on the SCUM Mods page ("Install our mods") and restart the server to use this page.')
+                    : 'Install the ' . Brand::mod('PelicanConsole') . ' mod on the ' . Brand::PAGE_MODS . ' page ("Install our mods") and restart the server to use this page.')
                 ->schema([$this->logEntry('console_output', fn () => $this->output, 'No output yet.')]),
             Section::make('Player reports')
-                ->description('Sent by players with !report <name> <what happened> (PlayerTools mod), newest first.')
+                ->description('Sent by players with !report <name> <what happened> (' . Brand::mod('PlayerTools') . ' mod), newest first.')
                 ->collapsible()
                 ->schema([$this->logEntry('player_reports', fn () => $this->reports, 'No reports.')]),
         ]);
@@ -171,7 +172,7 @@ class ScumConsolePage extends Page
                     $type === 'playerName' && $names !== [] => Select::make($name)->options($names)->searchable(),
                     $type === 'select' => Select::make($name)->options($definition[2])->selectablePlaceholder(false),
                     $type === 'int' => TextInput::make($name)->integer()->minValue($definition[2])->maxValue($definition[3]),
-                    $type === 'player' => TextInput::make($name)->placeholder('76561198000000000')->helperText('No players known yet (PlayerTools lists everyone who has joined). Enter a SteamID64.'),
+                    $type === 'player' => TextInput::make($name)->placeholder('76561198000000000')->helperText('No players known yet (' . Brand::mod('PlayerTools') . ' lists everyone who has joined). Enter a SteamID64.'),
                     default => TextInput::make($name)->maxLength(400),
                 };
 
@@ -208,7 +209,7 @@ class ScumConsolePage extends Page
                                 ->title('Queued, but SCUM has not picked it up yet')
                                 ->body($service->isStopped($server)
                                     ? 'The server is stopped. The command is dropped when it next starts.'
-                                    : 'PelicanConsole checks once a second while the server runs. If this keeps happening, check that the mod is enabled and look in ue4ss/UE4SS.log for [PelicanConsole] lines.')
+                                    : Brand::mod('PelicanConsole') . ' checks once a second while the server runs. If this keeps happening, check that the mod is enabled and look in ue4ss/UE4SS.log for [' . Brand::mod('PelicanConsole') . '] lines.')
                                 ->warning()
                                 ->send();
                         }
@@ -228,7 +229,7 @@ class ScumConsolePage extends Page
                 ->authorize(fn () => user()?->can(SubuserPermission::ControlConsole, $this->getServer())
                     && user()?->can(SubuserPermission::FileUpdate, $this->getServer()))
                 ->modalHeading('Add the outposts as teleport destinations')
-                ->modalDescription('Finds the trader outposts on your map (from where the bankers stand) and adds them to PlayerTools, so players can type !tp a0, !tp b4 and so on. Existing destinations with the same names are replaced. The server must be running. Teleport there once yourself to check the spot.')
+                ->modalDescription('Finds the trader outposts on your map (from where the bankers stand) and adds them to ' . Brand::mod('PlayerTools') . ', so players can type !tp a0, !tp b4 and so on. Existing destinations with the same names are replaced. The server must be running. Teleport there once yourself to check the spot.')
                 ->modalSubmitActionLabel('Find and add')
                 ->schema([
                     TextInput::make('price')->label('Price per teleport')->integer()->minValue(0)->default(500)->required(),
@@ -244,7 +245,7 @@ class ScumConsolePage extends Page
 
                         Notification::make()
                             ->title('Added ' . count($outposts) . ' teleport destination(s): ' . implode(', ', array_column($outposts, 'name')))
-                            ->body('Players can now type !tp ' . $outposts[0]['name'] . '. Change names and prices on SCUM Mod Settings > Player tools > Teleports.')
+                            ->body('Players can now type !tp ' . $outposts[0]['name'] . '. Change names and prices on ExclsvSCUM Mod Settings > Player tools > Teleports.')
                             ->success()
                             ->persistent()
                             ->send();

@@ -1,4 +1,4 @@
-PelicanConsole
+ExclsvConsole (mod folder: PelicanConsole)
 
 Runs SCUM admin commands sent from the SCUM Manager Admin Console page or the Pelican
 console.

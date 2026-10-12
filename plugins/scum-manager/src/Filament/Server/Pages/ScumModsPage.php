@@ -25,6 +25,7 @@ use Filament\Tables\Table;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Services\ScumServerService;
+use MrExclusive\ScumManager\Support\Brand;
 
 class ScumModsPage extends Page implements HasTable
 {
@@ -37,9 +38,9 @@ class ScumModsPage extends Page implements HasTable
 
     protected static ?int $navigationSort = 33;
 
-    protected static ?string $navigationLabel = 'SCUM Mods';
+    protected static ?string $navigationLabel = Brand::PAGE_MODS;
 
-    protected static ?string $title = 'SCUM Mods';
+    protected static ?string $title = Brand::PAGE_MODS;
 
     /** @var array{installed: bool, root: string, mods: string, layout: string, proxy: bool}|null */
     #[Locked]
@@ -123,7 +124,8 @@ class ScumModsPage extends Page implements HasTable
                 TextColumn::make('name')
                     ->label('Mod')
                     ->weight('bold')
-                    ->description(fn (array $record) => $record['builtin'] ? 'Ships with UE4SS' : (($record['bundled'] ?? false) ? 'Ships with SCUM Manager' : null)),
+                    ->formatStateUsing(fn (string $state) => Brand::mod($state))
+                    ->description(fn (array $record) => $record['builtin'] ? 'Ships with UE4SS' : (($record['bundled'] ?? false) ? 'Ships with ' . Brand::MANAGER . ' (folder ' . $record['name'] . ')' : null)),
                 TextColumn::make('type')
                     ->badge()
                     ->color('gray'),
@@ -256,7 +258,7 @@ class ScumModsPage extends Page implements HasTable
                 ->visible(fn () => ($this->ue4ss['installed'] ?? false) && ScumServerService::bundledMods() !== [])
                 ->authorize(fn () => user()?->can(SubuserPermission::FileCreate, $this->getServer()))
                 ->requiresConfirmation()
-                ->modalHeading('Install or update the SCUM Manager mods?')
+                ->modalHeading('Install or update the ' . Brand::MANAGER . ' mods?')
                 ->modalDescription(fn () => 'Installs ' . implode(', ', array_keys(ScumServerService::bundledMods())) . ' and enables them. Mods you already have are updated, and their settings (config.lua) are kept. Restart the server to load them.')
                 ->action(function (ScumServerService $service) {
                     try {

@@ -93,7 +93,7 @@ final class AdminCommands
         ],
         'unban' => [
             'label' => 'Unban a player', 'anytime' => false, 'template' => 'Unban {steamId}',
-            'help' => 'You can also remove them on the SCUM Player Lists page while the server is stopped.',
+            'help' => 'You can also remove them on the ExclsvSCUM Players page while the server is stopped.',
             'fields' => ['steamId' => ['player', 'Player']],
         ],
         'custom' => [

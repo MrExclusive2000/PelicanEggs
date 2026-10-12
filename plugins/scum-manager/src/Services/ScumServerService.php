@@ -18,6 +18,7 @@ use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
 use MrExclusive\ScumManager\Support\Ue4ssSettings;
 use RuntimeException;
+use MrExclusive\ScumManager\Support\Brand;
 
 class ScumServerService
 {
@@ -613,7 +614,7 @@ class ScumServerService
     {
         $dir = $this->consoleModDir($server);
         if ($dir === null) {
-            throw new RuntimeException('The PelicanConsole mod is not installed. Upload PelicanConsole.zip on the SCUM Mods page and restart the server.');
+            throw new RuntimeException('The ' . Brand::mod('PelicanConsole') . ' mod is not installed. Install it on the ' . Brand::PAGE_MODS . ' page ("Install our mods") and restart the server.');
         }
 
         $command = ConsoleCommand::normalize($command);
@@ -636,11 +637,11 @@ class ScumServerService
      */
     public function runConsoleCommandAndRead(Server $server, string $command, string $until, int $waitSeconds = 8): string
     {
-        $dir = $this->consoleModDir($server) ?? throw new RuntimeException('The PelicanConsole mod is not installed.');
+        $dir = $this->consoleModDir($server) ?? throw new RuntimeException('The ' . Brand::mod('PelicanConsole') . ' mod is not installed.');
         $before = strlen($this->read($server, "$dir/console.log") ?? '');
 
         if (!$this->sendConsoleCommand($server, $command)) {
-            throw new RuntimeException('SCUM did not pick up the command. Is the server running with PelicanConsole enabled?');
+            throw new RuntimeException('SCUM did not pick up the command. Is the server running with ' . Brand::mod('PelicanConsole') . ' enabled?');
         }
 
         $new = '';
@@ -676,14 +677,14 @@ class ScumServerService
     private function updatePlayerTools(Server $server, \Closure $change): void
     {
         if ($this->installedModsOf($server, ['PlayerTools']) === []) {
-            throw new RuntimeException('The PlayerTools mod is not installed.');
+            throw new RuntimeException('The ' . Brand::mod('PlayerTools') . ' mod is not installed.');
         }
 
         $raw = $this->modConfig($server, 'PlayerTools');
         $config = $raw === null ? [] : LuaTable::parse($raw);
         $this->writeModConfig($server, 'PlayerTools', LuaTable::render(
             $change($config),
-            "PlayerTools settings, written by SCUM Manager (SCUM Mod Settings page).\nYou can edit this file by hand; comments are not kept when the page saves it.",
+            Brand::mod('PlayerTools') . " settings, written by " . Brand::MANAGER . " (" . Brand::PAGE_MOD_SETTINGS . " page).\nYou can edit this file by hand; comments are not kept when the page saves it.",
         ));
     }
 

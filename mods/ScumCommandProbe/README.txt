@@ -1,4 +1,4 @@
-ScumCommandProbe (read-only)
+ExclsvProbe (mod folder: ScumCommandProbe, read-only)
 
 Lists SCUM's game functions on a topic, with their parameters. The topic is set in
 probe.lua: this version looks for item and inventory functions, to find a way to put

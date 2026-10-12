@@ -1,4 +1,4 @@
-ServerMessages
+ExclsvMessages (mod folder: ServerMessages)
 
  - Welcome message: shown privately to each player a few seconds after their character spawns.
  - Rotating announcements: your messages (rules, Discord link, ...) broadcast one at a time,

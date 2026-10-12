@@ -3,7 +3,7 @@
 namespace MrExclusive\ScumManager\Support;
 
 /**
- * The settings of our own mods, as shown on the SCUM Mod Settings page.
+ * The settings of our own mods, as shown on the ExclsvSCUM Mod Settings page.
  *
  * Each field maps a path in the mod's config.lua (e.g. "afk.minutes") to a form field.
  * Form state is flat, keyed by field id ("PlayerTools__afk__minutes"), because Filament
@@ -20,7 +20,7 @@ final class ModSettings
 {
     public const MODS = [
         'PlayerTools' => [
-            'label' => 'Player tools',
+            'label' => Brand::MODS['PlayerTools'],
             'description' => 'Chat commands, kill feed, stats, AFK kicker, voting, new players, rewards, kill streaks, bounties, teleports, info and reports.',
             'sections' => [
                 'Chat commands' => [
@@ -88,7 +88,7 @@ final class ModSettings
                     ],
                 ],
                 'Without an admin online (experimental)' => [
-                    'description' => 'Cash rewards, the starter kit cash and paid teleports normally run as an online admin and wait until one is on. With this on, PlayerTools checks once per server run whether SCUM accepts the commands without an admin (it adds 1 coin to a player and takes it back) and uses that if it works. The result is in the PlayerTools log.',
+                    'description' => 'Cash rewards, the starter kit cash and paid teleports normally run as an online admin and wait until one is on. With this on, ExclsvPlayerTools checks once per server run whether SCUM accepts the commands without an admin (it adds 1 coin to a player and takes it back) and uses that if it works. The result is in the PlayerTools log.',
                     'fields' => [
                         'noAdminFallback' => ['toggle', 'Try without an admin (experimental: reads balances, suspected in a server crash)', false],
                     ],
@@ -217,7 +217,7 @@ final class ModSettings
             ],
         ],
         'ServerMessages' => [
-            'label' => 'Messages',
+            'label' => Brand::MODS['ServerMessages'],
             'description' => 'Welcome message, rotating announcements, join/leave log and restart warnings.',
             'sections' => [
                 'Welcome and joins' => [
@@ -247,7 +247,7 @@ final class ModSettings
             ],
         ],
         'ScumAntiCheat' => [
-            'label' => 'Anti-cheat',
+            'label' => Brand::MODS['ScumAntiCheat'],
             'description' => 'Server-side checks for speed, teleport, fly and hover hacks, map bounds, fake admins and aimbots.',
             'sections' => [
                 'Action' => [

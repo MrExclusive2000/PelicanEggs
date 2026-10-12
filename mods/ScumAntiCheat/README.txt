@@ -1,4 +1,4 @@
-ScumAntiCheat
+ExclsvAntiCheat (mod folder: ScumAntiCheat)
 
 Server-side anti-cheat for SCUM. BattlEye still handles the client side (aimbots, wallhacks,
 injected code), which no server mod can see. This catches what cheats leave behind on the server.

@@ -17,7 +17,7 @@
 -- Typing "ListPlayers" or "#ListPlayers" in the console both become "#ListPlayers".
 local COMMAND_PREFIX = "#"
 
-local TAG = "[PelicanConsole] "
+local TAG = "[ExclsvConsole] "
 local PROCESSOR_PATH = "/Script/SCUM.Default__MiscStatics"
 local WORLD_CONTEXT_CLASSES = { "World", "BP_ConZGameMode_C", "ConZGameMode", "GameStateBase" }
 
@@ -428,7 +428,7 @@ local function writeItemList(quiet)
     file:write(table.concat(lines, "\n") .. "\n")
     file:close()
     if not quiet or new > 0 then
-        output(string.format("Item list: %d items known, %d loaded right now (%d new). %d classes checked (%d by parent class, %d by folder). Refresh SCUM Manager to see them.",
+        output(string.format("Item list: %d items known, %d loaded right now (%d new). %d classes checked (%d by parent class, %d by folder). Refresh ExclsvSCUM Manager to see them.",
             #names, loaded, new, scanned, byParent, byFolder))
     end
     return true

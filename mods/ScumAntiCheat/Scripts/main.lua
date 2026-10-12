@@ -30,7 +30,7 @@
               PelicanConsole mod is installed.
 ]]
 
-local TAG = "[ScumAntiCheat] "
+local TAG = "[ExclsvAntiCheat] "
 local CONTROLLER_CLASSES = { "ConZPlayerController", "BP_ConZPlayerController_C", "PlayerController" }
 local GAME_MODE_CLASSES = { "BP_ConZGameMode_C", "ConZGameMode" }
 local CM_PER_M = 100

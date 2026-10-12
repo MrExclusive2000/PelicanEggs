@@ -115,7 +115,7 @@ check("no join logged before the name is known", string.find(consoleLog(), "join
 alice.name = "Alice"
 advance(5)
 check("join logged to console", string.find(consoleLog(), "Alice joined.", 1, true) ~= nil)
-check("join logged to players.log with date", string.find(read(dir .. "/players.log"), "%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d %[ServerMessages%] Alice joined%.") ~= nil)
+check("join logged to players.log with date", string.find(read(dir .. "/players.log"), "%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d %[ExclsvMessages%] Alice joined%.") ~= nil)
 check("no join announcement by default", #commands == 0 and #hud == 0)
 
 alice.pawn = Pawn("BP_Prisoner_C")

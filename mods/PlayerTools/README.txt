@@ -1,4 +1,4 @@
-PlayerTools
+ExclsvPlayerTools (mod folder: PlayerTools)
 
 Quality-of-life features for SCUM players:
 

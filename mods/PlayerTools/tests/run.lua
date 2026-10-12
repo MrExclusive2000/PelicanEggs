@@ -169,7 +169,7 @@ write(dir .. "/config.lua", [[return {
 dofile(dir .. "/Scripts/main.lua")
 check("loop registered", loop ~= nil)
 check("startup summary", has(read(dir .. "/playertools.log"), "Active: chat commands, kill feed, stats, AFK kick after 3 min, voting, starter kit, kill streaks."))
-check("startup in Pelican console", has(read(mods .. "/PelicanConsole/console.log"), "[PlayerTools] Active"))
+check("startup in Pelican console", has(read(mods .. "/PelicanConsole/console.log"), "[ExclsvPlayerTools] Active"))
 
 step()
 check("old chat lines ignored", #private == 0)

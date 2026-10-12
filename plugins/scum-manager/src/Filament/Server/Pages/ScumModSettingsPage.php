@@ -26,6 +26,7 @@ use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\ItemSelect;
 use MrExclusive\ScumManager\Support\LuaTable;
 use MrExclusive\ScumManager\Support\ModSettings;
+use MrExclusive\ScumManager\Support\Brand;
 
 class ScumModSettingsPage extends ServerFormPage
 {
@@ -35,9 +36,9 @@ class ScumModSettingsPage extends ServerFormPage
 
     protected static ?int $navigationSort = 34;
 
-    protected static ?string $navigationLabel = 'SCUM Mod Settings';
+    protected static ?string $navigationLabel = Brand::PAGE_MOD_SETTINGS;
 
-    protected static ?string $title = 'SCUM Mod Settings';
+    protected static ?string $title = Brand::PAGE_MOD_SETTINGS;
 
     /** @var array<string, string> mod => sha1 of its config.lua when loaded */
     #[Locked]
@@ -97,8 +98,8 @@ class ScumModSettingsPage extends ServerFormPage
     {
         if ($this->installed === []) {
             return parent::form($schema)->components([
-                Section::make('No SCUM Manager mods installed')
-                    ->description('Install UE4SS and our mods on the SCUM Mods page ("Install our mods"), then come back here.')
+                Section::make('No ' . Brand::MANAGER . ' mods installed')
+                    ->description('Install UE4SS and our mods on the ExclsvSCUM Mods page ("Install our mods"), then come back here.')
                     ->icon('tabler-puzzle'),
             ]);
         }
@@ -176,7 +177,7 @@ class ScumModSettingsPage extends ServerFormPage
 
                 if (sha1($raw ?? '') !== ($this->hashes[$mod] ?? '')) {
                     Notification::make()
-                        ->title("$mod's config.lua changed since you opened this page")
+                        ->title(Brand::mod($mod) . "'s config.lua changed since you opened this page")
                         ->body('Reload the page and make your changes again. Nothing was saved for this mod.')
                         ->warning()
                         ->persistent()
@@ -196,7 +197,7 @@ class ScumModSettingsPage extends ServerFormPage
                     continue;
                 }
 
-                $service->writeModConfig($server, $mod, LuaTable::render($updated, "$mod settings, written by SCUM Manager (SCUM Mod Settings page).\nYou can edit this file by hand; comments are not kept when the page saves it."));
+                $service->writeModConfig($server, $mod, LuaTable::render($updated, Brand::mod($mod) . " settings, written by " . Brand::MANAGER . " (" . Brand::PAGE_MOD_SETTINGS . " page).\nYou can edit this file by hand; comments are not kept when the page saves it."));
                 $saved[] = ModSettings::MODS[$mod]['label'];
             }
 

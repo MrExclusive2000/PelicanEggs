@@ -109,7 +109,7 @@ dofile(copy)
 check("loop registered every second", loopDelay == 1000 and loopCallback ~= nil)
 check("stale commands.txt removed at startup", not exists("commands.txt"))
 check("stale commands.processing removed at startup", not exists("commands.processing"))
-check("ready message in console.log", string.find(consoleLog(), "[PelicanConsole] Ready.", 1, true) ~= nil)
+check("ready message in console.log", string.find(consoleLog(), "[ExclsvConsole] Ready.", 1, true) ~= nil)
 check("ready message printed to UE4SS log", string.find(table.concat(log), "Ready.", 1, true) ~= nil)
 
 -- Nothing queued: nothing runs and the loop keeps going.
@@ -126,7 +126,7 @@ check("world passed as context", calls[1] and calls[1].context == world)
 check("run on the game thread", gameThreadRuns == 3)   -- two commands plus the item list check
 check("queue file consumed", not exists("commands.txt") and not exists("commands.processing"))
 check("no-admin warning", string.find(consoleLog(), "Sent SetTime 12, but no admin is online", 1, true) ~= nil)
-check("log lines timestamped", string.find(consoleLog(), "%d%d:%d%d:%d%d %[PelicanConsole%] Sent SetTime 12") ~= nil)
+check("log lines timestamped", string.find(consoleLog(), "%d%d:%d%d:%d%d %[ExclsvConsole%] Sent SetTime 12") ~= nil)
 
 loopCallback()
 check("commands run once", #calls == 2)

@@ -35,7 +35,7 @@
               reports.log (player reports).
 ]]
 
-local TAG = "[PlayerTools] "
+local TAG = "[ExclsvPlayerTools] "
 local CONTROLLER_CLASSES = { "BP_ConZPlayerController_C", "ConZPlayerController" }
 local GAME_MODE_CLASSES = { "BP_ConZGameMode_C", "ConZGameMode" }
 local CM_PER_M = 100
@@ -118,7 +118,7 @@ end
 
 local DIR = modDir()
 if DIR == nil then
-    print(TAG .. "Could not work out the mod folder; PlayerTools is disabled.\n")
+    print(TAG .. "Could not work out the mod folder; ExclsvPlayerTools is disabled.\n")
     return
 end
 
