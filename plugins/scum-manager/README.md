@@ -20,6 +20,17 @@ The pages only appear on SCUM servers: eggs with the `scum_manager` feature or `
 
 Optional settings are under **Admin → Plugins → SCUM Manager → Settings**: how many backups to keep, which UE4SS build to install, and the maximum mod upload size.
 
+## Overview
+
+The first page in the **ExclsvSCUM** menu shows what needs attention on one screen:
+
+- **Server:** status, UE4SS, how many players have joined, and the panel version (with a notice when a newer one is published).
+- **Our mods:** each mod's state compared with the latest build on GitHub (up to date, update available, disabled, not installed).
+- **Anti-cheat flags:** strikes, kicks, bans and spectate flags, newest first, refreshed every 15 seconds. Start-up and reload messages are left out.
+- **Player reports:** the newest `!report` messages.
+- **Last session:** the end of `UE4SS.previous.log` (the egg keeps the log from before each restart), with crash lines picked out, and SCUM's newest crash report folder.
+- **Shortcuts:** restart or start the server, update mods, open the console or the crash reports.
+
 ## SCUM Settings
 
 - **Built from your own file:** the form is built from whatever keys are in your server's `ServerSettings.ini`, so settings added by monthly SCUM updates appear without updating the plugin.

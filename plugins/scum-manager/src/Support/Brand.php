@@ -14,6 +14,8 @@ final class Brand
     /** Sidebar group that holds all of our pages. */
     public const NAV_GROUP = 'ExclsvSCUM';
 
+    public const PAGE_OVERVIEW = 'ExclsvSCUM Overview';
+
     public const PAGE_CONSOLE = 'ExclsvSCUM Console';
 
     public const PAGE_SETTINGS = 'ExclsvSCUM Settings';

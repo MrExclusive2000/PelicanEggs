@@ -457,5 +457,39 @@ check('manifest: url built next to the manifest', ModManifest::url('https://raw.
 throws('manifest: plain http refused', fn () => ModManifest::url('http://example.com/mods', 'PlayerTools.zip'), 'https://');
 check('manifest: newer manager detected', [ModManifest::isNewer('1.14.0', '1.13.9'), ModManifest::isNewer('1.13.0', '1.13.0'), ModManifest::isNewer(null, '1.0')], [true, false, false]);
 
+// ---------------------------------------------------------------- overview page
+use MrExclusive\ScumManager\Support\Overview;
+$acLog = implode("\n", [
+    '20:00:01 [ExclsvAntiCheat] Active. action=kick, 3 strikes in 600 s. Checks: speed.',
+    '20:01:00 [ExclsvAntiCheat] Packet (7656...): moved 900 m in 1 s [strike 1/3]',
+    '20:01:05 [ExclsvAntiCheat] Possible vehicle glitch, not counted as a strike: Bob: speed',
+    '20:01:06 [ExclsvAntiCheat] Check failed: oops',
+    '20:02:00 [ExclsvAntiCheat] Kicked Packet: 3 strikes.',
+    '20:03:00 [ExclsvAntiCheat] SPECTATE Eve: aim followed Bob behind cover for 6 s at 80 m. Possible wallhack.',
+    '20:04:00 [ExclsvAntiCheat] Settings reloaded (action=kick).',
+]);
+check('overview: flags newest first, noise left out', Overview::antiCheatEvents($acLog), [
+    '20:03:00 [ExclsvAntiCheat] SPECTATE Eve: aim followed Bob behind cover for 6 s at 80 m. Possible wallhack.',
+    '20:02:00 [ExclsvAntiCheat] Kicked Packet: 3 strikes.',
+    '20:01:05 [ExclsvAntiCheat] Possible vehicle glitch, not counted as a strike: Bob: speed',
+    '20:01:00 [ExclsvAntiCheat] Packet (7656...): moved 900 m in 1 s [strike 1/3]',
+]);
+check('overview: flag limit', count(Overview::antiCheatEvents($acLog, 2)), 2);
+check('overview: crash lines found', Overview::crashLines("[Lua] ok\nUnhandled Exception: EXCEPTION_ACCESS_VIOLATION reading address 0x0000000C\n[Lua] fine"), ['Unhandled Exception: EXCEPTION_ACCESS_VIOLATION reading address 0x0000000C']);
+check('overview: clean log has no crash lines', Overview::crashLines("[Lua] [ExclsvPlayerTools] Paid the daily bonus to Bob."), []);
+check('overview: newest crash folder', Overview::newestCrash([
+    ['name' => 'UECC-old', 'directory' => true, 'size' => 0, 'modified' => '2026-10-10T10:00:00+00:00'],
+    ['name' => 'UECC-new', 'directory' => true, 'size' => 0, 'modified' => '2026-10-12T10:00:00+00:00'],
+    ['name' => 'readme.txt', 'directory' => false, 'size' => 1, 'modified' => '2026-10-13T10:00:00+00:00'],
+]), ['name' => 'UECC-new', 'modified' => '2026-10-12T10:00:00+00:00', 'count' => 2]);
+check('overview: no crash folders', Overview::newestCrash([]), null);
+check('overview: mod states', [
+    Overview::modStatus(false, false, null, 'abc123')[0],
+    Overview::modStatus(true, false, 'abc123', 'abc123')[0],
+    Overview::modStatus(true, true, 'abc123', 'abc123')[0],
+    Overview::modStatus(true, true, 'abc123', 'def456')[0],
+    Overview::modStatus(true, true, null, 'def456')[0],
+], ['Not installed', 'Disabled', 'Up to date', 'Update available', 'Installed']);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);
