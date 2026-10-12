@@ -210,7 +210,7 @@ local function readTail(tail)
     local size = file:seek("end") or 0
     if tail.offset == nil or size < tail.offset then
         tail.offset = (tail.offset == nil and tail.fromEnd) and size or 0
-        tail.partial = ""
+        tail.partial, tail.flushed = "", nil
     end
     local lines = {}
     if size > tail.offset then
@@ -218,12 +218,23 @@ local function readTail(tail)
         local data = file:read(math.min(size - tail.offset, MAX_READ)) or ""
         tail.offset = tail.offset + #data
         local text = tail.partial .. ascii(data)
-        local last = 1
+        local last, first = 1, true
         for line, finish in string.gmatch(text, "([^\n]*)\n()") do
-            lines[#lines + 1] = (string.gsub(line, "\r$", ""))
+            line = string.gsub(line, "\r$", "")
+            -- Already handled while it was the unfinished last line (see below).
+            if not (first and line == tail.flushed) then lines[#lines + 1] = line end
+            first, tail.flushed = false, nil
             last = finish
         end
         tail.partial = string.sub(text, last)
+    elseif tail.partial ~= "" then
+        -- SCUM ends a line only when it writes the next one, so a last line that has stopped
+        -- growing is complete: handle it now, once, instead of when the next line arrives.
+        local line = string.gsub(tail.partial, "\r$", "")
+        if line ~= tail.flushed and string.find(line, "%S") then
+            tail.flushed = line
+            lines[#lines + 1] = line
+        end
     end
     file:close()
     return lines
@@ -543,6 +554,8 @@ end
 local function announce(message)
     local gameMode = findFirst(GAME_MODE_CLASSES)
     if gameMode == nil then return false end
+    -- SCUM can read <...> as formatting and show nothing, so placeholders use [...].
+    message = string.gsub(string.gsub(tostring(message), "<", "["), ">", "]")
     return pcall(function() gameMode:SendHUDMessageToAll(message, false) end)
 end
 
@@ -581,6 +594,13 @@ local function sessionForChat(chat)
     return nil
 end
 
+local MESSAGE_MAX = 100   -- characters per private message; longer replies are sent in parts
+
+-- SCUM's chat can read <...> as formatting and show nothing, so placeholders use [...].
+local function chatSafe(text)
+    return (string.gsub(string.gsub(tostring(text), "<", "["), ">", "]"))
+end
+
 local function tell(session, lines)
     if type(lines) == "string" then lines = { lines } end
     local pawn = characterOf(session.controller)
@@ -588,9 +608,25 @@ local function tell(session, lines)
         output("Could not message " .. tostring(session.name) .. ": their character was not found.")
         return false
     end
-    local ok, err = pcall(function() pawn:SendMessageToClient(table.concat(lines, "\n"), nil) end)
-    if not ok then output("Could not message " .. tostring(session.name) .. ": " .. tostring(err)) end
-    return ok
+    -- Whole lines per message, at most MESSAGE_MAX characters each (a longer line goes alone).
+    local parts, current = {}, nil
+    for _, line in ipairs(lines) do
+        line = chatSafe(line)
+        if current ~= nil and #current + 1 + #line > MESSAGE_MAX then
+            parts[#parts + 1] = current
+            current = nil
+        end
+        current = current and (current .. "\n" .. line) or line
+    end
+    if current then parts[#parts + 1] = current end
+    for _, part in ipairs(parts) do
+        local ok, err = pcall(function() pawn:SendMessageToClient(part, nil) end)
+        if not ok then
+            output("Could not message " .. tostring(session.name) .. ": " .. tostring(err))
+            return false
+        end
+    end
+    return true
 end
 
 local function onlineCount()

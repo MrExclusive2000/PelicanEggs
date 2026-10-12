@@ -2,7 +2,7 @@
     "id": "scum-manager",
     "name": "SCUM Manager",
     "author": "MrExclusive2000",
-    "version": "1.9.2",
+    "version": "1.9.3",
     "description": "Edit SCUM server settings and player lists, run admin commands, and install and configure UE4SS mods (anti-cheat, player tools, messages) from the server panel.",
     "category": "plugin",
     "url": "https://github.com/MrExclusive2000/PelicanEggs/tree/main/plugins/scum-manager",

@@ -23,6 +23,7 @@ local function object(fields)
     return o
 end
 
+local stepCount = 0   -- loop ticks so far; a reply sent in parts shares one
 local private = {}   -- messages to one player: { to = name, text = ... }
 local hud = {}       -- announcements
 local kicks, adminCommands = {}, {}
@@ -31,7 +32,7 @@ local function Pawn(owner, x, y, z)
     local pawn = object({ owner = owner, x = x or 0, y = y or 0, z = z or 0 })
     function pawn:GetClass() return { GetFName = function() return { ToString = function() return "BP_Prisoner_C" end } end } end
     function pawn:K2_GetActorLocation() return { X = self.x * 100, Y = self.y * 100, Z = self.z * 100 } end
-    function pawn:SendMessageToClient(message) private[#private + 1] = { to = self.owner, text = message } end
+    function pawn:SendMessageToClient(message) private[#private + 1] = { to = self.owner, text = message, step = stepCount } end
     return pawn
 end
 
@@ -108,6 +109,7 @@ local function has(text, needle) return string.find(text, needle, 1, true) ~= ni
 local function step(seconds)
     for _ = 1, seconds or 1 do
         clock = clock + 1
+        stepCount = stepCount + 1
         loop()
     end
 end
@@ -117,9 +119,21 @@ end
 local function chat(id, name, text)
     write(gameLogDir .. "/" .. gameLogFiles.chat_, utf16("2026.10.11-13.00.00: '" .. id .. ":" .. name .. "(2)' 'Global: " .. text .. "'\n"), "a")
 end
+-- The last reply to a player: long replies arrive as several messages in the same second.
 local function lastPrivate(name)
     for index = #private, 1, -1 do
-        if private[index].to == name then return private[index].text end
+        local entry = private[index]
+        if entry.to == name then
+            local parts = { entry.text }
+            for earlier = index - 1, 1, -1 do
+                local previous = private[earlier]
+                if previous.to == name then
+                    if previous.step ~= entry.step or previous.step == nil then break end
+                    table.insert(parts, 1, previous.text)
+                end
+            end
+            return table.concat(parts, "\n")
+        end
     end
     return ""
 end
@@ -207,10 +221,29 @@ step()
 check("online list", lastPrivate("Alice") == "2 online: Alice, Bob")
 chat("76561198000000001", "Alice", "!HELP")
 step()
-check("help lists enabled commands", has(lastPrivate("Alice"), "!stats [name], !top") and has(lastPrivate("Alice"), "!vote <option>"))
+check("long replies sent in parts of at most 100 characters", (function()
+    for _, entry in ipairs(private) do if #entry.text > 100 then return false end end
+    return true
+end)())
+check("help lists enabled commands", has(lastPrivate("Alice"), "!stats [name], !top") and has(lastPrivate("Alice"), "!vote [option]") and not has(lastPrivate("Alice"), "<"))
+-- SCUM ends a chat line only when it writes the next one: the reply must not wait for that.
+local function chatUnfinished(id, name, text, before)
+    write(gameLogDir .. "/" .. gameLogFiles.chat_, utf16((before or "") .. "2026.10.11-13.00.00: '" .. id .. ":" .. name .. "(2)' 'Global: " .. text .. "'"), "a")
+end
+chatUnfinished("76561198000000001", "Alice", "!discord")
+step(2)
+check("reply without waiting for the next chat line", lastPrivate("Alice") == "Discord: discord.gg/test")
+local repliesBefore = #private
+chatUnfinished("76561198000000002", "Bob", "!online", "\n")
+step(2)
+check("finished line not handled twice", #private == repliesBefore + 1 and lastPrivate("Bob") == "2 online: Alice, Bob")
+write(gameLogDir .. "/" .. gameLogFiles.chat_, utf16("\n"), "a")
+step()
+check("line ending arriving later changes nothing", #private == repliesBefore + 1)
+local privateBeforeChat = #private
 chat("76561198000000001", "Alice", "hello everyone")
 step()
-check("normal chat ignored", lastPrivate("Alice") == lastPrivate("Alice") and #private == 4)
+check("normal chat ignored", #private == privateBeforeChat)
 
 -- ------------------------------------------------------------------ kills, kill feed and stats
 write(gameLogDir .. "/kill_1.log", '2026.10.11-13.01.00: {"Killer":{"ServerLocation":{"X":0,"Y":0,"Z":0},"ProfileName":"Alice","UserId":"76561198000000001"},"Victim":{"ServerLocation":{"X":25000,"Y":0,"Z":0},"ProfileName":"Bob","UserId":"76561198000000002"},"Weapon":"BP_Weapon_AK47_C [Projectile]"}\n'
@@ -311,7 +344,7 @@ private = {}
 chat("76561198000000001", "Alice", "/online")
 step()
 check("kill feed turned off by reload", #hud == 0)
-check("new prefix after reload", lastPrivate("Alice") == "3 online: Alice, Bob, Carol")
+check("new prefix after reload", has(lastPrivate("Alice"), "3 online: Alice, Bob, Carol"))
 
 -- A broken config keeps working with defaults.
 write(dir .. "/config.lua", "return {")
@@ -409,12 +442,12 @@ check("bounty charged to the placer", ran("ChangeCurrencyBalance Normal -200 765
 check("bounty announced", anyHud("Dave put a 200 bounty on Eve. Total: 200."))
 chat("76561198000000010", "Dave", "!bounty")
 step()
-check("bounty list", lastPrivate("Dave") == "Bounties:\nEve - 200\nPlace one: !bounty <name> <amount>")
+check("bounty list", lastPrivate("Dave") == "Bounties:\nEve - 200\nPlace one: !bounty [name] [amount]")
 
 -- Teleports.
 chat("76561198000000010", "Dave", "!tp")
 step()
-check("teleport list skips incomplete places", lastPrivate("Dave") == "Teleports (!tp <name>):\ntrader - 50")
+check("teleport list skips incomplete places", lastPrivate("Dave") == "Teleports (!tp [name]):\ntrader - 50")
 chat("76561198000000010", "Dave", "!tp trader")
 step()
 check("teleport waits", lastPrivate("Dave") == "Teleporting to trader in 5 s. Do not move." and ran("Teleport 76561198000000010 100 200 300") == nil)

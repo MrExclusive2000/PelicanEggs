@@ -233,7 +233,7 @@ local function readTail(tail)
     if tail.offset == nil or size < tail.offset then
         -- First read, or the file was recreated.
         tail.offset = (tail.offset == nil and tail.fromEnd) and size or 0
-        tail.partial = ""
+        tail.partial, tail.flushed = "", nil
     end
     local lines = {}
     if size > tail.offset then
@@ -241,12 +241,23 @@ local function readTail(tail)
         local data = file:read(math.min(size - tail.offset, MAX_READ)) or ""
         tail.offset = tail.offset + #data
         local text = tail.partial .. ascii(data)
-        local last = 1
+        local last, first = 1, true
         for line, finish in string.gmatch(text, "([^\n]*)\n()") do
-            lines[#lines + 1] = (string.gsub(line, "\r$", ""))
+            line = string.gsub(line, "\r$", "")
+            -- Already handled while it was the unfinished last line (see below).
+            if not (first and line == tail.flushed) then lines[#lines + 1] = line end
+            first, tail.flushed = false, nil
             last = finish
         end
         tail.partial = string.sub(text, last)
+    elseif tail.partial ~= "" then
+        -- SCUM ends a line only when it writes the next one, so a last line that has stopped
+        -- growing is complete: handle it now, once, instead of when the next line arrives.
+        local line = string.gsub(tail.partial, "\r$", "")
+        if line ~= tail.flushed and string.find(line, "%S") then
+            tail.flushed = line
+            lines[#lines + 1] = line
+        end
     end
     file:close()
     return lines
