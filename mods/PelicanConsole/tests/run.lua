@@ -120,13 +120,13 @@ check("no commands, no calls", #calls == 0 and gameThreadRuns == 1)   -- the ite
 writeCommands("SetTime 12\n\n   \n##SetWeather 0\r\n")
 loopCallback()
 check("two commands run", #calls == 2)
-check("prefix added", calls[1] and calls[1].command == "#SetTime 12")
-check("repeated prefix collapsed, CR trimmed", calls[2] and calls[2].command == "#SetWeather 0")
+check("sent without the #", calls[1] and calls[1].command == "SetTime 12")
+check("repeated # dropped, CR trimmed", calls[2] and calls[2].command == "SetWeather 0")
 check("world passed as context", calls[1] and calls[1].context == world)
 check("run on the game thread", gameThreadRuns == 3)   -- two commands plus the item list check
 check("queue file consumed", not exists("commands.txt") and not exists("commands.processing"))
-check("no-admin warning", string.find(consoleLog(), "Sent #SetTime 12, but no admin is online", 1, true) ~= nil)
-check("log lines timestamped", string.find(consoleLog(), "%d%d:%d%d:%d%d %[PelicanConsole%] Sent #SetTime 12") ~= nil)
+check("no-admin warning", string.find(consoleLog(), "Sent SetTime 12, but no admin is online", 1, true) ~= nil)
+check("log lines timestamped", string.find(consoleLog(), "%d%d:%d%d:%d%d %[PelicanConsole%] Sent SetTime 12") ~= nil)
 
 loopCallback()
 check("commands run once", #calls == 2)
@@ -173,7 +173,7 @@ bob.channel.owner = object()
 writeCommands("SetTime 7\n")
 loopCallback()
 check("unmatched channel reported", string.find(consoleLog(), "Found admin Bob online but not their command channel", 1, true) ~= nil)
-check("unmatched channel falls back", calls[3] and calls[3].command == "#SetTime 7")
+check("unmatched channel falls back", calls[3] and calls[3].command == "SetTime 7")
 bob.channel.owner = bob
 online = {}
 
@@ -187,14 +187,14 @@ check("new commands still run after leftover processing file", #calls == 4)
 processorFails = true
 writeCommands("SetTime 2\n")
 loopCallback()
-check("failure reported", string.find(consoleLog(), "Failed: #SetTime 2 (", 1, true) ~= nil)
+check("failure reported", string.find(consoleLog(), "Failed: SetTime 2 (", 1, true) ~= nil)
 processorFails = false
 
 -- World not loaded yet.
 worldAvailable = false
 writeCommands("SetTime 3\nAnnounce Hi\n")
 loopCallback()
-check("world missing reported", string.find(consoleLog(), "No admin is online, so SCUM cannot run #SetTime 3", 1, true) ~= nil)
+check("world missing reported", string.find(consoleLog(), "No admin is online, so SCUM cannot run SetTime 3", 1, true) ~= nil)
 check("announce without world reported", string.find(consoleLog(), "game world is not loaded yet", 1, true) ~= nil)
 check("no call without a world", #calls == 4)
 worldAvailable = true

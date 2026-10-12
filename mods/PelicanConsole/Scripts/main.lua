@@ -659,7 +659,9 @@ local function run(command)
     if admin ~= nil then
         output("Found admin " .. admin.name .. " online but not their command channel; trying without.")
     end
-    runWithoutAdmin(command)
+    -- Sent with the "#", SCUM's command helper did nothing for ChangeCurrencyBalance on a live
+    -- server; the admin channel works without it, so send it the same way.
+    runWithoutAdmin((string.gsub(command, "^#+", "")))
 end
 
 -- Take the pending commands. Renaming first means a line appended while we read lands
