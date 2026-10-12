@@ -35,7 +35,7 @@ Aimbot signs (report "SUSPECT" lines only, unless strikeOnKillFlags = true):
                        before (silent aim); reported after config.magicBulletPattern kills
 Wallhack tracking (EXPERIMENTAL, off until checks.wallTracking = true; "SPECTATE" lines only,
 never strikes): once a second, for each player aiming at another player 5-200 m away, the
-game is asked whether anything blocks the view between them. Aim that stays on a hidden
+game is asked (Controller.LineOfSightTo) whether they can see them. Aim that stays on a hidden
 player who is moving for config.wallTrackSeconds in a row is flagged. If the game cannot be
 asked on this server, the check switches itself off and says why.
 

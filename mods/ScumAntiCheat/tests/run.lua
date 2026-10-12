@@ -620,22 +620,18 @@ check("aim sampler never touches a controller from an earlier tick", not touched
 check("no game world is used for timing", not string.find(source, "GetRealTimeSeconds", 1, true))
 
 -- ------------------------------------------------------------------ wallhack tracking (experimental)
-local traceLibrary = object()
-local viewBlockedNow, traces = true, 0
-function traceLibrary:LineTraceSingle(context, from, to, channel, complex, ignore, debug, hit, ignoreSelf)
+local viewBlockedNow, traces, losBroken = true, 0, false
+local function canSee(controller, other, viewPoint, alternate)
     traces = traces + 1
-    assert(context ~= nil and ignoreSelf == true and channel == 0)
-    return viewBlockedNow
-end
-local savedStaticFind = StaticFindObject
-function StaticFindObject(path)
-    if path == "/Script/Engine.Default__KismetSystemLibrary" then return traceLibrary end
-    return savedStaticFind(path)
+    if losBroken then error("bad parameters") end
+    assert(other ~= nil and viewPoint.X == 0 and alternate == false)
+    return not viewBlockedNow
 end
 start([[return { checks = { wallTracking = true } }]])
 check("wall tracking listed when on", has(acLog(), "wallTracking."))
 local watcher = Player("Watcher", Pawn("BP_Prisoner_C", 0, 0, 0))
 local hider = Player("Hider", Pawn("BP_Prisoner_C", 50, 0, 0))
+watcher.LineOfSightTo, hider.LineOfSightTo = canSee, canSee
 login("76561198000000101", "Watcher")
 login("76561198000000102", "Hider")
 players = { watcher, hider }
@@ -670,7 +666,7 @@ for _ = 1, 3 do hider.pawn.x = hider.pawn.x + 2 step() end
 check("no view check without aim on someone", traces == tracesBefore)
 
 -- If the game cannot be asked, the check switches itself off once.
-function traceLibrary:LineTraceSingle() error("bad parameters") end
+losBroken = true
 watcher.yaw, hider.yaw = 0, 180
 start([[return { checks = { wallTracking = true } }]])
 players = { watcher, hider }
@@ -682,7 +678,6 @@ check("broken view check switches itself off once", offs == 1 and has(acLog(), "
 -- Off by default.
 start("return {}")
 check("wall tracking off by default", not has(acLog(), "wallTracking"))
-StaticFindObject = savedStaticFind
 players = {}
 
 -- ------------------------------------------------------------------ scenario 5: broken config

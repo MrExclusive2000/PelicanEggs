@@ -1000,10 +1000,8 @@ end
 -- hidden player who is moving, for wallTrackSeconds in a row, is flagged for an admin to
 -- spectate. Never a strike.
 
-local TRACE_LIBRARY = "/Script/Engine.Default__KismetSystemLibrary"
-local EYE_HEIGHT = 0.6        -- metres above a character's location (its middle) to its eyes
 local CHEST_HEIGHT = 0.3      -- metres above a character's location to aim at
-local TRACE_STOP_SHORT = 0.6  -- metres: end the view check before the target's own body
+local EYE_HEIGHT = 0.6        -- metres above a character's location (its middle) to its eyes
 local WALL_PAIR_COOLDOWN = 300   -- seconds before the same pair is flagged again
 local wallState = {}          -- "watcherId>targetId" -> { streak, last = position, flagged }
 local wallCheckBroken = false
@@ -1014,22 +1012,18 @@ local function aimDirection(yaw, pitch)
     return { x = math.cos(p) * math.cos(y), y = math.cos(p) * math.sin(y), z = math.sin(p) }
 end
 
--- True when something blocks the view from one point to another (metres), false when the view
--- is clear, nil when the game could not be asked.
-local function viewBlocked(watcherPawn, from, to)
-    local library = safe(function() return StaticFindObject(TRACE_LIBRARY) end)
-    if not isValid(library) then return nil, "the game's trace library was not found" end
-    local start = { X = from.x * CM_PER_M, Y = from.y * CM_PER_M, Z = from.z * CM_PER_M }
-    local finish = { X = to.x * CM_PER_M, Y = to.y * CM_PER_M, Z = to.z * CM_PER_M }
-    local colour = { R = 0, G = 0, B = 0, A = 0 }
+-- True when the watcher cannot see the target, false when they can, nil when the game could
+-- not be asked. Uses the controller's own LineOfSightTo (an actor, a zero view point meaning
+-- "where this controller looks from", no extra checks): plain arguments only. An earlier
+-- version called KismetSystemLibrary.LineTraceSingle with array and hit-result arguments,
+-- which is the likely cause of a server crash.
+local function viewBlocked(watcherController, targetPawn)
     local ok, result = pcall(function()
-        -- Visibility channel, simple collision, nothing extra ignored, no debug drawing,
-        -- ignoring the watcher's own character (the world context).
-        return library:LineTraceSingle(watcherPawn, start, finish, 0, false, {}, 0, {}, true, colour, colour, 0)
+        return watcherController:LineOfSightTo(targetPawn, { X = 0, Y = 0, Z = 0 }, false)
     end)
     if not ok then return nil, tostring(result) end
     if type(result) ~= "boolean" then return nil, "unexpected answer from the game: " .. tostring(result) end
-    return result
+    return not result
 end
 
 local function wallCheck(time)
@@ -1068,9 +1062,7 @@ local function wallCheck(time)
                         local along = dx * aim.x + dy * aim.y + dz * aim.z
                         local miss = along > 0 and math.sqrt(math.max(0, distance * distance - along * along)) or math.huge
                         if miss <= config.wallAimMetres then
-                            local scale = (distance - TRACE_STOP_SHORT) / distance
-                            local stop = { x = eye.x + dx * scale, y = eye.y + dy * scale, z = eye.z + dz * scale }
-                            local blocked, why = viewBlocked(watcher.pawn, eye, stop)
+                            local blocked, why = viewBlocked(watcher.controller, target.pawn)
                             if blocked == nil then
                                 wallCheckBroken = true
                                 output("Wall tracking check switched off: the game could not be asked about line of sight (" .. tostring(why) .. ").")

@@ -276,7 +276,7 @@ final class ModSettings
                         'checks.aimSnap' => ['toggle', 'Aim snaps before kills', true],
                         'checks.magicBullet' => ['toggle', 'Magic bullets (kills without aiming at the victim)', true],
                         'checks.adminLog' => ['toggle', 'Admin commands from players not in AdminUsers.ini', true],
-                        'checks.wallTracking' => ['toggle', 'Wallhack tracking (experimental, spectate flags only)', false],
+                        'checks.wallTracking' => ['toggle', 'Wallhack tracking (experimental, spectate flags only; the first version crashed a server, test with a friend first)', false],
                     ],
                 ],
                 'Movement limits' => [
