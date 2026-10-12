@@ -8,6 +8,7 @@ use App\Models\Server;
 use Exception;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -27,6 +28,11 @@ use MrExclusive\ScumManager\Support\ItemSelect;
 use MrExclusive\ScumManager\Support\LuaTable;
 use MrExclusive\ScumManager\Support\ModSettings;
 use MrExclusive\ScumManager\Support\Brand;
+use MrExclusive\ScumManager\Support\SettingsBundle;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ScumModSettingsPage extends ServerFormPage
 {
@@ -225,11 +231,147 @@ class ScumModSettingsPage extends ServerFormPage
                 ->icon('tabler-device-floppy')
                 ->visible(fn () => $this->installed !== [] && user()?->can(SubuserPermission::FileUpdate, $server))
                 ->action(fn () => $this->save()),
+            Action::make('export')
+                ->label('Export settings')
+                ->icon('tabler-download')
+                ->color('gray')
+                ->modalHeading('Export all settings')
+                ->modalDescription('Downloads one file with the settings of every installed Exclsv mod, to keep as a backup or to edit and import again.')
+                ->modalSubmitActionLabel('Download')
+                ->schema([
+                    Toggle::make('includeServer')->label('Include ServerSettings.ini')->default(true),
+                ])
+                ->action(fn (array $data) => $this->exportSettings((bool) ($data['includeServer'] ?? false))),
+            Action::make('import')
+                ->label('Import settings')
+                ->icon('tabler-upload')
+                ->color('gray')
+                ->visible(fn () => user()?->can(SubuserPermission::FileUpdate, $server))
+                ->modalHeading('Import settings')
+                ->modalDescription('Upload a settings file made with "Export settings" (edited or not). Each mod in it replaces that mod\'s settings; the previous config.lua is kept as config.before-import-<date>.lua in the mod\'s folder. Mods not in the file are left alone.')
+                ->modalSubmitActionLabel('Import')
+                ->schema([
+                    FileUpload::make('file')
+                        ->label('Settings file (.json)')
+                        ->required()
+                        ->acceptedFileTypes(['application/json', 'text/plain', 'text/json'])
+                        ->maxSize((int) (SettingsBundle::MAX_BYTES / 1024))
+                        ->previewable(false)
+                        ->storeFiles(false),
+                    Toggle::make('includeServer')
+                        ->label('Also import ServerSettings.ini if the file has it (only while the server is stopped)')
+                        ->default(false),
+                ])
+                ->action(function (array $data) {
+                    /** @var TemporaryUploadedFile $file */
+                    $file = $data['file'];
+                    try {
+                        $this->importSettings((string) file_get_contents($file->getRealPath()), (bool) ($data['includeServer'] ?? false));
+                    } finally {
+                        $file->delete();
+                    }
+                }),
             Action::make('refresh')
                 ->label('Refresh')
                 ->icon('tabler-refresh')
                 ->color('gray')
                 ->action(fn () => $this->loadSettings()),
         ];
+    }
+
+    public function exportSettings(bool $includeServer): ?StreamedResponse
+    {
+        $server = $this->getRecord();
+        $service = app(ScumServerService::class);
+        $configs = [];
+        $skipped = [];
+
+        foreach ($service->installedModsOf($server, array_keys(ModSettings::MODS)) as $mod) {
+            $raw = $service->modConfig($server, $mod);
+            try {
+                $configs[$mod] = $raw === null ? [] : LuaTable::parse($raw);
+            } catch (Exception) {
+                $skipped[] = Brand::mod($mod);
+            }
+        }
+
+        $ini = $includeServer ? $service->read($server, $service->configPath(ScumServerService::SETTINGS_FILE)) : null;
+        if ($configs === [] && $ini === null) {
+            Notification::make()->title('Nothing to export')->body('No Exclsv mods are installed and ServerSettings.ini was not included or not found.')->warning()->send();
+
+            return null;
+        }
+        if ($skipped !== []) {
+            Notification::make()->title('Left out: ' . implode(', ', $skipped))->body('Their config.lua could not be read.')->warning()->send();
+        }
+
+        $json = SettingsBundle::make($configs, $ini, $server->name, now()->toIso8601String());
+        $filename = 'exclsv-settings-' . (Str::slug($server->name) ?: 'server') . '-' . now()->format('Y-m-d') . '.json';
+
+        return response()->streamDownload(fn () => print($json), $filename, ['Content-Type' => 'application/json']);
+    }
+
+    public function importSettings(string $json, bool $includeServer): void
+    {
+        $server = $this->getRecord();
+        abort_unless(user()?->can(SubuserPermission::FileUpdate, $server), 403);
+        $service = app(ScumServerService::class);
+
+        try {
+            $bundle = SettingsBundle::parse($json);
+        } catch (InvalidArgumentException $exception) {
+            Notification::make()->title('Could not import that file')->body($exception->getMessage())->danger()->persistent()->send();
+
+            return;
+        }
+
+        $installed = $service->installedModsOf($server, array_keys(ModSettings::MODS));
+        $done = [];
+        $notes = [];
+
+        try {
+            foreach ($bundle['mods'] as $mod => $config) {
+                if (!in_array($mod, $installed, true)) {
+                    $notes[] = Brand::mod($mod) . ' is not installed, skipped.';
+
+                    continue;
+                }
+                $raw = $service->modConfig($server, $mod);
+                if ($raw !== null) {
+                    $service->backupModConfig($server, $mod, $raw);
+                }
+                $service->writeModConfig($server, $mod, LuaTable::render($config, Brand::mod($mod) . ' settings, imported by ' . Brand::MANAGER . ' on ' . now()->toDateTimeString() . ".\nYou can edit this file by hand; comments are not kept when the page saves it."));
+                $done[] = Brand::mod($mod);
+            }
+
+            if ($bundle['serverSettings'] !== null) {
+                if (!$includeServer) {
+                    $notes[] = 'ServerSettings.ini in the file was not imported (option off).';
+                } elseif (!$service->isStopped($server)) {
+                    $notes[] = 'ServerSettings.ini was not imported: stop the server first (SCUM rewrites it while running), then import again.';
+                } else {
+                    $path = $service->configPath(ScumServerService::SETTINGS_FILE);
+                    $current = $service->read($server, $path);
+                    $backup = $current !== null ? $service->backup($server, ScumServerService::SETTINGS_FILE, $current) : null;
+                    $service->write($server, $path, $bundle['serverSettings']);
+                    $done[] = 'ServerSettings.ini' . ($backup ? " (previous kept as $backup)" : '');
+                }
+            }
+        } catch (Exception $exception) {
+            report($exception);
+            Notification::make()->title('Import stopped part way')->body(($done ? 'Imported: ' . implode(', ', $done) . '. ' : '') . $exception->getMessage())->danger()->persistent()->send();
+            $this->loadSettings();
+
+            return;
+        }
+
+        Notification::make()
+            ->title($done === [] ? 'Nothing was imported' : 'Imported: ' . implode(', ', $done))
+            ->body(implode(' ', array_merge($done === [] ? [] : ['Mods pick up their settings within 30 seconds.'], $notes)) ?: null)
+            ->status($done === [] ? 'warning' : 'success')
+            ->persistent()
+            ->send();
+
+        $this->loadSettings();
     }
 }

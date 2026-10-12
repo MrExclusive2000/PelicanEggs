@@ -396,5 +396,33 @@ foreach ($bundled as $name => $zip) {
     $archive->close();
 }
 
+// ---------------------------------------------------------------- settings export / import
+use MrExclusive\ScumManager\Support\SettingsBundle;
+$shipped = [];
+foreach (['PlayerTools', 'ScumAntiCheat', 'ServerMessages'] as $mod) {
+    $shipped[$mod] = LuaTable::parse(file_get_contents(__DIR__ . "/../../../mods/$mod/config.lua"));
+}
+$ini = "[General]\nScumServer.ServerName=Test\n[World]\nScumServer.MaxAllowedBirds=10\n";
+$exported = SettingsBundle::make($shipped, $ini, 'ExclsvUK', '2026-10-12T22:00:00Z');
+$decoded = json_decode($exported, true);
+check('bundle: format marked', $decoded['format'], 'exclsv-settings');
+check('bundle: mods under their display names', array_keys($decoded['mods']), ['ExclsvPlayerTools', 'ExclsvAntiCheat', 'ExclsvMessages']);
+$imported = SettingsBundle::parse($exported);
+check('bundle: mods come back under their folder names', array_keys($imported['mods']), ['PlayerTools', 'ScumAntiCheat', 'ServerMessages']);
+foreach ($shipped as $mod => $config) {
+    check("bundle: $mod round trip unchanged", LuaTable::parse(LuaTable::render($imported['mods'][$mod])), $config);
+}
+check('bundle: server settings kept as text', $imported['serverSettings'], $ini);
+// Hand-edited: one mod by folder name, no server settings.
+$edited = SettingsBundle::parse('{"format":"exclsv-settings","version":1,"mods":{"PlayerTools":{"teleports":{"toPlayerPrice":250}}}}');
+check('bundle: folder names accepted, missing parts left alone', [array_keys($edited['mods']), $edited['serverSettings']], [['PlayerTools'], null]);
+throws('bundle: other JSON refused', fn () => SettingsBundle::parse('{"hello":1}'), 'not an Exclsv settings export');
+throws('bundle: broken JSON refused', fn () => SettingsBundle::parse('{"format":'), 'not valid JSON');
+throws('bundle: unknown mod refused', fn () => SettingsBundle::parse('{"format":"exclsv-settings","version":1,"mods":{"SomeoneElsesMod":{}}}'), 'Unknown mod');
+throws('bundle: newer version refused', fn () => SettingsBundle::parse('{"format":"exclsv-settings","version":99,"mods":{}}'), 'newer version');
+throws('bundle: server settings must be an ini', fn () => SettingsBundle::parse('{"format":"exclsv-settings","version":1,"serverSettings":"rm -rf"}'), 'does not look like ServerSettings.ini');
+throws('bundle: empty file refused', fn () => SettingsBundle::parse('{"format":"exclsv-settings","version":1,"mods":{}}'), 'contains no mods');
+throws('bundle: huge file refused', fn () => SettingsBundle::parse(str_repeat(' ', SettingsBundle::MAX_BYTES + 1)), 'too large');
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

@@ -567,6 +567,16 @@ class ScumServerService
         $this->write($server, $this->ue4ss($server)['mods'] . "/$mod/config.lua", $contents);
     }
 
+    /** Keep a mod's current config.lua next to it before an import replaces it; returns the file name. */
+    public function backupModConfig(Server $server, string $mod, string $contents): string
+    {
+        $this->assertModName($mod);
+        $name = 'config.before-import-' . now()->format('Ymd-His') . '.lua';
+        $this->write($server, $this->ue4ss($server)['mods'] . "/$mod/$name", $contents);
+
+        return $name;
+    }
+
     private function modList(Server $server, string $modsDir): ModList
     {
         return ModList::parse($this->read($server, "$modsDir/mods.txt"), $this->read($server, "$modsDir/mods.json"));

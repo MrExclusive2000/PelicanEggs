@@ -8,7 +8,7 @@ Adds five pages to SCUM servers in the Pelican client area:
 | **SCUM Settings** | Form editor for `ServerSettings.ini`, with a tab per section and search |
 | **SCUM Player Lists** | Admins, settings admins, whitelist, exclusive, banned and silenced players |
 | **SCUM Mods** | Installs or updates UE4SS and our mods, uploads mods, and turns them on/off or deletes them |
-| **SCUM Mod Settings** | Settings for our mods: player tools (chat commands, kill feed, stats, AFK, voting, starter kit, rewards, bounties, teleports, manhunt, King of the Hill...), messages and restart warnings, anti-cheat. Item fields are searchable dropdowns of the server's items |
+| **ExclsvSCUM Mod Settings** | Settings for our mods (with Export / Import of everything in one file): player tools (chat commands, kill feed, stats, AFK, voting, starter kit, rewards, bounties, teleports, manhunt, King of the Hill...), messages and restart warnings, anti-cheat. Item fields are searchable dropdowns of the server's items |
 
 The pages only appear on SCUM servers: eggs with the `scum_manager` feature or `scum` tag, or any server whose startup command runs `SCUMServer.exe`.
 
@@ -52,7 +52,16 @@ Changes apply on the next server start.
 
 To run admin commands, upload the [PelicanConsole](../../mods/PelicanConsole) mod (`mods/dist/PelicanConsole.zip`) on this page and restart. Then use the **SCUM Admin Console** page: pick a command from the list (grouped into "works any time" and "needs an admin in game"), fill in the player or value, and run it. The page writes the command straight into the mod's `commands.txt`, tells you whether SCUM picked it up, and shows the mod's `console.log`. The SCUM egg also forwards commands typed in the Pelican console to the same mod. See the [egg README](../../scum/README.md#console-commands).
 
-## SCUM Mod Settings
+## ExclsvSCUM Mod Settings
+
+**Export settings** downloads one JSON file with the settings of every installed Exclsv mod
+(the whole config.lua of each, as data) and, optionally, ServerSettings.ini as text.
+**Import settings** takes such a file back, edited or not: each mod in it replaces that mod's
+config.lua (the old one is kept as `config.before-import-<date>.lua` in the mod folder), mods
+not in the file are left alone, and ServerSettings.ini is only written while the server is
+stopped (backed up first). Imported values are data: they are written out as a Lua table, never
+run as code.
+
 
 A tab per installed mod of ours, with every option of its `config.lua`. Saving rewrites `config.lua` (comments are not kept; options the page doesn't know are), and the mods pick up the change within 30 seconds, without a restart. If the file changed after you opened the page, the save is refused for that mod. See the [egg README](../../scum/README.md#server-mods) for what each mod does.
 
