@@ -24,9 +24,9 @@ class ScumPlayerListsPage extends ServerFormPage
 
     protected static ?string $slug = 'scum-player-lists';
 
-    protected static ?int $navigationSort = 35;
+    protected static ?int $navigationSort = 36;
 
-    protected static ?string $navigationLabel = 'Players';
+    protected static ?string $navigationLabel = 'Player lists';
 
     /** Grouped in the sidebar under the brand (a method, so it fits every Filament version). */
     public static function getNavigationGroup(): ?string
@@ -34,7 +34,7 @@ class ScumPlayerListsPage extends ServerFormPage
         return Brand::NAV_GROUP;
     }
 
-    protected static ?string $title = Brand::PAGE_PLAYERS;
+    protected static ?string $title = Brand::PAGE_PLAYER_LISTS;
 
     /** File => [label, description, requires SteamID64 at the start of each line] */
     private const LISTS = [

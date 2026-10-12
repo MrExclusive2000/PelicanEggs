@@ -19,6 +19,7 @@ use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
 use MrExclusive\ScumManager\Support\ModManifest;
 use MrExclusive\ScumManager\Support\OnlinePlayers;
+use MrExclusive\ScumManager\Support\PlayerDirectory;
 use Throwable;
 use MrExclusive\ScumManager\Support\Ue4ssSettings;
 use RuntimeException;
@@ -917,6 +918,35 @@ class ScumServerService
         $ue4ss = $this->ue4ss($server);
 
         return OnlinePlayers::parse($ue4ss['installed'] ? $this->read($server, $ue4ss['mods'] . '/PlayerTools/online.tsv') : null, time());
+    }
+
+    /** Everything known about every player, from all files that mention them (see PlayerDirectory). */
+    public function playerDirectory(Server $server): array
+    {
+        $ue4ss = $this->ue4ss($server);
+        $mods = $ue4ss['installed'] ? $ue4ss['mods'] : null;
+
+        $lists = [];
+        foreach (array_keys(PlayerDirectory::LISTS) as $file) {
+            $lists[$file] = $this->read($server, $this->configPath($file));
+        }
+
+        return PlayerDirectory::build(
+            $mods === null ? null : $this->read($server, "$mods/PlayerTools/players.tsv"),
+            $this->onlinePlayers($server)['players'],
+            $lists,
+            $mods === null ? null : $this->read($server, "$mods/ScumAntiCheat/offenses.txt"),
+        );
+    }
+
+    /** Add a player to, or remove them from, one of SCUM's player lists (e.g. BannedUsers.ini). */
+    public function setPlayerListMembership(Server $server, string $file, string $steamId, bool $member): void
+    {
+        if (!array_key_exists($file, PlayerDirectory::LISTS)) {
+            throw new RuntimeException('Unknown player list.');
+        }
+        $path = $this->configPath($file);
+        $this->write($server, $path, PlayerDirectory::setMembership($this->read($server, $path), $steamId, $member));
     }
 
     /** The newest player reports from PlayerTools' reports.log, newest first. */

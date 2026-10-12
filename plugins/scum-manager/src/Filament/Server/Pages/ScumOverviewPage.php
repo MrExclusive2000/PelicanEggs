@@ -22,6 +22,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\HtmlString;
 use Livewire\Attributes\Locked;
+use MrExclusive\ScumManager\Filament\Server\Concerns\RunsPlayerCommands;
 use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\Brand;
@@ -36,12 +37,13 @@ use MrExclusive\ScumManager\Support\Overview;
 class ScumOverviewPage extends Page
 {
     use BlockAccessInConflict;
+    use RunsPlayerCommands;
 
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-layout-dashboard';
 
     protected static ?string $slug = 'scum-overview';
 
-    protected static ?int $navigationSort = 29;
+    protected static ?int $navigationSort = 28;
 
     protected static ?string $navigationLabel = 'Overview';
 
@@ -305,9 +307,6 @@ class ScumOverviewPage extends Page
             . "<tbody>$rows</tbody></table></div>";
     }
 
-    /** Commands offered by "Manage a player"; each is an AdminCommands command. */
-    private const PLAYER_ACTIONS = ['whereis', 'balance', 'giveitem', 'money', 'fame', 'teleportplayer', 'teleporttome', 'teleportto', 'kick', 'ban'];
-
     /** @return array<string, string> "steamId|name" => label */
     private function playerOptions(): array
     {
@@ -317,70 +316,6 @@ class ScumOverviewPage extends Page
         }
 
         return $options;
-    }
-
-    /** @return list<\Filament\Schemas\Components\Component> */
-    private function manageForm(): array
-    {
-        $actions = [];
-        foreach (self::PLAYER_ACTIONS as $key) {
-            $command = AdminCommands::COMMANDS[$key];
-            $actions[$key] = $command['label'] . ($command['anytime'] === false ? ' (needs an admin in game)' : '');
-        }
-        $is = fn (string ...$keys) => fn (Get $get) => in_array($get('action'), $keys, true);
-
-        return [
-            Select::make('player')->label('Player')->options(fn () => $this->playerOptions())->searchable()->required(),
-            Select::make('action')->label('Do')->options($actions)->required()->live(),
-            Text::make(fn (Get $get) => AdminCommands::COMMANDS[$get('action')]['help'] ?? '')->color('gray'),
-            ItemSelect::make('item', 'Item', fn () => app(ScumServerService::class)->itemCatalog($this->getServer()))
-                ->visible($is('giveitem'))->required($is('giveitem')),
-            TextInput::make('amount')->label('Amount')->integer()->minValue(1)->maxValue(10)->default(1)
-                ->visible($is('giveitem'))->required($is('giveitem')),
-            TextInput::make('money')->label('Amount (negative takes money)')->integer()->minValue(-1000000)->maxValue(1000000)
-                ->visible($is('money'))->required($is('money')),
-            TextInput::make('fame')->label('Fame points')->integer()->minValue(0)->maxValue(100000)
-                ->visible($is('fame'))->required($is('fame')),
-            Grid::make(3)->visible($is('teleportplayer'))->schema([
-                TextInput::make('x')->label('X')->integer()->required($is('teleportplayer')),
-                TextInput::make('y')->label('Y')->integer()->required($is('teleportplayer')),
-                TextInput::make('z')->label('Z')->integer()->required($is('teleportplayer')),
-            ]),
-        ];
-    }
-
-    /** Runs the picked command and shows what the console mod answered. */
-    private function managePlayer(array $data, ScumServerService $service): void
-    {
-        [$steamId, $name] = array_pad(explode('|', (string) ($data['player'] ?? ''), 2), 2, '');
-        $key = (string) ($data['action'] ?? '');
-        abort_unless(in_array($key, self::PLAYER_ACTIONS, true), 422);
-
-        $values = [];
-        foreach (['name' => $name, 'steamId' => $steamId, 'item' => $data['item'] ?? '', 'amount' => $key === 'money' ? ($data['money'] ?? '') : ($key === 'fame' ? ($data['fame'] ?? '') : ($data['amount'] ?? '')),
-            'x' => $data['x'] ?? '', 'y' => $data['y'] ?? '', 'z' => $data['z'] ?? ''] as $field => $value) {
-            $values[AdminCommands::fieldName($key, $field)] = (string) $value;
-        }
-
-        try {
-            if ($steamId === '' && array_key_exists('steamId', AdminCommands::COMMANDS[$key]['fields'])) {
-                throw new \RuntimeException("$name's SteamID is not known yet, so this command cannot be used for them.");
-            }
-            $line = AdminCommands::build($key, $values);
-            $until = '/' . preg_quote($name, '/') . '|' . preg_quote($steamId ?: $name, '/') . '|No online player|Usage:|failed|no admin/i';
-            $answer = trim(preg_replace('/^\S+ \[[^\]]+\] /m', '', $service->runConsoleCommandAndRead($this->getServer(), $line, $until, 6)));
-
-            Notification::make()
-                ->title($line)
-                ->body($answer !== '' ? $answer : 'Sent. No answer yet: see the Console page.')
-                ->status(preg_match('/failed|No online player|no admin|Usage:/i', $answer) ? 'warning' : 'success')
-                ->persistent()
-                ->send();
-        } catch (Exception $exception) {
-            Notification::make()->title('Could not run that')->body($exception->getMessage())->danger()->send();
-        }
-
-        $this->loadLive();
     }
 
     private function crashSummary(): string
@@ -454,8 +389,12 @@ class ScumOverviewPage extends Page
                 ->modalHeading('Manage a player')
                 ->modalDescription('Runs through the ' . Brand::mod('PelicanConsole') . ' mod; the answer is shown when it arrives.')
                 ->modalSubmitActionLabel('Run')
-                ->schema(fn () => $this->manageForm())
-                ->action(fn (array $data, ScumServerService $service) => $this->managePlayer($data, $service)),
+                ->schema(fn () => $this->playerCommandSchema(fn () => $this->playerOptions()))
+                ->action(function (array $data, ScumServerService $service) {
+                    [$steamId, $name] = array_pad(explode('|', (string) ($data['player'] ?? ''), 2), 2, '');
+                    $this->runPlayerCommand($steamId, $name, $data, $service);
+                    $this->loadLive();
+                }),
             Action::make('mods')
                 ->label('Update mods')
                 ->icon('tabler-package')

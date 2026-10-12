@@ -32,6 +32,17 @@ The first page in the **ExclsvSCUM** menu shows what needs attention on one scre
 - **Last session:** the end of `UE4SS.previous.log` (the egg keeps the log from before each restart), with crash lines picked out, and SCUM's newest crash report folder.
 - **Shortcuts:** restart or start the server, update mods, open the console or the crash reports.
 
+## Players
+
+One table with every player, combining what every file knows about them:
+
+- **Stats:** kills, deaths, K/D, playtime, bounty and last seen, from PlayerTools' `players.tsv`.
+- **Online now and where**, from PlayerTools' `online.tsv` (refreshes every 30 seconds).
+- **Lists:** admin, settings admin, whitelisted, exclusive, banned and silenced, from SCUM's `.ini` player lists. Banned players who never played here are listed too.
+- **Anti-cheat kicks**, from ScumAntiCheat's `offenses.txt`.
+
+Search by name or SteamID and sort by kills, deaths, playtime or kicks. Each player has **Run a command** (the same commands as Manage a player; offline players get the SteamID ones) and a **Lists** menu: **Ban** works while the server runs (added to `BannedUsers.ini` and kicked, as the anti-cheat does); unban, admin, whitelist and silence need the server stopped, because SCUM rewrites those files while it runs. The raw files stay editable on **Player lists**.
+
 ## SCUM Settings
 
 - **Built from your own file:** the form is built from whatever keys are in your server's `ServerSettings.ini`, so settings added by monthly SCUM updates appear without updating the plugin.

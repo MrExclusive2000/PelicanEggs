@@ -517,5 +517,29 @@ use MrExclusive\ScumManager\Support\SettingChoices;
 check('choices: raid protection labelled from SCUM\'s enum', array_keys(SettingChoices::for('scum.RaidProtectionType')), [0, 1, 2, 3]);
 check('choices: other keys stay plain', SettingChoices::for('scum.MaxPlayers'), null);
 
+// ---------------------------------------------------------------- player directory
+use MrExclusive\ScumManager\Support\PlayerDirectory;
+$tsv = "76561198000000001\tAlice\t12\t3\t7200\t340\tgiven\t1000\t7200\t2026-10-12\t5\t500\t0\t2000\t\n"
+    . "76561198000000002\tBob\t1\t9\t600\t20\t\t900\t600\t\t1\t0\t0\t1500\t\n";
+$onlineNow = OnlinePlayers::parse("# updated 3000\n76561198000000002\tBob\t100\t200\t300\tin sector B2\t1\t0\t60\n", 3010)['players'];
+$dir = PlayerDirectory::build($tsv, $onlineNow, [
+    'AdminUsers.ini' => "76561198000000001[SetGodMode]\r\n",
+    'BannedUsers.ini' => "76561198000000003\r\n",
+    'WhitelistedUsers.ini' => null,
+], "76561198000000002 2\n76561198000000003 3\n");
+check('directory: everyone from every file, online first', array_column(array_values($dir), 'steamId'), ['76561198000000002', '76561198000000001', '76561198000000003']);
+check('directory: stats from players.tsv', [$dir['76561198000000001']['kills'], $dir['76561198000000001']['deaths'], $dir['76561198000000001']['playtime'], $dir['76561198000000001']['bounty'], $dir['76561198000000001']['lastSeen']], [12, 3, 7200, 500, 2000]);
+check('directory: online player and where', [$dir['76561198000000002']['online'], $dir['76561198000000002']['where'], $dir['76561198000000002']['vehicle']], [true, 'in sector B2 (X=100 Y=200 Z=300)', true]);
+check('directory: admin with permissions suffix', $dir['76561198000000001']['flags']['admin'], true);
+check('directory: banned player only known from the list', [$dir['76561198000000003']['name'], $dir['76561198000000003']['flags']['banned'], $dir['76561198000000003']['kicks']], ['', true, 3]);
+check('directory: anti-cheat kicks', $dir['76561198000000002']['kicks'], 2);
+check('directory: search by name or id', [array_column(array_values(PlayerDirectory::search($dir, 'ali')), 'steamId'), array_column(array_values(PlayerDirectory::search($dir, '0003')), 'steamId')], [['76561198000000001'], ['76561198000000003']]);
+check('lists: add keeps other lines and line endings', PlayerDirectory::setMembership("76561198000000001[SetGodMode]\r\n", '76561198000000002', true), "76561198000000001[SetGodMode]\r\n76561198000000002\r\n");
+check('lists: add twice is a no-op', PlayerDirectory::setMembership("76561198000000002\n", '76561198000000002', true), "76561198000000002\n");
+check('lists: remove keeps the rest', PlayerDirectory::setMembership("76561198000000001[SetGodMode]\n76561198000000002\n", '76561198000000001', false), "76561198000000002\n");
+check('lists: remove the last one empties the file', PlayerDirectory::setMembership("76561198000000002\r\n", '76561198000000002', false), '');
+check('lists: add to a new file uses Windows line endings', PlayerDirectory::setMembership(null, '76561198000000002', true), "76561198000000002\r\n");
+throws('lists: only SteamIDs', fn () => PlayerDirectory::setMembership('', '123', true), 'SteamID64');
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);
