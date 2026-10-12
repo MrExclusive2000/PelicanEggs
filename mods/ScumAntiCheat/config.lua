@@ -29,6 +29,8 @@ return {
         gameLogs = true,          -- show SCUM's own violation and admin command logs in the console
         killLog = true,           -- aimbot signs in SCUM's kill log (range, god mode, desync, kill rate)
         aimSnap = true,           -- aim jumping onto targets right before kills
+        magicBullet = true,       -- firearm kills without ever aiming at the victim (silent aim)
+        adminLog = true,          -- admin commands (SCUM's admin log) from players not in AdminUsers.ini
     },
 
     -- Speed limits. Sprinting is about 7 m/s; the fastest vehicles stay well under 100.
@@ -98,6 +100,11 @@ return {
     -- just before.
     aimSnapDegrees = 150,
     aimSnapPattern = 3,
+
+    -- A firearm kill while the killer's aim stayed more than this many degrees away from the
+    -- victim for the whole few seconds before. Report a player after this many such kills.
+    magicBulletDegrees = 60,
+    magicBulletPattern = 2,
 
     -- Also count aimbot suspicions as strikes (so they can lead to a kick/ban). Off by default.
     strikeOnKillFlags = false,

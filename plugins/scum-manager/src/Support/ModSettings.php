@@ -75,6 +75,7 @@ final class ModSettings
                     'fields' => [
                         'newPlayers.messages' => ['lines', 'Welcome messages (one per line)', []],
                         'newPlayers.starterKit' => ['toggle', 'Starter kit on', true],
+                        'newPlayers.starterKitPreset' => ['select', 'Ready-made kit (used while the item list below is empty)', 'basic', 'options' => ['basic' => 'Basic: 2 water, tuna, beans, 2 apples, 3 bandages, knife, small backpack', 'none' => 'None']],
                         'newPlayers.starterKitItems' => ['rows', 'Starter kit items (experimental: needs "Give items" on)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'newPlayers.starterKitCommands' => ['lines', 'Starter kit admin commands (one per line, need an admin online)', []],
                         'newPlayers.starterKitMessage' => ['text', 'Message when the kit is given', ''],
@@ -84,6 +85,12 @@ final class ModSettings
                     'description' => 'One switch for every item list on this page: starter kit, playtime and daily rewards, manhunt and King of the Hill. Items go straight into the player\'s inventory without an admin. Leave this off until "Give an item" on the Admin Console has worked for you. Cash and other commands are not affected.',
                     'fields' => [
                         'itemRewards.enabled' => ['toggle', 'Give items', false],
+                    ],
+                ],
+                'Without an admin online' => [
+                    'description' => 'Cash rewards, the starter kit cash and paid teleports normally run as an online admin and wait until one is on. With this on, PlayerTools checks once per server run whether SCUM accepts the commands without an admin (it adds 1 coin to a player and takes it back) and uses that if it works. The result is in the PlayerTools log.',
+                    'fields' => [
+                        'noAdminFallback' => ['toggle', 'Try without an admin', true],
                     ],
                 ],
                 'Welcome back' => [
@@ -267,6 +274,8 @@ final class ModSettings
                         'checks.gameLogs' => ['toggle', 'Show SCUM violation and admin logs', true],
                         'checks.killLog' => ['toggle', 'Aimbot signs in the kill log', true],
                         'checks.aimSnap' => ['toggle', 'Aim snaps before kills', true],
+                        'checks.magicBullet' => ['toggle', 'Magic bullets (kills without aiming at the victim)', true],
+                        'checks.adminLog' => ['toggle', 'Admin commands from players not in AdminUsers.ini', true],
                     ],
                 ],
                 'Movement limits' => [
@@ -292,6 +301,8 @@ final class ModSettings
                         'maxLocationMismatch' => ['int', 'Max client/server position gap (m)', 50],
                         'aimSnapDegrees' => ['int', 'Aim snap (degrees in 0.1 s)', 150],
                         'aimSnapPattern' => ['int', 'Report after this many snapped kills', 3],
+                        'magicBulletDegrees' => ['int', 'Magic bullet: aim this many degrees off the victim', 60],
+                        'magicBulletPattern' => ['int', 'Report after this many magic bullet kills', 2],
                         'strikeOnKillFlags' => ['toggle', 'Count aimbot suspicions as strikes', false],
                     ],
                 ],

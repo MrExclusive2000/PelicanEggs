@@ -13,6 +13,8 @@ These add strikes. config.strikesToAct strikes within config.strikeWindowSeconds
 
 Instant checks (no strikes needed):
   - unauthorized admin  admin rights in game, but the SteamID is not in AdminUsers.ini
+  - admin log           an admin command in SCUM's admin_*.log from a SteamID that is not
+                        in AdminUsers.ini (admin rights from a cheat)
   - names               names containing config.blockedNames ("admin", "moderator", ...)
 
 Also:
@@ -28,6 +30,9 @@ Aimbot signs (report "SUSPECT" lines only, unless strikeOnKillFlags = true):
   - kill rate          config.killRateKills kills within config.killRateMinutes
   - aim snaps          the view jumping 150+ degrees in a tenth of a second right before a
                        kill; reported once it happens on 3 kills (and at least half of them)
+  - magic bullets      firearm kills (5 m and further) while the killer's aim stayed more
+                       than config.magicBulletDegrees away from the victim the whole time
+                       before (silent aim); reported after config.magicBulletPattern kills
 These read SCUM's kill_*.log and sample each player's aim 10 times a second. Aimbots run on
 the cheater's PC, so this cannot prove anything: it points at who to spectate.
 

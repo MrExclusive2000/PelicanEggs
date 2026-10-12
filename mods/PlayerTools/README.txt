@@ -59,7 +59,15 @@ Good to know:
    (SetTime, ChangeCurrencyBalance, Teleport <player> <x> <y> <z>...) through an online admin's chat command
    channel, exactly as if that admin typed them. So an admin from AdminUsers.ini must be
    online. Rewards, kits and payouts wait until one is; votes, bounties and teleports say
-   they cannot be done right now.
+   they cannot be done right now. With noAdminFallback on (default), PlayerTools checks once
+   per run whether SCUM accepts these commands without an admin (1 coin added to a player
+   and taken back) and uses that route if it works. The log says which way it went.
+ - Starter kit items: while starterKitItems is empty, starterKitPreset = "basic" gives 2
+   water, tuna, beans, 2 apples, 3 bandages, a knife and a small backpack. Items need "Give
+   items" on, and an item type is only given once SCUM has loaded it on the server (the log
+   names any that were skipped: spawn one with SpawnItem as an admin).
+ - players.tsv is copied once a day to players.backup-<date>.tsv; the last 7 are kept. To
+   restore, stop the server and copy a backup over players.tsv.
  - Starter kit commands are SCUM admin commands without the "#", with {steamId} and {name}
    replaced by the new player. The default gives 500 cash:
        ChangeCurrencyBalance Normal 500 {steamId}

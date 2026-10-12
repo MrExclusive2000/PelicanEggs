@@ -42,6 +42,7 @@ local CM_PER_M = 100
 local MAX_READ = 1024 * 1024       -- bytes read from a log per second
 local CONFIG_CHECK = 30            -- seconds between looks at config.lua
 local SAVE_EVERY = 60              -- seconds between writes of players.tsv
+local BACKUP_DAYS = 7              -- daily copies of players.tsv kept (players.backup-<date>.tsv)
 local LOG_REFRESH = 60             -- seconds between looks for a newer chat or kill log
 local SPAWN_DELAY = 10             -- seconds after spawning before new-player messages and kits
 local AFK_MOVE = 1                 -- metres
@@ -53,7 +54,7 @@ local DEFAULTS = {
     stats = { enabled = true, topCount = 3, announceTopEveryMinutes = 0 },
     afk = { enabled = false, minutes = 20, warnMinutesBefore = 2, onlyWhenPlayersAtLeast = 0, ignoreAdmins = true, kickReason = "Kicked for being AFK." },
     voting = { enabled = true, durationSeconds = 60, cooldownMinutes = 15, percentNeeded = 50, minVotes = 2, options = {} },
-    newPlayers = { messages = {}, starterKit = false, starterKitItems = {}, starterKitCommands = {}, starterKitMessage = "" },
+    newPlayers = { messages = {}, starterKit = false, starterKitPreset = "basic", starterKitItems = {}, starterKitCommands = {}, starterKitMessage = "" },
     welcomeBack = { enabled = true, message = "Welcome back {name}! {hours} played, {kills} kills, {deaths} deaths." },
     playtimeRewards = {
         enabled = true, everyMinutes = 60, dailyEnabled = true,
@@ -86,6 +87,7 @@ local DEFAULTS = {
     reports = { enabled = true, cooldownSeconds = 60 },
     featureTips = { onJoin = true, announceEveryMinutes = 20, extraTips = {} },
     itemRewards = { enabled = false },
+    noAdminFallback = true,
     deathRecap = { enabled = true, message = "You were killed by {killer} with {weapon} from {distance} m." },
     hotspots = {
         enabled = true, kills = 3, withinMinutes = 5, radius = 500, cooldownMinutes = 10,
@@ -274,8 +276,27 @@ local function loadRecords()
     end
 end
 
+-- One copy of players.tsv per day, taken before the first save of the day; the oldest go.
+local function backupFile(time)
+    return DIR .. "/players.backup-" .. os.date("!%Y-%m-%d", time) .. ".tsv"
+end
+
+local function backupRecords(time)
+    local path = backupFile(time)
+    local existing = io.open(path, "r")
+    if existing then existing:close() return end
+    local text = readText(PLAYERS_FILE)
+    if text == nil or text == "" then return end
+    local file = io.open(path, "w")
+    if not file then return end
+    file:write(text)
+    file:close()
+    for age = BACKUP_DAYS, BACKUP_DAYS + 30 do os.remove(backupFile(time - age * 86400)) end
+end
+
 local function saveRecords()
     if not recordsDirty then return end
+    pcall(backupRecords, os.time())
     local file = io.open(PLAYERS_FILE, "w")
     if not file then return end
     for id, record in pairs(records) do
@@ -578,13 +599,39 @@ local function onlineCount()
     return count
 end
 
+-- SCUM's command helper (MiscStatics.Test_ProcessAdminCommand) needs no admin online, but SCUM
+-- may ignore what it is sent. It is only used once a test has shown it works (see noAdminTick).
+local NO_ADMIN_PROCESSOR = "/Script/SCUM.Default__MiscStatics"
+local NO_ADMIN_FORMS = { "", "#" }   -- tried without and with the "#"
+local noAdmin = { state = nil, wanted = false }   -- state: nil (untested), "testing", "works", "ignored"
+
+local function sendWithoutAdmin(text)
+    local processor = safe(function() return StaticFindObject(NO_ADMIN_PROCESSOR) end)
+    local world = findFirst({ "World" })
+    if not isValid(processor) or world == nil then return false, "SCUM's command helper was not found" end
+    local ok, err = pcall(function() processor:Test_ProcessAdminCommand(world, text) end)
+    if not ok then return false, tostring(err) end
+    return true
+end
+
 -- Runs an admin command through an online admin's chat command channel, as if they typed it.
+-- With no admin online, SCUM's command helper is used instead once it is known to work.
 local function runAdminCommand(command)
     local admins = {}
     for key, session in pairs(sessions) do
         if isAdmin(session.controller) then admins[key] = session end
     end
-    if next(admins) == nil then return false, "no admin is online" end
+    if next(admins) == nil then
+        if config.noAdminFallback == false then return false, "no admin is online" end
+        if noAdmin.state == "works" then
+            local text = noAdmin.form .. string.gsub(command, "^#+", "")
+            local ok, detail = sendWithoutAdmin(text)
+            if ok then return true, "SCUM's command helper" end
+            return false, detail
+        end
+        if noAdmin.state == nil then noAdmin.wanted = true end
+        return false, "no admin is online"
+    end
 
     for _, channel in ipairs(findAll({ "PlayerRpcChannel" })) do
         local owner = safe(function() return channel:GetOwner() end)
@@ -812,6 +859,51 @@ local function balanceOf(session)
     local text = safe(function() return session.controller:GetCurrencyBalanceText(0):ToString() end)
     local digits = text and string.gsub(text, "[^%d]", "")
     return digits and digits ~= "" and tonumber(digits) or nil
+end
+
+-- Finds out once per run whether SCUM runs commands sent without an admin: 1 coin is added to a
+-- player whose balance can be read, and taken back again if it arrived. Nothing waiting for an
+-- admin is paid this way until that has worked.
+local NO_ADMIN_WAIT = 6   -- seconds to wait for the coin before trying the next form
+
+local function noAdminTick(time)
+    if noAdmin.state == nil and noAdmin.wanted then
+        for _, session in pairs(sessions) do
+            local before = session.steamId and balanceOf(session)
+            if before then
+                noAdmin.state = "testing"
+                noAdmin.test = { steamId = session.steamId, before = before, form = 1, started = time }
+                sendWithoutAdmin(NO_ADMIN_FORMS[1] .. "ChangeCurrencyBalance Normal 1 " .. session.steamId)
+                output("No admin online: checking whether SCUM runs commands without one (1 coin to " .. session.name .. ", taken back).")
+                return
+            end
+        end
+        return
+    end
+    if noAdmin.state ~= "testing" then return end
+
+    local test = noAdmin.test
+    local session = sessionById(test.steamId)
+    if session == nil then
+        noAdmin.state, noAdmin.test = nil, nil   -- they left; test again with someone else
+        return
+    end
+    local now = balanceOf(session)
+    if now and now >= test.before + 1 then
+        noAdmin.state, noAdmin.form, noAdmin.test = "works", NO_ADMIN_FORMS[test.form], nil
+        sendWithoutAdmin(noAdmin.form .. "ChangeCurrencyBalance Normal -1 " .. test.steamId)
+        output("SCUM runs commands without an admin online. Rewards and teleports no longer wait for one.")
+    elseif time - test.started >= NO_ADMIN_WAIT then
+        test.form = test.form + 1
+        if NO_ADMIN_FORMS[test.form] == nil then
+            noAdmin.state, noAdmin.test = "ignored", nil
+            output("SCUM ignores commands sent without an admin online. Rewards and teleports wait for an admin.")
+            return
+        end
+        test.started = time
+        test.before = now or test.before
+        sendWithoutAdmin(NO_ADMIN_FORMS[test.form] .. "ChangeCurrencyBalance Normal 1 " .. test.steamId)
+    end
 end
 
 local function canAfford(session, price, check)
@@ -1703,6 +1795,24 @@ end
 
 -- ------------------------------------------------------------------ new players and AFK
 
+-- A basic survival kit, used when no starter kit items are set. Item codes as in SpawnItem.
+local BASIC_STARTER_KIT = {
+    { item = "Water_05l", amount = 2 },
+    { item = "Canned_Tuna", amount = 1 },
+    { item = "BakedBeans", amount = 1 },
+    { item = "Apple", amount = 2 },
+    { item = "Emergency_bandage", amount = 3 },
+    { item = "1H_Improvised_metal_knife", amount = 1 },
+    { item = "Improvised_Bag_Small_01", amount = 1 },
+}
+
+local function starterKitItems()
+    local kit = config.newPlayers
+    if #(kit.starterKitItems or {}) > 0 then return kit.starterKitItems end
+    if kit.starterKitPreset == "basic" then return BASIC_STARTER_KIT end
+    return {}
+end
+
 local function newPlayerCheck(session, time)
     if session.newChecked or session.steamId == nil then return end
     local pawn = characterOf(session.controller)
@@ -1743,12 +1853,12 @@ local function newPlayerCheck(session, time)
             name = session.name, steamId = session.steamId,
             location = position and string.format("X=%.0f Y=%.0f Z=%.0f", position.x, position.y, position.z + 50) or "",
         }
-        local kitItems = config.itemRewards.enabled and (kit.starterKitItems or {}) or {}
+        local kitItems = config.itemRewards.enabled and starterKitItems() or {}
         if #(kit.starterKitCommands or {}) == 0 and #kitItems == 0 then
             session.newChecked = true
             return
         end
-        local ok, detail = giveReward(session, kit.starterKitCommands, kit.starterKitItems, values)
+        local ok, detail = giveReward(session, kit.starterKitCommands, kitItems, values)
         if not ok then
             -- Try again later (for example when an admin comes online).
             if not session.kitWaitReported then
@@ -1882,6 +1992,9 @@ local function tick()
     for key in pairs(sessions) do
         if not seen[key] then sessions[key] = nil end
     end
+
+    local tested, testError = pcall(noAdminTick, time)
+    if not tested then output("Checking for commands without an admin failed: " .. tostring(testError)) end
 
     local online = onlineCount()
     for _, session in pairs(sessions) do

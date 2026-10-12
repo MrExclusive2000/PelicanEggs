@@ -54,7 +54,7 @@ local DEFAULTS = {
     checks = {
         speed = true, teleport = true, flying = true, hovering = true, mapBounds = true,
         unauthorizedAdmin = true, names = true, watchlist = true, gameLogs = true,
-        killLog = true, aimSnap = true,
+        killLog = true, aimSnap = true, magicBullet = true, adminLog = true,
     },
     maxFootSpeed = 21,
     maxVehicleSpeed = 120,
@@ -81,6 +81,8 @@ local DEFAULTS = {
     maxLocationMismatch = 50,
     aimSnapDegrees = 150,
     aimSnapPattern = 3,
+    magicBulletDegrees = 60,
+    magicBulletPattern = 2,
     strikeOnKillFlags = false,
     kickReason = "Kicked by anti-cheat.",
 }
@@ -266,6 +268,7 @@ local steamIdByName = {}      -- from SCUM.log login lines
 local adminIds = nil          -- AdminUsers.ini; nil when it can't be read
 local offenses = {}           -- SteamID -> times kicked by this mod
 local pendingViolations = {}  -- SteamID -> reason, from SCUM's violation log
+local pendingRogueCommands = {}   -- SteamID -> admin log line, for players not in AdminUsers.ini
 local serverLog = newTail(SERVER_LOG, false)
 local gameLogs = {}           -- prefix -> tail
 local lastFileRefresh = nil
@@ -333,6 +336,8 @@ local function parseKill(line)
             weapon = string.match(line, '"Weapon":"(.-)"') or "?",
             distance = distanceBetween(killerServer, vectorIn(victim, "ServerLocation")),
             mismatch = distanceBetween(killerServer, vectorIn(killer, "ClientLocation")),
+            killerAt = killerServer,
+            victimAt = vectorIn(victim, "ServerLocation"),
             immortal = string.find(killer, '"HasImmortality":true', 1, true) ~= nil,
         }
     end
@@ -370,6 +375,10 @@ local function handleGameLogLine(kind, line)
     output("SCUM " .. kind .. ": " .. line)
     if kind == "violation" and config.strikeOnGameViolations then
         pendingViolations[id] = line
+    end
+    -- An admin command from someone who is not in AdminUsers.ini: rights from a cheat.
+    if kind == "admin command" and config.checks.adminLog and adminIds and not adminIds[id] then
+        pendingRogueCommands[id] = line
     end
 end
 
@@ -620,6 +629,8 @@ local tracked = {}   -- by controller address
 
 local SNAP_HISTORY = 10   -- seconds of snaps kept per player
 local SNAP_WINDOW = 3     -- seconds before a kill (plus log delay) that count
+local AIM_HISTORY = 5     -- seconds of aim directions kept per player (magic bullet check)
+local MIN_AIM_SAMPLES = 10   -- fewer samples than this before a kill: no verdict
 
 local function angleDifference(a, b)
     local d = (a - b + 180) % 360 - 180
@@ -652,6 +663,11 @@ local function sampleAim()
                 end
             end
             player.lastAim = { yaw = yaw, pitch = pitch, time = time }
+            player.aimHistory = player.aimHistory or {}
+            player.aimHistory[#player.aimHistory + 1] = player.lastAim
+            while player.aimHistory[1] and time - player.aimHistory[1].time > AIM_HISTORY do
+                table.remove(player.aimHistory, 1)
+            end
             while player.snaps[1] and time - player.snaps[1].time > SNAP_HISTORY do
                 table.remove(player.snaps, 1)
             end
@@ -711,6 +727,28 @@ local function analyseKill(kill, byId, time)
     killTimes[kill.killerId] = recent
     if #recent == config.killRateKills then
         suspect(string.format("%d kills within %d minutes", #recent, config.killRateMinutes))
+    end
+
+    -- Magic bullets / silent aim: a firearm kill while the killer never looked anywhere near the
+    -- victim in the seconds before. Close kills are skipped (the angle swings wildly up close).
+    local firearm = string.find(kill.weapon, "[Projectile]", 1, true) ~= nil
+    if config.checks.magicBullet and player and firearm and kill.killerAt and kill.victimAt
+        and (kill.distance or 0) >= 5 and #(player.aimHistory or {}) >= MIN_AIM_SAMPLES then
+        local bearing = math.deg(math.atan(kill.victimAt.y - kill.killerAt.y, kill.victimAt.x - kill.killerAt.x))
+        local closest = 180
+        for _, sample in ipairs(player.aimHistory) do
+            closest = math.min(closest, angleDifference(sample.yaw, bearing))
+        end
+        if closest > config.magicBulletDegrees then
+            local stats = killStats[kill.killerId] or { kills = 0, snapKills = 0 }
+            killStats[kill.killerId] = stats
+            stats.awayKills = (stats.awayKills or 0) + 1
+            output(string.format("%s killed %s at %.0f m while aiming at least %.0f degrees away from them.",
+                who, victim, kill.distance, closest))
+            if stats.awayKills % config.magicBulletPattern == 0 then
+                suspect(string.format("%d kills without aiming at the victim (magic bullet / silent aim)", stats.awayKills))
+            end
+        end
     end
 
     if config.checks.aimSnap and player then
@@ -881,6 +919,15 @@ local function check(controller, time, seen)
 
     checkIdentity(player, controller, isTrue(controller, "IsUserAdmin"))
 
+    if player.steamId and pendingRogueCommands[player.steamId] then
+        local line = pendingRogueCommands[player.steamId]
+        pendingRogueCommands[player.steamId] = nil
+        if not config.ignoredIds[player.steamId] then
+            output(describe(player) .. " ran an admin command but is not in AdminUsers.ini: " .. line)
+            act(player, controller, "admin command without being an admin")
+        end
+    end
+
     if player.steamId and pendingViolations[player.steamId] then
         local line = pendingViolations[player.steamId]
         pendingViolations[player.steamId] = nil
@@ -985,7 +1032,7 @@ LoopAsync(1000, function()
     return false
 end)
 
-if config.checks.aimSnap then
+if config.checks.aimSnap or config.checks.magicBullet then
     local sampling = false
     LoopAsync(100, function()
         if not sampling then
@@ -1001,7 +1048,7 @@ if config.checks.aimSnap then
 end
 
 local enabled = {}
-for _, name in ipairs({ "speed", "teleport", "flying", "hovering", "mapBounds", "unauthorizedAdmin", "names", "watchlist", "gameLogs", "killLog", "aimSnap" }) do
+for _, name in ipairs({ "speed", "teleport", "flying", "hovering", "mapBounds", "unauthorizedAdmin", "names", "watchlist", "gameLogs", "killLog", "aimSnap", "magicBullet", "adminLog" }) do
     if config.checks[name] then enabled[#enabled + 1] = name end
 end
 output(string.format("Active. action=%s, %d strikes in %d s. Checks: %s.",

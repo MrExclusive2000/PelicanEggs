@@ -58,13 +58,16 @@ return {
             "Welcome {name}! Type !help in chat for server commands.",
         },
         -- Starter kit: SCUM admin commands (without "#") run once per new player, after their
-        -- character spawns. {steamId} and {name} are the player. Needs an admin online; the kit
-        -- waits until one is. Use commands that name the player: SpawnItem has no target, so it
+        -- character spawns. {steamId} and {name} are the player. Needs an admin online (or SCUM
+        -- accepting commands without one, see noAdminFallback); the kit waits until then. Use commands that name the player: SpawnItem has no target, so it
         -- would drop items in front of the admin instead.
         starterKit = true,
         -- EXPERIMENTAL: items given straight into the new player's inventory, no admin needed.
         -- Item names as in SpawnItem (find them with "Find an item name" on the Admin Console),
         -- e.g. { item = "Water_05l", amount = 1 }.
+        -- "basic": water, tuna, beans, apples, bandages, a knife and a small backpack, used while
+        -- starterKitItems is empty. "none": only starterKitItems. Items need itemRewards on.
+        starterKitPreset = "basic",
         starterKitItems = {},
         starterKitCommands = {
             "ChangeCurrencyBalance Normal 500 {steamId}",
@@ -217,4 +220,8 @@ return {
     itemRewards = {
         enabled = false,
     },
+
+    -- With no admin online, try SCUM's own command helper for cash rewards and teleports. It is
+    -- tested once per run (1 coin added and taken back) and only used if SCUM accepts it.
+    noAdminFallback = true,
 }

@@ -138,7 +138,7 @@ write(mods .. "/PelicanConsole/console.log", "")
 -- ------------------------------------------------------------------ scenario 1: shipped config (log only)
 start(read("mods/ScumAntiCheat/config.lua"))
 check("loop registered", tick ~= nil)
-check("startup line lists checks", has(acLog(), "Active. action=log, 3 strikes in 60 s. Checks: speed, teleport, flying, hovering, mapBounds, unauthorizedAdmin, names, watchlist, gameLogs, killLog, aimSnap."))
+check("startup line lists checks", has(acLog(), "Active. action=log, 3 strikes in 60 s. Checks: speed, teleport, flying, hovering, mapBounds, unauthorizedAdmin, names, watchlist, gameLogs, killLog, aimSnap, magicBullet, adminLog."))
 check("startup line mirrored to Pelican console", has(read(mods .. "/PelicanConsole/console.log"), "Active."))
 
 local walker = Player("Walker", Pawn("BP_Prisoner_C", 0, 0, 0))
@@ -441,6 +441,17 @@ check("admin log header skipped", not has(text, "Game version"))
 check("admin command shown", has(text, "SCUM admin command: 2026.10.11-12.40.00: '76561198000000001:Admin(1)' Command: 'ListPlayers'"))
 check("game violation counted as strike", has(text, "Reported (76561198000000007): SCUM reported:"))
 
+-- An admin command in SCUM's admin log from a player who is not in AdminUsers.ini.
+local rogueAdmin = Player("Sneaky", Pawn("BP_Prisoner_C", 0, 0, 0))
+login("76561198000000009", "Sneaky")
+players = { rogueAdmin }
+tick()
+write(gameLogDir .. "/admin_1.log", "2026.10.11-12.41.00: '76561198000000009:Sneaky(3)' Command: 'SpawnItem Weapon_M82A1'\n", "a")
+step()
+step()
+check("admin command from a non-admin acted on", has(acLog(), "Sneaky (76561198000000009) ran an admin command but is not in AdminUsers.ini")
+    and has(read(configDir .. "/BannedUsers.ini"), "76561198000000009"))
+
 -- A new game log file (after SCUM rotates it) is read from the start.
 gameLogFiles.violations_ = "violations_2.log"
 write(gameLogDir .. "/violations_2.log", "first line of new file 76561198000000008\n")
@@ -466,7 +477,7 @@ gameLogFiles.kill_ = "kill_1.log"
 gameLogFiles.violations_, gameLogFiles.admin_ = nil, nil
 start([[return { killRateKills = 3, killRateMinutes = 5 }]])
 check("kill log: old kills before start ignored", not has(acLog(), "Old"))
-check("startup lists aimbot checks", has(acLog(), "killLog, aimSnap."))
+check("startup lists aimbot checks", has(acLog(), "killLog, aimSnap, magicBullet, adminLog."))
 check("aim sampler registered", aimTick ~= nil)
 
 local sniper = Player("Sniper", Pawn("BP_Prisoner_C", 0, 0, 0))
@@ -534,6 +545,44 @@ clock = clock + 5
 write(killLog, utf16(textKill("2026.10.11-12.44.00", "76561198000000070", "Calm", "76561198000000071", "W", "Weapon_AK47_C [Projectile]", 50)), "a")
 step()
 check("slow turns and old snaps not counted", not has(acLog(), "Calm (76561198000000070) snapped"))
+
+-- Magic bullets: firearm kills while never aiming anywhere near the victim.
+local silent = Player("Silent", Pawn("BP_Prisoner_C", 0, 0, 0))
+local honest = Player("Honest", Pawn("BP_Prisoner_C", 0, 0, 0))
+login("76561198000000080", "Silent")
+login("76561198000000081", "Honest")
+players = { silent, honest }
+tick()
+local function aimFor(seconds, yawSilent, yawHonest)
+    for _ = 1, seconds * 10 do
+        silent.yaw, honest.yaw = yawSilent, yawHonest
+        clock = clock + 0.1; aimTick()
+    end
+end
+local function shoot(n, killerId, killerName)
+    -- Victim due east (+X) of the killer, 100 m away.
+    write(killLog, utf16(jsonKill("2026.10.11-12.50.0" .. n, killerId, killerName, { 0, 0, 0 }, nil,
+        "7656119800000090" .. n, "Target" .. n, { 100, 0, 0 }, "Weapon_AK47_C [Projectile]")), "a")
+    step()
+end
+aimFor(2, 180, 10)   -- Silent looks west the whole time; Honest looks (nearly) east
+shoot(1, "76561198000000080", "Silent")
+shoot(2, "76561198000000081", "Honest")
+text = acLog()
+check("kill without aiming at the victim reported", has(text, "Silent (76561198000000080) killed Target1 at 100 m while aiming at least 180 degrees away"))
+check("kill while aiming at the victim not reported", not has(text, "Honest (76561198000000081) killed"))
+check("no magic bullet suspect after one", not has(text, "magic bullet"))
+aimFor(2, 180, 10)
+shoot(3, "76561198000000080", "Silent")
+check("magic bullet pattern reported", has(acLog(), "SUSPECT Silent (76561198000000080): 2 kills without aiming at the victim (magic bullet / silent aim)"))
+-- Close kills and melee are not judged.
+aimFor(2, 180, 10)
+write(killLog, utf16(jsonKill("2026.10.11-12.51.00", "76561198000000080", "Silent", { 0, 0, 0 }, nil,
+    "76561198000000095", "Close", { 3, 0, 0 }, "Weapon_AK47_C [Projectile]")), "a")
+write(killLog, utf16(jsonKill("2026.10.11-12.51.01", "76561198000000080", "Silent", { 0, 0, 0 }, nil,
+    "76561198000000096", "Stabbed", { 6, 0, 0 }, "1H_KitchenKnife_C [Melee]")), "a")
+step()
+check("close and melee kills not judged", not has(acLog(), "killed Close") and not has(acLog(), "killed Stabbed"))
 
 -- strikeOnKillFlags turns suspicions into strikes.
 start([[return { strikeOnKillFlags = true, strikesToAct = 1, action = "kick", banAfterKicks = 0 }]])

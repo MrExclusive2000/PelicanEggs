@@ -636,6 +636,82 @@ FindFirstOf = oldFindFirst
 players = {}
 
 
+-- ================================================================== no admin online: SCUM's command helper
+private, hud, adminCommands = {}, {}, {}
+local helperSent, helperWorks, helperForm = {}, true, ""
+local balance = 1000
+local miscStatics = object()
+function miscStatics:Test_ProcessAdminCommand(context, text)
+    helperSent[#helperSent + 1] = text
+    if not helperWorks then return end
+    local form, amount, id = string.match(text, "^(#?)ChangeCurrencyBalance Normal (%-?%d+) (%d+)$")
+    if form == helperForm and id == "76561198000000050" then balance = balance + tonumber(amount) end
+end
+local savedStatic, savedFirst = StaticFindObject, FindFirstOf
+function StaticFindObject(path) if path == "/Script/SCUM.Default__MiscStatics" then return miscStatics end return nil end
+local helperWorld = object()
+function FindFirstOf(className) if className == "World" then return helperWorld end return savedFirst(className) end
+local function startHelperRun()
+    write(dir .. "/players.tsv", "")
+    write(dir .. "/config.lua", [[return {
+        newPlayers = { starterKit = false },
+        playtimeRewards = { enabled = true, everyMinutes = 0, commands = {},
+            dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" }, dailyMessage = "Daily!" },
+        featureTips = { onJoin = false, announceEveryMinutes = 0 },
+    }]])
+    dofile(dir .. "/Scripts/main.lua")
+    local ivy = Player("Ivy")
+    function ivy:GetCurrencyBalanceText() return { ToString = function() return tostring(balance) end } end
+    login("76561198000000050", "Ivy")
+    players = { ivy }
+end
+
+-- The helper works (here only with the "#"): found by a 1-coin round trip, then used.
+helperForm = "#"
+startHelperRun()
+step(20)
+local helperLog = read(dir .. "/playertools.log")
+check("helper tested with a 1-coin round trip", helperSent[1] == "ChangeCurrencyBalance Normal 1 76561198000000050"
+    and helperSent[2] == "#ChangeCurrencyBalance Normal 1 76561198000000050")
+check("helper found to work", has(helperLog, "SCUM runs commands without an admin online."))
+check("test coin taken back, daily bonus paid without an admin", balance == 1200 and lastPrivate("Ivy") == "Daily!")
+
+-- The helper is ignored: rewards keep waiting for an admin.
+helperWorks, balance, helperSent, private = false, 1000, {}, {}
+startHelperRun()
+step(20)
+check("ignored helper reported", has(read(dir .. "/playertools.log"), "SCUM ignores commands sent without an admin online."))
+check("nothing paid when the helper is ignored", balance == 1000 and lastPrivate("Ivy") ~= "Daily!")
+local sentWhenIgnored = #helperSent
+step(10)
+check("helper not tried again once ignored", #helperSent == sentWhenIgnored)
+StaticFindObject, FindFirstOf = savedStatic, savedFirst
+players = {}
+
+-- The ready-made starter kit is used while no kit items are set.
+StaticFindObject, FindFirstOf = savedStatic, oldFindFirst
+function StaticFindObject(path) if path == "/Script/Engine.Default__GameplayStatics" then return statics end return nil end
+function FindFirstOf(className) if className == "World" then return world end return oldFindFirst(className) end
+write(dir .. "/players.tsv", "")
+write(dir .. "/config.lua", [[return {
+    itemRewards = { enabled = true },
+    newPlayers = { starterKit = true, starterKitCommands = {}, starterKitMessage = "Kit!" },
+    playtimeRewards = { enabled = false },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 },
+}]])
+dofile(dir .. "/Scripts/main.lua")
+login("76561198000000060", "Kim")
+players = { Player("Kim") }
+local spawnedBeforeKit = #spawned
+step(12)
+local kitLog = read(dir .. "/playertools.log")
+check("basic kit given while no items are set", #spawned == spawnedBeforeKit + 4 and spawned[spawnedBeforeKit + 1].class == waterClass
+    and lastPrivate("Kim") == "Kit!")
+check("basic kit asks for the rest of its items", has(kitLog, "Item Emergency_bandage has not been loaded")
+    and has(kitLog, "Item Improvised_Bag_Small_01 has not been loaded"))
+StaticFindObject, FindFirstOf = savedStatic, savedFirst
+players = {}
+
 -- ================================================================== death recap, hotspots, !seen, manhunt, king of the hill
 private, hud, adminCommands, kicks = {}, {}, {}, {}
 -- Bankers at the outposts: rows A..Z along +X, columns 0..4 along +Y (cell = 3048 m).
@@ -760,6 +836,26 @@ dofile(dir .. "/Scripts/main.lua")
 players = { Player("Solo") }
 step(2)
 check("sectors from destinations named after the outposts", countWorkedOut() == workedOutBefore + 1)
+players = {}
+
+-- ================================================================== daily backups of players.tsv
+local function backupName(time) return dir .. "/players.backup-" .. os.date("!%Y-%m-%d", time) .. ".tsv" end
+local function exists(path) local f = io.open(path) if f then f:close() return true end return false end
+write(dir .. "/config.lua", "return {}")
+write(dir .. "/players.tsv", "76561198000000070\tZed\t1\t0\t0\t0\t\t1\n")
+os.remove(backupName(clock))
+dofile(dir .. "/Scripts/main.lua")
+login("76561198000000070", "Zed")
+players = { Player("Zed") }
+step(61)
+check("backup taken on the first save of the day", has(read(backupName(clock)), "76561198000000070\tZed"))
+local firstDay = clock
+for _ = 1, 8 do
+    clock = clock + 86400
+    step(61)
+end
+check("one backup per day", exists(backupName(clock)) and exists(backupName(clock - 86400)))
+check("backups older than 7 days removed", not exists(backupName(firstDay)) and exists(backupName(firstDay + 2 * 86400)))
 players = {}
 
 os.execute("rm -rf '" .. tmp .. "'")
