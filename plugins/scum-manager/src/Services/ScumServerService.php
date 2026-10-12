@@ -920,6 +920,68 @@ class ScumServerService
         return OnlinePlayers::parse($ue4ss['installed'] ? $this->read($server, $ue4ss['mods'] . '/PlayerTools/online.tsv') : null, time());
     }
 
+    /** Where SCUM keeps its save database (relative to the server root). */
+    public const SAVE_DIR = 'SCUM/Saved/SaveFiles';
+
+    /**
+     * Copy SCUM's save database (SCUM.db, plus SCUM.db-wal with the newest changes when it
+     * exists) into a private temporary folder on the panel. Returns the copy's path; remove it
+     * with removeSaveDatabaseCopy(). The live file is only read.
+     */
+    public function copySaveDatabase(Server $server): string
+    {
+        $max = (int) config('scum-manager.save_db_max_mb', 2048) * 1024 * 1024;
+        $dir = sys_get_temp_dir() . '/exclsv-db-' . bin2hex(random_bytes(8));
+        if (!mkdir($dir, 0700)) {
+            throw new RuntimeException('Could not create a temporary folder for the save database.');
+        }
+
+        try {
+            foreach (['SCUM.db' => true, 'SCUM.db-wal' => false] as $file => $required) {
+                $target = "$dir/$file";
+                $response = $this->files($server)->getHttpClient()
+                    ->timeout(900)
+                    ->withOptions([
+                        'sink' => $target,
+                        'on_headers' => function ($response) use ($max, $file) {
+                            if ((int) $response->getHeaderLine('Content-Length') > $max) {
+                                throw new RuntimeException("$file is larger than the " . intdiv($max, 1024 * 1024) . ' MB limit (SCUM_MANAGER_SAVE_DB_MAX_MB).');
+                            }
+                        },
+                    ])
+                    ->get("/api/servers/$server->uuid/files/contents", ['file' => self::SAVE_DIR . "/$file"]);
+
+                if ($response->status() === 404 && !$required) {
+                    @unlink($target);
+                    continue;
+                }
+                if (!$response->successful()) {
+                    throw new RuntimeException($response->status() === 404
+                        ? 'SCUM.db was not found in ' . self::SAVE_DIR . '. Has the server been started at least once?'
+                        : "Could not read $file (HTTP {$response->status()}).");
+                }
+            }
+        } catch (\Throwable $exception) {
+            $this->removeSaveDatabaseCopy("$dir/SCUM.db");
+
+            throw $exception instanceof RuntimeException ? $exception : new RuntimeException('Could not copy SCUM.db: ' . $exception->getMessage(), 0, $exception);
+        }
+
+        return "$dir/SCUM.db";
+    }
+
+    public function removeSaveDatabaseCopy(string $path): void
+    {
+        $dir = dirname($path);
+        if (!str_starts_with(basename($dir), 'exclsv-db-')) {
+            return; // only ever remove our own temporary folders
+        }
+        foreach (glob("$dir/*") ?: [] as $file) {
+            @unlink($file);
+        }
+        @rmdir($dir);
+    }
+
     /** Everything known about every player, from all files that mention them (see PlayerDirectory). */
     public function playerDirectory(Server $server): array
     {

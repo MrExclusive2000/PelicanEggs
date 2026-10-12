@@ -541,5 +541,27 @@ check('lists: remove the last one empties the file', PlayerDirectory::setMembers
 check('lists: add to a new file uses Windows line endings', PlayerDirectory::setMembership(null, '76561198000000002', true), "76561198000000002\r\n");
 throws('lists: only SteamIDs', fn () => PlayerDirectory::setMembership('', '123', true), 'SteamID64');
 
+// ---------------------------------------------------------------- save database
+use MrExclusive\ScumManager\Support\SaveDatabase;
+$dbFile = sys_get_temp_dir() . '/exclsv-test-' . getmypid() . '.db';
+@unlink($dbFile);
+$pdo = new PDO('sqlite:' . $dbFile);
+$pdo->exec('CREATE TABLE user_profile (id INTEGER PRIMARY KEY, user_id TEXT, name TEXT, fame_points REAL)');
+$pdo->exec("INSERT INTO user_profile (user_id, name, fame_points) VALUES ('76561198000000001', 'Alice', 12.5), ('76561198000000002', 'Bob', 3)");
+$pdo->exec('CREATE TABLE "bank account" (account_id INTEGER, balance INTEGER)');
+$pdo = null;
+$schema = (new SaveDatabase($dbFile))->schema();
+check('db: tables, columns and row counts', [array_keys($schema), $schema['user_profile']['rows'], array_column($schema['user_profile']['columns'], 'name'), $schema['user_profile']['columns'][0]['pk']],
+    [['bank account', 'user_profile'], 2, ['id', 'user_id', 'name', 'fame_points'], true]);
+$schemaText = (new SaveDatabase($dbFile))->schemaReport('SCUM', '2026-10-13');
+check('db: report lists structure', str_contains($schemaText, "== user_profile (2 rows)\n   id INTEGER PRIMARY KEY\n   user_id TEXT") && str_contains($schemaText, '== bank account (0 rows)'), true);
+check('db: report holds no player data', !str_contains($schemaText, 'Alice') && !str_contains($schemaText, '76561198000000001'), true);
+$before = md5_file($dbFile);
+try { (new SaveDatabase($dbFile))->schema(); } catch (Throwable) {}
+check('db: opened read-only, file unchanged', md5_file($dbFile), $before);
+file_put_contents($dbFile, 'not a database');
+throws('db: refuses a broken copy', fn () => new SaveDatabase($dbFile), 'not an SQLite database');
+@unlink($dbFile);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

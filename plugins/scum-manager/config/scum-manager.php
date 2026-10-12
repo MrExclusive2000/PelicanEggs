@@ -24,6 +24,9 @@ return [
     // fallback when this cannot be reached.
     'mods_source' => env('SCUM_MANAGER_MODS_SOURCE', 'https://raw.githubusercontent.com/MrExclusive2000/PelicanEggs/HEAD/mods/dist'),
 
+    // Largest SCUM.db the panel copies to read balances and inventories (MB).
+    'save_db_max_mb' => (int) env('SCUM_MANAGER_SAVE_DB_MAX_MB', 2048),
+
     // Limits for uploaded mod archives.
     'mod_upload_max_kb' => (int) env('SCUM_MANAGER_MOD_UPLOAD_MAX_KB', 51200),
     'mod_max_extracted_bytes' => 200 * 1024 * 1024,

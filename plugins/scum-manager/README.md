@@ -43,6 +43,8 @@ One table with every player, combining what every file knows about them:
 
 Search by name or SteamID and sort by kills, deaths, playtime or kicks. Each player has **Run a command** (the same commands as Manage a player; offline players get the SteamID ones) and a **Lists** menu: **Ban** works while the server runs (added to `BannedUsers.ini` and kicked, as the anti-cheat does); unban, admin, whitelist and silence need the server stopped, because SCUM rewrites those files while it runs. The raw files stay editable on **Player lists**.
 
+**Scan save database** copies SCUM's save database (`SCUM/Saved/SaveFiles/SCUM.db`, SQLite, plus `SCUM.db-wal`) to a private temporary folder on the panel, lists its tables, columns and row counts, deletes the copy and downloads the list. The list has no player data. It is the first step towards showing money, fame and inventories here. `SCUM_MANAGER_SAVE_DB_MAX_MB` (default 2048) limits the size copied.
+
 ## SCUM Settings
 
 - **Built from your own file:** the form is built from whatever keys are in your server's `ServerSettings.ini`, so settings added by monthly SCUM updates appear without updating the plugin.
