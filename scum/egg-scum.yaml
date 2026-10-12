@@ -22,7 +22,7 @@ docker_images:
   'Wine Latest': 'ghcr.io/pelican-eggs/yolks:wine_latest'
 file_denylist: {  }
 startup_commands:
-  Default: 'wine ./SCUM/Binaries/Win64/SCUMServer.exe -log -port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -MaxPlayers={{MAX_PLAYERS}} {{ADDITIONAL_ARGS}} & SCUM_PID=$!; trap ''kill -INT $SCUM_PID'' INT TERM; CMD_DIR=./SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole; tail -q -c0 -F ./SCUM/Saved/Logs/SCUM.log $CMD_DIR/console.log --pid=$SCUM_PID 2>/dev/null & while kill -0 $SCUM_PID 2>/dev/null; do read -r -t 1 CMD; RC=$?; if [ $RC -eq 0 ] && [ -n "$CMD" ]; then if [ -d $CMD_DIR ]; then printf ''%s\n'' "$CMD" >> $CMD_DIR/commands.txt; else echo "Console commands need the PelicanConsole mod (SCUM Manager > Mods)."; fi; elif [ $RC -eq 1 ]; then sleep 1; fi; done; wait $SCUM_PID'
+  Default: 'cp -f ./SCUM/Binaries/Win64/ue4ss/UE4SS.log ./SCUM/Binaries/Win64/ue4ss/UE4SS.previous.log 2>/dev/null; wine ./SCUM/Binaries/Win64/SCUMServer.exe -log -port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -MaxPlayers={{MAX_PLAYERS}} {{ADDITIONAL_ARGS}} & SCUM_PID=$!; trap ''kill -INT $SCUM_PID'' INT TERM; CMD_DIR=./SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole; tail -q -c0 -F ./SCUM/Saved/Logs/SCUM.log $CMD_DIR/console.log --pid=$SCUM_PID 2>/dev/null & while kill -0 $SCUM_PID 2>/dev/null; do read -r -t 1 CMD; RC=$?; if [ $RC -eq 0 ] && [ -n "$CMD" ]; then if [ -d $CMD_DIR ]; then printf ''%s\n'' "$CMD" >> $CMD_DIR/commands.txt; else echo "Console commands need the PelicanConsole mod (SCUM Manager > Mods)."; fi; elif [ $RC -eq 1 ]; then sleep 1; fi; done; wait $SCUM_PID'
 config:
   files:
     SCUM/Saved/Config/WindowsServer/ServerSettings.ini:
