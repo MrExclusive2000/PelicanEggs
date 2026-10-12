@@ -2034,6 +2034,46 @@ end
 local lastTick = nil
 local lastTopAnnouncement = nil
 
+-- Who is online and where, for the panel's Overview page. Rewritten every 15 seconds:
+--   # updated <unix time>
+--   steamId <tab> name <tab> x <tab> y <tab> z <tab> place <tab> vehicle <tab> admin <tab> online seconds
+-- x/y/z are centimetres (empty when unknown); vehicle and admin are 1 or 0.
+local ONLINE_FILE = DIR .. "/online.tsv"
+local ONLINE_EVERY = 15
+local lastOnlineWrite = 0
+
+local function cell(value)
+    return (string.gsub(tostring(value or ""), "[\t\r\n]", " "))
+end
+
+local function writeOnline(time)
+    if time - lastOnlineWrite < ONLINE_EVERY then return end
+    lastOnlineWrite = time
+    local lines = { "# updated " .. string.format("%d", time) }
+    for _, session in pairs(sessions) do
+        -- The pawn is the character, or the vehicle while driving; read now, not kept.
+        local pawn = safe(function() return session.controller:K2_GetPawn() end)
+        local position = isValid(pawn) and location(pawn) or nil
+        local vehicle = position ~= nil and characterOf(session.controller) == nil
+        local fields = {
+            session.steamId or "", session.name or "?",
+            position and string.format("%.0f", position.x) or "",
+            position and string.format("%.0f", position.y) or "",
+            position and string.format("%.0f", position.z) or "",
+            position and (describePlace(position) or "") or "",
+            vehicle and "1" or "0",
+            isAdmin(session.controller) and "1" or "0",
+            string.format("%d", math.max(0, time - (session.since or time))),
+        }
+        for index, value in ipairs(fields) do fields[index] = cell(value) end
+        lines[#lines + 1] = table.concat(fields, "\t")
+    end
+    local file = io.open(ONLINE_FILE, "w")
+    if not file then return end
+    file:write(table.concat(lines, "\n") .. "\n")
+    file:close()
+end
+
 local function tick()
     local time = os.time()
     local elapsed = lastTick and math.max(0, math.min(time - lastTick, 10)) or 0
@@ -2047,7 +2087,7 @@ local function tick()
         local session = sessions[key]
         local name = playerName(controller)
         if session == nil and name ~= nil then
-            session = { controller = controller, name = name }
+            session = { controller = controller, name = name, since = time }
             sessions[key] = session
         end
         if session ~= nil then
@@ -2065,6 +2105,9 @@ local function tick()
     for key in pairs(sessions) do
         if not seen[key] then sessions[key] = nil end
     end
+
+    local wrote, writeError = pcall(writeOnline, time)
+    if not wrote then output("Writing online.tsv failed: " .. tostring(writeError)) end
 
     local tested, testError = pcall(noAdminTick, time)
     if not tested then output("Checking for commands without an admin failed: " .. tostring(testError)) end

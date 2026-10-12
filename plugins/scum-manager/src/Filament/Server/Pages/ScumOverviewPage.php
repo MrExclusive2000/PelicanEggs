@@ -10,16 +10,23 @@ use App\Traits\Filament\BlockAccessInConflict;
 use Exception;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\HtmlString;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Services\ScumServerService;
+use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\Brand;
+use MrExclusive\ScumManager\Support\ItemSelect;
+use MrExclusive\ScumManager\Support\OnlinePlayers;
 use MrExclusive\ScumManager\Support\Overview;
 
 /**
@@ -78,6 +85,17 @@ class ScumOverviewPage extends Page
 
     #[Locked]
     public string $reports = '';
+
+    /** @var list<array{steamId: string, name: string, x: ?int, y: ?int, z: ?int, place: string, vehicle: bool, admin: bool, seconds: int}> */
+    #[Locked]
+    public array $online = [];
+
+    /** When PlayerTools last wrote the online list (null: never). */
+    #[Locked]
+    public ?int $onlineUpdated = null;
+
+    #[Locked]
+    public bool $consoleInstalled = false;
 
     /** @var array{name: string, modified: string, count: int}|null */
     #[Locked]
@@ -148,6 +166,7 @@ class ScumOverviewPage extends Page
             $this->mods[] = ['name' => $mod, 'label' => $label, 'color' => $color, 'build' => $build];
         }
 
+        $this->consoleInstalled = $present->has('PelicanConsole');
         $this->logDir = $ue4ss['installed'] ? $ue4ss['root'] : null;
         $this->previousLog = $this->logDir === null ? '' : $service->tailOf($server, $this->logDir . '/UE4SS.previous.log', 40);
         $this->crashLines = Overview::crashLines($this->previousLog);
@@ -168,6 +187,9 @@ class ScumOverviewPage extends Page
                 ? Overview::antiCheatEvents($service->tailOf($server, $ue4ss['mods'] . '/ScumAntiCheat/anticheat.log', 400))
                 : [];
             $this->reports = $service->playerReports($server, 10);
+            $online = $service->onlinePlayers($server);
+            $this->online = $online['players'];
+            $this->onlineUpdated = $online['updated'];
             $this->serverState = $service->powerState($server)->value;
         } catch (Exception) {
             // Files briefly out of reach (e.g. restarting): keep what is shown.
@@ -217,11 +239,19 @@ class ScumOverviewPage extends Page
                     ))
                     ->columns(2),
             ]),
+            Section::make('Online players')
+                ->icon('tabler-users')
+                ->description(fn () => $this->onlineSummary())
+                ->extraAttributes(['wire:poll.15s' => 'loadLive'])
+                ->schema([
+                    TextEntry::make('online_players')
+                        ->hiddenLabel()
+                        ->state(fn () => new HtmlString($this->onlineTable())),
+                ]),
             Grid::make(['default' => 1, 'lg' => 2])->schema([
                 Section::make('Anti-cheat flags')
                     ->icon('tabler-shield-exclamation')
                     ->description('Strikes, kicks, bans and spectate flags from ' . Brand::mod('ScumAntiCheat') . ', newest first. Updates every 15 seconds.')
-                    ->extraAttributes(['wire:poll.15s' => 'loadLive'])
                     ->schema([$this->logEntry('flags', fn () => implode("\n", $this->flags), 'Nothing flagged.')]),
                 Section::make('Player reports')
                     ->icon('tabler-message-report')
@@ -238,6 +268,119 @@ class ScumOverviewPage extends Page
                     $this->logEntry('previous_log', fn () => $this->previousLog, 'No previous UE4SS log yet (it is kept from the next restart on).'),
                 ]),
         ]);
+    }
+
+    private function onlineSummary(): string
+    {
+        if ($this->onlineUpdated === null) {
+            return Brand::mod('PlayerTools') . ' has not written the online list yet (it does every 15 seconds while the server runs). Update our mods if this stays empty.';
+        }
+        if ($this->online === [] && time() - $this->onlineUpdated > OnlinePlayers::FRESH_SECONDS) {
+            return 'Not current: last updated ' . OnlinePlayers::duration(time() - $this->onlineUpdated) . ' ago (server stopped or restarting).';
+        }
+
+        return count($this->online) . ' online. Updates every 15 seconds. Use "Manage a player" above for items, money, teleports, kicks and bans.';
+    }
+
+    private function onlineTable(): string
+    {
+        if ($this->online === []) {
+            return '<p style="opacity: .7; font-size: .875rem;">Nobody online.</p>';
+        }
+
+        $cell = 'style="padding: .35rem .75rem .35rem 0; text-align: left; vertical-align: top;"';
+        $rows = '';
+        foreach ($this->online as $player) {
+            $tags = trim(($player['admin'] ? 'admin ' : '') . ($player['vehicle'] ? 'in a vehicle' : ''));
+            $rows .= '<tr style="border-top: 1px solid rgba(127,127,127,.2);">'
+                . "<td $cell><strong>" . e($player['name']) . '</strong>' . ($tags !== '' ? ' <span style="opacity: .7;">(' . e($tags) . ')</span>' : '') . '</td>'
+                . "<td $cell><code style=\"font-size: .75rem;\">" . e($player['steamId'] ?: 'unknown') . '</code></td>'
+                . "<td $cell>" . e(OnlinePlayers::where($player)) . '</td>'
+                . "<td $cell>" . e(OnlinePlayers::duration($player['seconds'])) . '</td>'
+                . '</tr>';
+        }
+
+        return '<div style="overflow-x: auto;"><table style="width: 100%; font-size: .875rem; border-collapse: collapse;">'
+            . "<thead><tr><th $cell>Player</th><th $cell>SteamID</th><th $cell>Where</th><th $cell>Online for</th></tr></thead>"
+            . "<tbody>$rows</tbody></table></div>";
+    }
+
+    /** Commands offered by "Manage a player"; each is an AdminCommands command. */
+    private const PLAYER_ACTIONS = ['whereis', 'balance', 'giveitem', 'money', 'fame', 'teleportplayer', 'teleporttome', 'teleportto', 'kick', 'ban'];
+
+    /** @return array<string, string> "steamId|name" => label */
+    private function playerOptions(): array
+    {
+        $options = [];
+        foreach ($this->online as $player) {
+            $options[$player['steamId'] . '|' . $player['name']] = $player['name'] . ($player['steamId'] !== '' ? " ({$player['steamId']})" : '');
+        }
+
+        return $options;
+    }
+
+    /** @return list<\Filament\Schemas\Components\Component> */
+    private function manageForm(): array
+    {
+        $actions = [];
+        foreach (self::PLAYER_ACTIONS as $key) {
+            $command = AdminCommands::COMMANDS[$key];
+            $actions[$key] = $command['label'] . ($command['anytime'] === false ? ' (needs an admin in game)' : '');
+        }
+        $is = fn (string ...$keys) => fn (Get $get) => in_array($get('action'), $keys, true);
+
+        return [
+            Select::make('player')->label('Player')->options(fn () => $this->playerOptions())->searchable()->required(),
+            Select::make('action')->label('Do')->options($actions)->required()->live(),
+            Text::make(fn (Get $get) => AdminCommands::COMMANDS[$get('action')]['help'] ?? '')->color('gray'),
+            ItemSelect::make('item', 'Item', fn () => app(ScumServerService::class)->itemCatalog($this->getServer()))
+                ->visible($is('giveitem'))->required($is('giveitem')),
+            TextInput::make('amount')->label('Amount')->integer()->minValue(1)->maxValue(10)->default(1)
+                ->visible($is('giveitem'))->required($is('giveitem')),
+            TextInput::make('money')->label('Amount (negative takes money)')->integer()->minValue(-1000000)->maxValue(1000000)
+                ->visible($is('money'))->required($is('money')),
+            TextInput::make('fame')->label('Fame points')->integer()->minValue(0)->maxValue(100000)
+                ->visible($is('fame'))->required($is('fame')),
+            Grid::make(3)->visible($is('teleportplayer'))->schema([
+                TextInput::make('x')->label('X')->integer()->required($is('teleportplayer')),
+                TextInput::make('y')->label('Y')->integer()->required($is('teleportplayer')),
+                TextInput::make('z')->label('Z')->integer()->required($is('teleportplayer')),
+            ]),
+        ];
+    }
+
+    /** Runs the picked command and shows what the console mod answered. */
+    private function managePlayer(array $data, ScumServerService $service): void
+    {
+        [$steamId, $name] = array_pad(explode('|', (string) ($data['player'] ?? ''), 2), 2, '');
+        $key = (string) ($data['action'] ?? '');
+        abort_unless(in_array($key, self::PLAYER_ACTIONS, true), 422);
+
+        $values = [];
+        foreach (['name' => $name, 'steamId' => $steamId, 'item' => $data['item'] ?? '', 'amount' => $key === 'money' ? ($data['money'] ?? '') : ($key === 'fame' ? ($data['fame'] ?? '') : ($data['amount'] ?? '')),
+            'x' => $data['x'] ?? '', 'y' => $data['y'] ?? '', 'z' => $data['z'] ?? ''] as $field => $value) {
+            $values[AdminCommands::fieldName($key, $field)] = (string) $value;
+        }
+
+        try {
+            if ($steamId === '' && array_key_exists('steamId', AdminCommands::COMMANDS[$key]['fields'])) {
+                throw new \RuntimeException("$name's SteamID is not known yet, so this command cannot be used for them.");
+            }
+            $line = AdminCommands::build($key, $values);
+            $until = '/' . preg_quote($name, '/') . '|' . preg_quote($steamId ?: $name, '/') . '|No online player|Usage:|failed|no admin/i';
+            $answer = trim(preg_replace('/^\S+ \[[^\]]+\] /m', '', $service->runConsoleCommandAndRead($this->getServer(), $line, $until, 6)));
+
+            Notification::make()
+                ->title($line)
+                ->body($answer !== '' ? $answer : 'Sent. No answer yet: see the Console page.')
+                ->status(preg_match('/failed|No online player|no admin|Usage:/i', $answer) ? 'warning' : 'success')
+                ->persistent()
+                ->send();
+        } catch (Exception $exception) {
+            Notification::make()->title('Could not run that')->body($exception->getMessage())->danger()->send();
+        }
+
+        $this->loadLive();
     }
 
     private function crashSummary(): string
@@ -302,6 +445,17 @@ class ScumOverviewPage extends Page
                         Notification::make()->title('Could not start')->body($exception->getMessage())->danger()->send();
                     }
                 }),
+            Action::make('manage')
+                ->label('Manage a player')
+                ->icon('tabler-user-cog')
+                ->visible(fn () => $this->consoleInstalled && $this->online !== [])
+                ->authorize(fn () => user()?->can(SubuserPermission::ControlConsole, $server)
+                    && user()?->can(SubuserPermission::FileUpdate, $server))
+                ->modalHeading('Manage a player')
+                ->modalDescription('Runs through the ' . Brand::mod('PelicanConsole') . ' mod; the answer is shown when it arrives.')
+                ->modalSubmitActionLabel('Run')
+                ->schema(fn () => $this->manageForm())
+                ->action(fn (array $data, ScumServerService $service) => $this->managePlayer($data, $service)),
             Action::make('mods')
                 ->label('Update mods')
                 ->icon('tabler-package')

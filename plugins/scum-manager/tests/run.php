@@ -491,5 +491,26 @@ check('overview: mod states', [
     Overview::modStatus(true, true, null, 'def456')[0],
 ], ['Not installed', 'Disabled', 'Up to date', 'Update available', 'Installed']);
 
+// ---------------------------------------------------------------- online players
+use MrExclusive\ScumManager\Support\OnlinePlayers;
+$tsv = "# updated 1000\n76561198000000001\tAlice\t123400\t-56700\t8900\tin sector B2\t0\t0\t4000\n"
+    . "76561198000000002\tbob\t500000\t600000\t1000\t\t1\t1\t75\n"
+    . "\tNewbie\t\t\t\t\t0\t0\t5\n"
+    . "garbage line\n";
+$online = OnlinePlayers::parse($tsv, 1030);
+check('online: three players, sorted by name', array_column($online['players'], 'name'), ['Alice', 'bob', 'Newbie']);
+check('online: fields read', $online['players'][1], ['steamId' => '76561198000000002', 'name' => 'bob', 'x' => 500000, 'y' => 600000, 'z' => 1000, 'place' => '', 'vehicle' => true, 'admin' => true, 'seconds' => 75]);
+check('online: fresh within a minute', [$online['fresh'], $online['updated']], [true, 1000]);
+check('online: stale list shows nobody', OnlinePlayers::parse($tsv, 1000 + OnlinePlayers::FRESH_SECONDS + 1)['players'], []);
+check('online: missing file', OnlinePlayers::parse(null, 1000), ['updated' => null, 'fresh' => false, 'players' => []]);
+check('online: where', [OnlinePlayers::where($online['players'][0]), OnlinePlayers::where($online['players'][1]), OnlinePlayers::where($online['players'][2])],
+    ['in sector B2 (X=123400 Y=-56700 Z=8900)', 'X=500000 Y=600000 Z=1000', 'unknown (not spawned)']);
+check('online: durations', [OnlinePlayers::duration(40), OnlinePlayers::duration(720), OnlinePlayers::duration(7500)], ['40 s', '12 min', '2 h 05 min']);
+check('online: player actions build commands', [
+    AdminCommands::build('giveitem', ['giveitem__name' => 'Alice', 'giveitem__item' => 'Water_05l', 'giveitem__amount' => '2']),
+    AdminCommands::build('money', ['money__steamId' => '76561198000000001', 'money__amount' => '-500']),
+    AdminCommands::build('teleportplayer', ['teleportplayer__name' => 'Alice', 'teleportplayer__x' => '1', 'teleportplayer__y' => '2', 'teleportplayer__z' => '3']),
+], ['GiveItem Alice Water_05l 2', 'ChangeCurrencyBalance Normal -500 76561198000000001', 'TeleportPlayer Alice 1 2 3']);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

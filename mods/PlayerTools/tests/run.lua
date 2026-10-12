@@ -326,6 +326,24 @@ check("moving and turning players not kicked", #kicks == 1)
 check("admins not kicked", lastPrivate("Bob") == "")
 check("AFK kick logged", has(read(dir .. "/playertools.log"), "Kicked Carol for being AFK."))
 
+-- ------------------------------------------------------------------ online.tsv for the panel
+alice.pawn.x, alice.pawn.y, alice.pawn.z = 1234, -567, 89
+local car = object({})
+function car:GetClass() return { GetFName = function() return { ToString = function() return "BPC_Dirtbike_C" end } end } end
+function car:K2_GetActorLocation() return { X = 500000, Y = 600000, Z = 1000 } end
+local bobPawn = bob.pawn
+bob.pawn = car
+step(16)
+local online = read(dir .. "/online.tsv")
+local stamped = tonumber(string.match(online, "^# updated (%d+)\n"))
+check("online.tsv stamped within the last 15 s", stamped ~= nil and stamped <= clock and stamped > clock - 15)
+check("online.tsv: player, SteamID and position", has(online, "76561198000000001\tAlice\t123400\t-56700\t8900\t"))
+check("online.tsv: driving player marked, admin marked", string.match(online, "\tBob\t500000\t600000\t1000\t[^\t]*\t1\t1\t%d+\n") ~= nil)
+check("online.tsv: one line per online player", select(2, string.gsub(online, "\n", "")) == 1 + #players)
+local aliceSeconds = tonumber(string.match(online, "\tAlice\t[^\n]*\t0\t0\t(%d+)\n"))
+check("online.tsv: time online counted", aliceSeconds and aliceSeconds > 60)
+bob.pawn = bobPawn
+
 -- ------------------------------------------------------------------ saving, playtime and reload
 step(60)
 local saved = read(dir .. "/players.tsv")

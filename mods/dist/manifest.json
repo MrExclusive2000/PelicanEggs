@@ -1,9 +1,9 @@
 {
   "format": "exclsv-mods",
-  "manager": "1.16.0",
+  "manager": "1.17.0",
   "mods": {
     "PelicanConsole": { "file": "PelicanConsole.zip", "build": "917afe2c02e2", "sha256": "ee7bbb3b033abcd3ea1c0dba70c40861229b9b90ccec31cc6faa544e7a06dafd", "bytes": 12913 },
-    "PlayerTools": { "file": "PlayerTools.zip", "build": "e383f4863a33", "sha256": "ea853fc1fa154cb012340e75b8a5918e8de2e7b9b7fa29c3be2b5a42b8bd2313", "bytes": 32171 },
+    "PlayerTools": { "file": "PlayerTools.zip", "build": "71f9cf4ef885", "sha256": "869be8a72bc957b04d8f7539acb08712b50716a90585f67eec62aaf225161990", "bytes": 32798 },
     "ScumAntiCheat": { "file": "ScumAntiCheat.zip", "build": "34231cb4cd48", "sha256": "01e7ab11b6417613caa34a2f0f91de403238b67f491e5a9847af8e0ac0963800", "bytes": 19060 },
     "ScumCommandProbe": { "file": "ScumCommandProbe.zip", "build": "40f7714f7d24", "sha256": "3604a4f40ace77aad21087b971b12a4ac2d4ef782533f505d63df525b9cc95c7", "bytes": 9127 },
     "ServerMessages": { "file": "ServerMessages.zip", "build": "c37c6db2ae84", "sha256": "83558f7b43ee82e094f703702eee18eb645129a1be96d3c33414111656ab6bfb", "bytes": 5265 }

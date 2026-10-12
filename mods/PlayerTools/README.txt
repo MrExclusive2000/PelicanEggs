@@ -67,6 +67,8 @@ Good to know:
    water, tuna, beans, 2 apples, 3 bandages, a knife and a small backpack. Items need "Give
    items" on, and an item type is only given once SCUM has loaded it on the server (the log
    names any that were skipped: spawn one with SpawnItem as an admin).
+ - online.tsv lists who is online, where and for how long, rewritten every 15 seconds. The
+   panel's ExclsvSCUM Overview page shows it.
  - players.tsv is copied once a day to players.backup-<date>.tsv; the last 7 are kept. To
    restore, stop the server and copy a backup over players.tsv.
  - Starter kit commands are SCUM admin commands without the "#", with {steamId} and {name}

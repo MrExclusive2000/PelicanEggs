@@ -18,6 +18,7 @@ use MrExclusive\ScumManager\Support\TeleportDestinations;
 use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
 use MrExclusive\ScumManager\Support\ModManifest;
+use MrExclusive\ScumManager\Support\OnlinePlayers;
 use Throwable;
 use MrExclusive\ScumManager\Support\Ue4ssSettings;
 use RuntimeException;
@@ -908,6 +909,14 @@ class ScumServerService
         return cache()->remember("scum-manager.items.$server->uuid", 120, fn () => AdminCommands::itemCatalog(
             $this->read($server, $ue4ss['mods'] . '/PelicanConsole/items.txt'),
         ));
+    }
+
+    /** Who is online and where, from PlayerTools' online.tsv (empty when it is not current). */
+    public function onlinePlayers(Server $server): array
+    {
+        $ue4ss = $this->ue4ss($server);
+
+        return OnlinePlayers::parse($ue4ss['installed'] ? $this->read($server, $ue4ss['mods'] . '/PlayerTools/online.tsv') : null, time());
     }
 
     /** The newest player reports from PlayerTools' reports.log, newest first. */

@@ -26,6 +26,7 @@ The first page in the **ExclsvSCUM** menu shows what needs attention on one scre
 
 - **Server:** status, UE4SS, how many players have joined, and the panel version (with a notice when a newer one is published).
 - **Our mods:** each mod's state compared with the latest build on GitHub (up to date, update available, disabled, not installed).
+- **Online players:** who is on, where (map sector and coordinates), whether they are driving or an admin, and how long they have been on, refreshed every 15 seconds from PlayerTools' `online.tsv`. **Manage a player** runs the common commands on one of them (where is, money and fame check, give item, give/take money, set fame, teleport, bring/go to, kick, ban) and shows the answer.
 - **Anti-cheat flags:** strikes, kicks, bans and spectate flags, newest first, refreshed every 15 seconds. Start-up and reload messages are left out.
 - **Player reports:** the newest `!report` messages.
 - **Last session:** the end of `UE4SS.previous.log` (the egg keeps the log from before each restart), with crash lines picked out, and SCUM's newest crash report folder.
