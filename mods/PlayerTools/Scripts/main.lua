@@ -1803,7 +1803,17 @@ local function handleChat(chat, time)
             end
             if entry == nil then return tell(session, "No stats for " .. rest .. ".") end
         end
-        tell(session, entry and statsLines(entry) or "No stats yet.")
+        local lines = entry and statsLines(entry) or { "No stats yet." }
+        if type(lines) == "string" then lines = { lines } end
+        -- Your own stats also say when the next playtime reward is due.
+        local rewards = config.playtimeRewards
+        local every = (tonumber(rewards.everyMinutes) or 0) * 60
+        if rest == "" and entry and rewards.enabled and every > 0 and #(rewards.commands or {}) > 0 then
+            local left = every - (entry.playtime - (entry.rewarded or 0))
+            lines[#lines + 1] = left > 0 and string.format("Next playtime reward in %d min.", math.ceil(left / 60))
+                or "Playtime reward due now (needs an admin online)."
+        end
+        tell(session, lines)
     elseif word == "top" and config.stats.enabled then
         tell(session, topLines())
     elseif word == "vote" and config.voting.enabled then
@@ -1936,18 +1946,39 @@ local function rewardCheck(session, time)
         local itemsOn = config.itemRewards.enabled
         local hasDaily = rewards.dailyEnabled ~= false
             and (#(rewards.dailyCommands or {}) > 0 or (itemsOn and #(rewards.dailyItems or {}) > 0))
-        if hasDaily and entry.daily ~= today(time) and giveReward(session, rewards.dailyCommands, rewards.dailyItems, values) then
-            entry.daily = today(time)
-            recordsDirty = true
-            if (rewards.dailyMessage or "") ~= "" then tell(session, fill(rewards.dailyMessage, values)) end
+        -- Logged when paid, and once per reason while a reward waits, so it can be followed.
+        local function waiting(kind, why)
+            local key = kind .. ":" .. tostring(why)
+            if session.rewardWait ~= key then
+                session.rewardWait = key
+                output(string.format("%s for %s is waiting: %s.", kind, session.name, tostring(why)))
+            end
+        end
+        if hasDaily and entry.daily ~= today(time) then
+            local paid, why = giveReward(session, rewards.dailyCommands, rewards.dailyItems, values)
+            if paid then
+                entry.daily = today(time)
+                recordsDirty = true
+                session.rewardWait = nil
+                output("Paid the daily bonus to " .. session.name .. ".")
+                if (rewards.dailyMessage or "") ~= "" then tell(session, fill(rewards.dailyMessage, values)) end
+            else
+                waiting("Daily bonus", why)
+            end
         end
         local every = (tonumber(rewards.everyMinutes) or 0) * 60
         local hasReward = #(rewards.commands or {}) > 0 or (itemsOn and #(rewards.items or {}) > 0)
-        if every > 0 and hasReward and entry.playtime - (entry.rewarded or 0) >= every
-            and giveReward(session, rewards.commands, rewards.items, values) then
-            entry.rewarded = (entry.rewarded or 0) + every
-            recordsDirty = true
-            if (rewards.message or "") ~= "" then tell(session, fill(rewards.message, values)) end
+        if every > 0 and hasReward and entry.playtime - (entry.rewarded or 0) >= every then
+            local paid, why = giveReward(session, rewards.commands, rewards.items, values)
+            if paid then
+                entry.rewarded = (entry.rewarded or 0) + every
+                recordsDirty = true
+                session.rewardWait = nil
+                output(string.format("Paid the playtime reward to %s (%.0f min played in total).", session.name, entry.playtime / 60))
+                if (rewards.message or "") ~= "" then tell(session, fill(rewards.message, values)) end
+            else
+                waiting("Playtime reward", why)
+            end
         end
     end
 

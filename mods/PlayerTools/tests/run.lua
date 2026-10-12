@@ -404,6 +404,11 @@ local paysLater = 0
 for _, entry in ipairs(adminCommands) do if entry.command == "Pay 76561198000000010" then paysLater = paysLater + 1 end end
 check("reward once per interval", pays == 1 and paysLater == 1)
 check("daily bonus once a day", (function() local n = 0 for _, e in ipairs(adminCommands) do if e.command == "Daily 76561198000000010" then n = n + 1 end end return n end)() == 1)
+check("payments logged", has(read(dir .. "/playertools.log"), "Paid the playtime reward to Dave (")
+    and has(read(dir .. "/playertools.log"), "Paid the daily bonus to Dave."))
+chat("76561198000000010", "Dave", "!stats")
+step()
+check("own stats say when the next reward is due", has(lastPrivate("Dave"), "Next playtime reward in 1 min."))
 
 -- Kill streaks and the streak bounty.
 local killTime = 0
@@ -520,6 +525,8 @@ step()
 check("bounty needs an admin", lastPrivate("Dave") == "Bounties cannot be placed right now (no admin is online).")
 
 step(60)
+local _, waits = string.gsub(read(dir .. "/playertools.log"), "Playtime reward for Dave is waiting: no admin is online%.", "")
+check("waiting reward logged once", waits == 1)
 local saved = read(dir .. "/players.tsv")
 local fields = {}
 for field in string.gmatch(string.match(saved, "76561198000000010[^\n]*") .. "\t", "([^\t]*)\t") do fields[#fields + 1] = field end
