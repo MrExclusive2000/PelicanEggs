@@ -186,7 +186,7 @@ class ScumModsPage extends Page implements HasTable
                 ->visible(fn () => $this->ue4ss['installed'] ?? false)
                 ->authorize(fn () => user()?->can(SubuserPermission::FileCreate, $this->getServer()))
                 ->modalHeading('Upload a UE4SS mod')
-                ->modalDescription('Upload the mod\'s .zip as downloaded. Each folder in it that contains Scripts/main.lua or dlls/main.dll is installed and enabled. Uploading a mod that already exists updates its files.')
+                ->modalDescription('Upload the mod\'s .zip as downloaded. Each folder in it that contains Scripts/main.lua or dlls/main.dll is installed and enabled. Uploading a mod that already exists updates its files and keeps its settings (config.lua).')
                 ->schema([
                     FileUpload::make('archive')
                         ->label('Mod archive (.zip)')
@@ -202,7 +202,8 @@ class ScumModsPage extends Page implements HasTable
                     $file = $data['archive'];
 
                     try {
-                        $installed = $service->installModArchive($this->getServer(), $file->getRealPath(), $file->getClientOriginalName());
+                        // An update must not reset the mod's settings: an existing config.lua is kept.
+                        $installed = $service->installModArchive($this->getServer(), $file->getRealPath(), $file->getClientOriginalName(), keepSettings: true);
 
                         Notification::make()
                             ->title('Installed ' . implode(', ', $installed))
