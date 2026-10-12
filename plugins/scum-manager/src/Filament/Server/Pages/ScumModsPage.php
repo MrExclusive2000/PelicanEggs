@@ -38,7 +38,13 @@ class ScumModsPage extends Page implements HasTable
 
     protected static ?int $navigationSort = 33;
 
-    protected static ?string $navigationLabel = Brand::PAGE_MODS;
+    protected static ?string $navigationLabel = 'Mods';
+
+    /** Grouped in the sidebar under the brand (a method, so it fits every Filament version). */
+    public static function getNavigationGroup(): ?string
+    {
+        return Brand::NAV_GROUP;
+    }
 
     protected static ?string $title = Brand::PAGE_MODS;
 

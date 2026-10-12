@@ -42,7 +42,13 @@ class ScumModSettingsPage extends ServerFormPage
 
     protected static ?int $navigationSort = 34;
 
-    protected static ?string $navigationLabel = Brand::PAGE_MOD_SETTINGS;
+    protected static ?string $navigationLabel = 'Mod settings';
+
+    /** Grouped in the sidebar under the brand (a method, so it fits every Filament version). */
+    public static function getNavigationGroup(): ?string
+    {
+        return Brand::NAV_GROUP;
+    }
 
     protected static ?string $title = Brand::PAGE_MOD_SETTINGS;
 
@@ -57,6 +63,10 @@ class ScumModSettingsPage extends ServerFormPage
     /** @var list<string> our mods that are installed on this server */
     #[Locked]
     public array $installed = [];
+
+    /** @var list<string> fields of section switches that were off when loaded (those sections start collapsed) */
+    #[Locked]
+    public array $switchedOff = [];
 
     public static function canAccess(): bool
     {
@@ -97,6 +107,7 @@ class ScumModSettingsPage extends ServerFormPage
             $state += ModSettings::toState($mod, $config);
         }
 
+        $this->switchedOff = array_keys(array_filter($state, fn ($value) => $value === false));
         $this->form->fill($state);
     }
 
@@ -119,23 +130,45 @@ class ScumModSettingsPage extends ServerFormPage
                 $components[] = Text::make('Could not read config.lua (' . $this->problems[$mod] . '). Saving writes a fresh config.lua from the values below.')->color('danger');
             }
 
-            foreach ($definition['sections'] as $title => $section) {
-                $components[] = Section::make($title)
-                    ->description($section['description'])
-                    ->collapsible()
-                    ->schema([
-                        Grid::make(['default' => 1, 'lg' => 2])->schema(array_map(
-                            fn (string $path, array $field) => $this->field($mod, $path, $field),
-                            array_keys($section['fields']),
-                            $section['fields'],
-                        )),
-                    ]);
+            // Themed sub-tabs; a switched-off section starts collapsed.
+            $groups = ModSettings::groups($mod);
+            $subTabs = [];
+            foreach ($groups as $group => $titles) {
+                $sections = [];
+                foreach ($titles as $title) {
+                    $sections[] = $this->section($mod, $title, $definition['sections'][$title]);
+                }
+                $subTabs[] = Tab::make($group)->schema($sections);
             }
+            $components[] = count($subTabs) === 1
+                ? Grid::make(1)->schema($subTabs[0]->getChildComponents())
+                : Tabs::make($mod . '_groups')->tabs($subTabs)->contained(false);
 
             $tabs[] = Tab::make($definition['label'])->schema($components);
         }
 
         return parent::form($schema)->components([Tabs::make('mods')->tabs($tabs)->persistTabInQueryString()]);
+    }
+
+    /** @param array<mixed> $section */
+    private function section(string $mod, string $title, array $section): Section
+    {
+        $switch = ModSettings::sectionSwitch($section);
+        $switchId = $switch === null ? null : ModSettings::fieldId($mod, $switch);
+        $experimental = str_contains(strtolower($title), 'experimental');
+
+        return Section::make($title)
+            ->description(($experimental ? 'Experimental: try it on yourself first. ' : '') . $section['description'])
+            ->icon($experimental ? 'tabler-flask' : null)
+            ->collapsible()
+            ->collapsed($switchId !== null && in_array($switchId, $this->switchedOff, true))
+            ->schema([
+                Grid::make(['default' => 1, 'lg' => 2])->schema(array_map(
+                    fn (string $path, array $field) => $this->field($mod, $path, $field),
+                    array_keys($section['fields']),
+                    $section['fields'],
+                )),
+            ]);
     }
 
     /** @param array<mixed> $field */

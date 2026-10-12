@@ -325,6 +325,62 @@ final class ModSettings
         ],
     ];
 
+    /**
+     * Themed sub-tabs on the settings page: tab => section titles. Mods not listed show their
+     * sections on one tab; a section not listed here lands on "Other".
+     */
+    public const GROUPS = [
+        'PlayerTools' => [
+            'Chat & info' => ['Chat commands', 'Welcome back', 'Info and reports', 'Feature tips'],
+            'Economy' => ['New players', 'Playtime rewards', 'Bounties', 'Item rewards (experimental)', 'Without an admin online (experimental)'],
+            'Teleports' => ['Teleports'],
+            'Events & PvP' => ['Kill feed', 'Stats', 'Kill streaks', 'Death recap and hotspots', 'Manhunt', 'King of the Hill', 'Voting'],
+            'Moderation' => ['AFK kicker'],
+        ],
+        'ScumAntiCheat' => [
+            'Action & players' => ['Action', 'Players'],
+            'Checks' => ['Checks'],
+            'Limits' => ['Movement limits', 'Aimbot'],
+        ],
+    ];
+
+    /** @return array<string, list<string>> tab => section titles, every section exactly once */
+    public static function groups(string $mod): array
+    {
+        $titles = array_keys(self::MODS[$mod]['sections'] ?? []);
+        if (!isset(self::GROUPS[$mod])) {
+            return ['Settings' => $titles];
+        }
+
+        $groups = [];
+        $placed = [];
+        foreach (self::GROUPS[$mod] as $tab => $sections) {
+            $present = array_values(array_intersect($sections, $titles));
+            if ($present !== []) {
+                $groups[$tab] = $present;
+                array_push($placed, ...$present);
+            }
+        }
+        $rest = array_values(array_diff($titles, $placed));
+        if ($rest !== []) {
+            $groups['Other'] = $rest;
+        }
+
+        return $groups;
+    }
+
+    /** The section's on/off switch ("x.enabled"), if it has one. */
+    public static function sectionSwitch(array $section): ?string
+    {
+        foreach ($section['fields'] as $path => $field) {
+            if ($field[0] === 'toggle' && (str_ends_with($path, '.enabled') || $path === 'enabled')) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
     /** @return array<string, array{0: string, 1: string, 2: mixed, options?: array<string, string>, columns?: array<int|string, string>, tuple?: bool}> */
     public static function fields(string $mod): array
     {

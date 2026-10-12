@@ -424,5 +424,18 @@ throws('bundle: server settings must be an ini', fn () => SettingsBundle::parse(
 throws('bundle: empty file refused', fn () => SettingsBundle::parse('{"format":"exclsv-settings","version":1,"mods":{}}'), 'contains no mods');
 throws('bundle: huge file refused', fn () => SettingsBundle::parse(str_repeat(' ', SettingsBundle::MAX_BYTES + 1)), 'too large');
 
+// ---------------------------------------------------------------- settings page layout
+foreach (array_keys(ModSettings::MODS) as $mod) {
+    $placed = array_merge(...array_values(ModSettings::groups($mod)));
+    $titles = array_keys(ModSettings::MODS[$mod]['sections']);
+    sort($placed);
+    sort($titles);
+    check("layout: $mod sub-tabs hold every section once", $placed, $titles);
+}
+check('layout: no PlayerTools section left in "Other"', array_key_exists('Other', ModSettings::groups('PlayerTools')), false);
+check('layout: no anti-cheat section left in "Other"', array_key_exists('Other', ModSettings::groups('ScumAntiCheat')), false);
+check('layout: section switch found', ModSettings::sectionSwitch(['fields' => ['a.price' => ['number', 'x', 1], 'a.enabled' => ['toggle', 'x', true]]]), 'a.enabled');
+check('layout: no switch, no collapse', ModSettings::sectionSwitch(['fields' => ['a.price' => ['number', 'x', 1]]]), null);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

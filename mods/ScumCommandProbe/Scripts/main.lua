@@ -3,7 +3,8 @@
 
     Once the server has loaded its world, it lists every game function whose name looks
     related to admin commands, chat or console input, with its class, network flags and
-    parameters, and every stored value (property) whose name looks related to admin rights. Nothing in the game is called or changed: it only reads the reflection data
+    parameters, and every stored value (property) whose name looks related to admin rights, money, squads,
+    raids or ownership. One run covers what the planned mods need to know. Nothing in the game is called or changed: it only reads the reflection data
     Unreal keeps about its own classes.
 
     Output:
@@ -19,6 +20,9 @@ local TAG = "[ExclsvProbe] "
 local KEYWORDS = {
     "admin", "command", "cheat", "chat", "console", "exec", "kick", "ban",
     "teleport", "announce", "broadcast", "message", "say", "whisper",
+    -- For the next mods: money, squads, raids and bases, mines and traps, vehicles, loot, events.
+    "currency", "balance", "money", "gold", "squad", "raid", "flag", "mine", "trap",
+    "vehicle", "loot", "bunker", "cargo", "airdrop",
 }
 
 -- Engine modules that are noise for this purpose, except for the classes listed below.
@@ -175,8 +179,11 @@ end
 
 local progress = "start"
 
--- Stored values (properties) worth reporting: how the game decides who may run admin commands.
-local PROPERTY_KEYWORDS = { "admin", "rights", "privilege", "permission", "godmode", "cheat", "whitelist" }
+-- Stored values (properties) worth reporting: admin rights, money, squads, raids, ownership.
+local PROPERTY_KEYWORDS = {
+    "admin", "rights", "privilege", "permission", "godmode", "cheat", "whitelist",
+    "currency", "balance", "money", "gold", "squad", "raid", "flag", "mine", "owner",
+}
 
 local function matchesPropertyKeyword(name)
     local lowered = lower(name)
@@ -297,7 +304,7 @@ local function scan()
     }
     for _, line in ipairs(functions) do table.insert(lines, line) end
     table.insert(lines, "")
-    table.insert(lines, "== Properties (stored values about admin rights and permissions; read from class descriptions only) ==")
+    table.insert(lines, "== Properties (stored values about admin rights, money, squads, raids and ownership; read from class descriptions only) ==")
     table.sort(properties)
     for _, line in ipairs(properties) do table.insert(lines, line) end
     table.insert(lines, "")

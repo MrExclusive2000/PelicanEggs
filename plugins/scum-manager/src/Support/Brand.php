@@ -11,6 +11,9 @@ final class Brand
 {
     public const MANAGER = 'ExclsvSCUM Manager';
 
+    /** Sidebar group that holds all of our pages. */
+    public const NAV_GROUP = 'ExclsvSCUM';
+
     public const PAGE_CONSOLE = 'ExclsvSCUM Console';
 
     public const PAGE_SETTINGS = 'ExclsvSCUM Settings';

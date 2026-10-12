@@ -35,9 +35,15 @@ class ScumSettingsPage extends ServerFormPage
 
     protected static ?string $slug = 'scum-settings';
 
-    protected static ?int $navigationSort = 31;
+    protected static ?int $navigationSort = 30;
 
-    protected static ?string $navigationLabel = Brand::PAGE_SETTINGS;
+    protected static ?string $navigationLabel = 'Server settings';
+
+    /** Grouped in the sidebar under the brand (a method, so it fits every Filament version). */
+    public static function getNavigationGroup(): ?string
+    {
+        return Brand::NAV_GROUP;
+    }
 
     protected static ?string $title = Brand::PAGE_SETTINGS;
 
