@@ -212,7 +212,9 @@ class ScumModsPage extends Page implements HasTable
 
         $from = $latest !== null
             ? 'The latest versions are downloaded from GitHub and checked before installing.'
-            : 'GitHub is not reachable or not set, so the copies bundled with the panel are used.';
+            : ($service->modSource() !== null
+                ? 'GitHub cannot be reached right now: only missing mods are installed (from the copies bundled with the panel); installed ones are kept.'
+                : 'The copies bundled with the panel are used.');
 
         return $from . ' Settings (config.lua) are kept. ' . implode('. ', $lines) . '. Restart the server afterwards.';
     }

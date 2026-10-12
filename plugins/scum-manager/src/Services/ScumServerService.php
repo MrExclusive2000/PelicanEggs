@@ -608,7 +608,8 @@ class ScumServerService
     public function installLatestMods(Server $server): array
     {
         $wanted = array_keys(self::bundledMods());
-        foreach ($this->installedModsOf($server, array_keys(Brand::MODS)) as $mod) {
+        $present = $this->installedModsOf($server, array_keys(Brand::MODS));
+        foreach ($present as $mod) {
             if (!in_array($mod, $wanted, true)) {
                 $wanted[] = $mod;
             }
@@ -621,7 +622,7 @@ class ScumServerService
                 $latest = $this->latestModManifest(fresh: true);
             } catch (Throwable $exception) {
                 report($exception);
-                $notes[] = 'The latest versions could not be fetched (' . $exception->getMessage() . '), so the copies bundled with the panel were used.';
+                $notes[] = 'The latest versions could not be fetched (' . $exception->getMessage() . '). Try again in a few minutes.';
             }
         }
 
@@ -640,12 +641,18 @@ class ScumServerService
                     continue;
                 } catch (Throwable $exception) {
                     report($exception);
-                    $notes[] = Brand::mod($name) . ': ' . $exception->getMessage() . (isset($bundled[$name]) ? ' The bundled copy was used.' : '');
+                    $notes[] = Brand::mod($name) . ': ' . $exception->getMessage();
                 }
             }
 
-            if (!isset($bundled[$name])) {
-                continue; // e.g. the probe when the source is unreachable: left as it is
+            // The bundled copy can be older than one installed from the source earlier, so with a
+            // source set it only fills in mods that are missing.
+            $isPresent = in_array($name, $present, true);
+            if (!isset($bundled[$name]) || ($isPresent && $this->modSource() !== null)) {
+                if ($isPresent) {
+                    $notes[] = Brand::mod($name) . ': the installed version was kept.';
+                }
+                continue;
             }
             array_push($installed, ...$this->installModArchive($server, $bundled[$name], "$name.zip", keepSettings: true));
             if (isset($bundledBuilds[$name])) {
