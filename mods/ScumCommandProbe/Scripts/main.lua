@@ -1,29 +1,58 @@
 --[[
-    ScumCommandProbe - read-only UE4SS mod for SCUM dedicated servers.
+    ScumCommandProbe (ExclsvProbe) - read-only UE4SS mod for SCUM dedicated servers.
 
-    Once the server has loaded its world, it lists every game function whose name looks
-    related to admin commands, chat or console input, with its class, network flags and
-    parameters, and every stored value (property) whose name looks related to admin rights, money, squads,
-    raids or ownership. One run covers what the planned mods need to know. Nothing in the game is called or changed: it only reads the reflection data
-    Unreal keeps about its own classes.
+    Once the server has loaded its world, it maps what SCUM exposes for the features our mods
+    use or plan to use, grouped by topic (admin, chat, money, squads, bases, mines, events,
+    vehicles, loot, combat, ...):
+
+      - classes (with their parent class) and their functions, with parameters and network flags
+      - stored values (properties) and events other code can listen to (delegates)
+      - enums with their values (e.g. squad ranks, chat channels) and structs with their fields
+      - data tables (loot, traders, items)
+      - a census: how many of each world thing (vehicles, flags, traders, ...) exist right now
+
+    Nothing in the game is called or changed: it reads the reflection data Unreal keeps about
+    its own classes and counts live objects without touching them.
 
     Output:
       ue4ss/Mods/ScumCommandProbe/probe-output.txt   (full report)
-      ue4ss/UE4SS.log                                (summary, lines start with [ScumCommandProbe])
+      ue4ss/UE4SS.log                                (summary, lines start with [ExclsvProbe])
 
-    It runs once per server start. Disable or delete it after you have the report.
+    It scans when the world has loaded and again later (things such as vehicles and airdrops
+    load their classes only once they appear). Disable or delete it after you have the report.
 ]]
 
 local TAG = "[ExclsvProbe] "
 
--- Case-insensitive name fragments worth reporting.
-local KEYWORDS = {
-    "admin", "command", "cheat", "chat", "console", "exec", "kick", "ban",
-    "teleport", "announce", "broadcast", "message", "say", "whisper",
-    -- For the next mods: money, squads, raids and bases, mines and traps, vehicles, loot, events.
-    "currency", "balance", "money", "gold", "squad", "raid", "flag", "mine", "trap",
-    "vehicle", "loot", "bunker", "cargo", "airdrop",
+-- Topics, in priority order: a name that fits several topics is listed under the first.
+-- census = count the world objects of these classes.
+local TOPICS = {
+    { name = "Admin, rights and commands", words = { "admin", "command", "cheat", "exec", "permission", "privilege", "rights", "godmode", "whitelist", "kick", "ban" } },
+    { name = "Chat, messages and on-screen notices", words = { "chat", "console", "announce", "broadcast", "message", "say", "whisper", "notif", "popup", "toast", "hud" } },
+    { name = "Money, traders and fame", census = true, words = { "currency", "balance", "money", "gold", "cash", "bank", "wallet", "trade", "price", "fame", "economy", "shop" } },
+    { name = "Squads", census = true, words = { "squad", "party", "invite" } },
+    { name = "Bases, flags and raids", census = true, words = { "baseelement", "basebuilding", "flag", "raid", "lock", "door", "gate", "decay", "upkeep", "territory", "claim" } },
+    { name = "Mines and traps", census = true, words = { "mine", "trap", "explosive", "claymore", "tripwire" } },
+    { name = "World events, airdrops and NPCs", census = true, words = { "airdrop", "cargo", "bunker", "killbox", "horde", "puppet", "zombie", "sentry", "encounter", "event", "mech", "drone" } },
+    { name = "Vehicles", census = true, words = { "vehicle", "fuel", "boat", "bicycle", "motorcycle", "aircraft", "airplane", "driver", "passenger", "seat" } },
+    { name = "Loot and zones", census = true, words = { "loot", "spawner", "zone", "region", "sector" } },
+    { name = "Stats and skills", words = { "skill", "attribute", "metabolism", "experience" } },
+    { name = "Combat, damage and kills", words = { "damage", "projectile", "killer", "killed", "death", "recoil", "ammo", "firerate" } },
+    { name = "Teleport and respawn", words = { "teleport", "respawn", "spawnpoint", "spawnlocation" } },
+    { name = "Weather and time of day", words = { "weather", "timeofday", "daytime", "nighttime", "rain", "fog", "season" } },
+    { name = "Map and markers", words = { "marker", "waypoint", "minimap", "mapicon" } },
+    { name = "Logins and logs", words = { "login", "logout", "gamelog", "writelog" } },
 }
+
+-- Parts of names that contain a keyword by accident ("Flags" is not a base flag, a bandage
+-- is not a ban). They are removed before matching.
+local IGNORED_FRAGMENTS = {
+    "flags", "determine", "examine", "bandage", "banner", "strap", "block", "clock",
+    "prevent", "essay", "eventual", "train", "brain", "terrain",
+}
+
+-- Every function of these classes is listed, matching or not.
+local WHOLE_CLASSES = { "conzplayercontroller", "conzgamemode", "conzgamestate", "conzplayerstate" }
 
 -- Engine modules that are noise for this purpose, except for the classes listed below.
 local NOISY_PREFIXES = {
@@ -32,6 +61,9 @@ local NOISY_PREFIXES = {
     "/Script/AnimGraphRuntime", "/Script/Chaos", "/Script/Foliage", "/Script/Paper2D",
     "/Script/OnlineSubsystem", "/Script/LevelSequence", "/Script/Synthesis",
 }
+
+-- Blueprint classes that are user interface or animation, by name prefix.
+local NOISY_CLASS_PREFIXES = { "wbp_", "w_", "abp_", "umg_" }
 
 -- Engine classes that are relevant even though they live in /Script/Engine.
 local ENGINE_CLASSES_OF_INTEREST = {
@@ -59,28 +91,38 @@ local FLAGS = {
     { 0x04000000, "BlueprintCallable" },
 }
 
+-- Limits that keep one huge enum, struct or census from swamping the report or the server.
+local MAX_ENUM_VALUES = 200
+local MAX_STRUCT_FIELDS = 60
+local MAX_CENSUS_CLASSES = 200
+local CENSUS_PER_SECOND = 10
+
 local function safe(fn, ...)
     local ok, result = pcall(fn, ...)
     if ok then return result end
     return nil
 end
 
--- Optional probe.lua in the mod folder narrows the search to another topic:
---   return { title = "...", keywords = { ... }, nativeOnly = true, wholeClasses = { ... } }
+-- Optional probe-settings.lua in the mod folder (an old probe.lua is ignored on purpose) narrows the search to one topic:
+--   return { title = "...", keywords = { ... }, nativeOnly = true, wholeClasses = { ... },
+--            lateScanMinutes = 45 }
 -- nativeOnly skips Blueprint (/Game/) classes; wholeClasses lists every function of classes
--- whose name contains one of these words.
+-- whose name contains one of these words; lateScanMinutes = 0 turns the second scan off.
 local TITLE = "ExclsvProbe report"
 local NATIVE_ONLY = false
-local WHOLE_CLASSES = {}
+local LATE_SCAN_MINUTES = 45
 do
     local source = string.gsub(debug.getinfo(1, "S").source or "", "^@", "")
     local dir = string.match(source, "^(.*)[/\\]Scripts[/\\]main%.lua$")
-    local ok, settings = pcall(dofile, (dir or ".") .. "/probe.lua")
+    local ok, settings = pcall(dofile, (dir or ".") .. "/probe-settings.lua")
     if ok and type(settings) == "table" then
-        KEYWORDS = settings.keywords or KEYWORDS
+        if type(settings.keywords) == "table" then
+            TOPICS = { { name = "Matches", words = settings.keywords } }
+        end
         TITLE = settings.title or TITLE
         NATIVE_ONLY = settings.nativeOnly == true
         WHOLE_CLASSES = settings.wholeClasses or WHOLE_CLASSES
+        if type(settings.lateScanMinutes) == "number" then LATE_SCAN_MINUTES = settings.lateScanMinutes end
     end
 end
 
@@ -92,14 +134,20 @@ local function lower(text)
     return string.lower(text or "")
 end
 
-local function matchesKeyword(name)
+-- Index of the first topic whose keyword appears in the name, or nil.
+local function topicOf(name)
     local lowered = lower(name)
-    for _, keyword in ipairs(KEYWORDS) do
-        if string.find(lowered, keyword, 1, true) then
-            return true
+    for _, fragment in ipairs(IGNORED_FRAGMENTS) do
+        lowered = string.gsub(lowered, fragment, " ")
+    end
+    for index, topic in ipairs(TOPICS) do
+        for _, word in ipairs(topic.words) do
+            if string.find(lowered, word, 1, true) then
+                return index
+            end
         end
     end
-    return false
+    return nil
 end
 
 local function isNoisy(path)
@@ -108,6 +156,13 @@ local function isNoisy(path)
     end
     for _, prefix in ipairs(NOISY_PREFIXES) do
         if string.sub(path, 1, #prefix) == prefix then
+            return true
+        end
+    end
+
+    local shortName = lower(string.match(path, "([^%./:]+)$"))
+    for _, prefix in ipairs(NOISY_CLASS_PREFIXES) do
+        if string.sub(shortName, 1, #prefix) == prefix then
             return true
         end
     end
@@ -142,29 +197,42 @@ end
 
 -- UE4SS invokes iteration callbacks from C++. Keep those callbacks to a bare table insert
 -- and do all the inspection afterwards, each item inside its own pcall, so one broken
--- entry is skipped instead of taking the whole scan down.
+-- entry is skipped instead of taking the whole scan down. Returns the items, whether the
+-- iteration finished, and {item, second argument} pairs (enums pass name and value).
 local function collect(owner, method)
-    local items = {}
+    local pairsSeen = {}
     local ok = pcall(function()
-        owner[method](owner, function(item)
-            items[#items + 1] = item
+        owner[method](owner, function(item, value)
+            pairsSeen[#pairsSeen + 1] = { item, value }
         end)
     end)
-    return items, ok
+    local items = {}
+    for index, pair in ipairs(pairsSeen) do items[index] = pair[1] end
+    return items, ok, pairsSeen
 end
 
--- "StrProperty /Script/ConZ.Foo:Bar:Message" -> "Message: StrProperty"
-local function describeParameters(func)
-    local params = {}
-    local properties = collect(func, "ForEachProperty")
+local function pathOf(object)
+    local full = safe(function() return object:GetFullName() end)
+    if full == nil then return nil end
+    return string.match(full, "^%S+%s+(.+)$") or full
+end
 
-    for _, property in ipairs(properties) do
-        local full = safe(function() return property:GetFullName() end) or ""
-        local propertyType = string.match(full, "^(%S+)%s") or "?"
-        params[#params + 1] = fname(property) .. ": " .. propertyType
+-- "StrProperty /Script/ConZ.Foo:Bar:Message" -> "StrProperty"
+local function propertyType(property)
+    local full = safe(function() return property:GetFullName() end) or ""
+    return string.match(full, "^(%S+)%s") or "?"
+end
+
+local function describeFields(owner, limit)
+    local fields = {}
+    for _, property in ipairs((collect(owner, "ForEachProperty"))) do
+        if limit and #fields >= limit then
+            fields[#fields + 1] = "..."
+            break
+        end
+        fields[#fields + 1] = fname(property) .. ": " .. propertyType(property)
     end
-
-    return "(" .. table.concat(params, ", ") .. ")"
+    return "(" .. table.concat(fields, ", ") .. ")"
 end
 
 local function outputPath()
@@ -179,77 +247,240 @@ end
 
 local progress = "start"
 
--- Stored values (properties) worth reporting: admin rights, money, squads, raids, ownership.
-local PROPERTY_KEYWORDS = {
-    "admin", "rights", "privilege", "permission", "godmode", "cheat", "whitelist",
-    "currency", "balance", "money", "gold", "squad", "raid", "flag", "mine", "owner",
-}
-
-local function matchesPropertyKeyword(name)
-    local lowered = lower(name)
-    for _, word in ipairs(PROPERTY_KEYWORDS) do
-        if string.find(lowered, word, 1, true) then return true end
+local function newReport()
+    local report = { topics = {}, whole = {}, otherEvents = {}, dataTables = {}, census = {}, censusList = {},
+        classCount = 0, functionCount = 0, classMatches = 0 }
+    for index = 1, #TOPICS do
+        report.topics[index] = { classes = {}, functions = {}, properties = {}, events = {}, enums = {}, structs = {} }
     end
-    return false
+    return report
 end
 
-local function inspectClass(class, functions, classes, properties)
-    local full = safe(function() return class:GetFullName() end)
-    if full == nil then
-        return 0
+local function inspectClass(class, report)
+    local classPath = pathOf(class)
+    if classPath == nil then
+        return
     end
-
-    local classPath = string.match(full, "^%S+%s+(.+)$") or full
     progress = classPath
     if isNoisy(classPath) then
-        return 0
+        return
     end
 
-    if matchesKeyword(fname(class)) then
-        classes[#classes + 1] = classPath
+    local className = fname(class)
+    local classTopic = topicOf(className)
+    if classTopic ~= nil then
+        local parent = safe(function() return class:GetSuperStruct() end)
+        local parentPath = parent ~= nil and pathOf(parent) or nil
+        table.insert(report.topics[classTopic].classes, classPath .. (parentPath and ("  (parent: " .. parentPath .. ")") or ""))
+        report.classMatches = report.classMatches + 1
+        if TOPICS[classTopic].census and #report.censusList < MAX_CENSUS_CLASSES then
+            table.insert(report.censusList, { name = className, path = classPath, topic = classTopic })
+        end
     end
 
     local whole = false
     for _, word in ipairs(WHOLE_CLASSES) do
-        if string.find(lower(fname(class)), word, 1, true) then whole = true end
+        if string.find(lower(className), word, 1, true) then whole = true end
     end
 
-    local found = 0
-    local classFunctions = collect(class, "ForEachFunction")
-    for _, func in ipairs(classFunctions) do
+    for _, func in ipairs((collect(class, "ForEachFunction"))) do
         local name = fname(func)
-        if whole or matchesKeyword(name) then
+        local topic = topicOf(name)
+        if whole or topic ~= nil then
             progress = classPath .. ":" .. name
             local flags = safe(function() return func:GetFunctionFlags() end)
-            functions[#functions + 1] = string.format("%s:%s %s\n    %s", classPath, name, describeParameters(func), describeFlags(flags))
-            found = found + 1
+            local line = string.format("%s:%s %s\n    %s", classPath, name, describeFields(func), describeFlags(flags))
+            table.insert(whole and report.whole or report.topics[topic].functions, line)
+            report.functionCount = report.functionCount + 1
         end
     end
 
     -- Properties are only read from the class description: no object's value is touched.
-    if properties then
-        for _, property in ipairs(collect(class, "ForEachProperty")) do
-            local name = fname(property)
-            if matchesPropertyKeyword(name) then
-                local full = safe(function() return property:GetFullName() end) or ""
-                local propertyType = string.match(full, "^(%S+)%s") or "?"
-                properties[#properties + 1] = string.format("%s.%s: %s", classPath, name, propertyType)
+    for _, property in ipairs((collect(class, "ForEachProperty"))) do
+        local name = fname(property)
+        local kind = propertyType(property)
+        local topic = topicOf(name)
+        local line = string.format("%s.%s: %s", classPath, name, kind)
+        if string.find(kind, "Delegate", 1, true) then
+            -- Events other code can listen to: one hook instead of polling every tick.
+            table.insert(topic and report.topics[topic].events or report.otherEvents, line)
+        elseif topic ~= nil then
+            table.insert(report.topics[topic].properties, line)
+        end
+    end
+end
+
+local function inspectEnum(enum, report)
+    local path = pathOf(enum)
+    if path == nil or isNoisy(path) then return end
+    local topic = topicOf(fname(enum))
+    if topic == nil then return end
+
+    local values = {}
+    local _, ok, named = collect(enum, "ForEachName")
+    if ok then
+        for _, pair in ipairs(named) do
+            if #values >= MAX_ENUM_VALUES then
+                values[#values + 1] = "..."
+                break
             end
+            local name = type(pair[1]) == "string" and pair[1] or safe(function() return pair[1]:ToString() end) or "?"
+            values[#values + 1] = pair[2] ~= nil and (name .. "=" .. tostring(pair[2])) or name
+        end
+    end
+    table.insert(report.topics[topic].enums, path .. ": " .. (#values > 0 and table.concat(values, ", ") or "(values not readable)"))
+end
+
+local function inspectStruct(struct, report)
+    local path = pathOf(struct)
+    if path == nil or isNoisy(path) then return end
+    local topic = topicOf(fname(struct))
+    if topic == nil then return end
+    table.insert(report.topics[topic].structs, path .. " " .. describeFields(struct, MAX_STRUCT_FIELDS))
+end
+
+-- Every object of a type (non-exact, so subclasses count too), searched on the C++ side.
+local function findAll(className)
+    local noFlags = (type(EObjectFlags) == "table" and EObjectFlags.RF_NoFlags) or 0
+    local found = safe(function() return FindObjects(0, className, nil, noFlags, noFlags, false) end)
+    local list = {}
+    if type(found) == "table" then
+        for _, object in pairs(found) do list[#list + 1] = object end
+    end
+    return list
+end
+
+local function render(report, pass)
+    local lines = {
+        TITLE,
+        "Generated: " .. os.date("!%Y-%m-%d %H:%M:%S UTC") .. " (" .. pass .. ")",
+        string.format("Classes scanned: %d, matching functions: %d, matching classes: %d", report.classCount, report.functionCount, report.classMatches),
+        "",
+        "How to read: Net/NetServer = callable over the network to the server; Exec = console command;",
+        "BlueprintEvent/Native functions and Delegate properties can be hooked by a mod.",
+        "",
+        "== Summary ==",
+    }
+    for index, topic in ipairs(TOPICS) do
+        local t = report.topics[index]
+        lines[#lines + 1] = string.format("%s: %d classes, %d functions, %d properties, %d events, %d enums, %d structs",
+            topic.name, #t.classes, #t.functions, #t.properties, #t.events, #t.enums, #t.structs)
+    end
+
+    local function section(title, entries)
+        if #entries == 0 then return end
+        table.sort(entries)
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = title
+        for _, entry in ipairs(entries) do lines[#lines + 1] = entry end
+    end
+
+    for index, topic in ipairs(TOPICS) do
+        local t = report.topics[index]
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "######## " .. topic.name .. " ########"
+        section("== Classes ==", t.classes)
+        section("== Functions ==", t.functions)
+        section("== Properties ==", t.properties)
+        section("== Events (delegates) ==", t.events)
+        section("== Enums ==", t.enums)
+        section("== Structs ==", t.structs)
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "######## Other ########"
+    section("== Key classes, every function ==", report.whole)
+    section("== Other events (delegates) ==", report.otherEvents)
+    section("== Data tables ==", report.dataTables)
+
+    lines[#lines + 1] = ""
+    if report.censusDone then
+        lines[#lines + 1] = "== Census (live objects right now; a count of 1 can be the class template) =="
+        table.sort(report.census, function(a, b) return a.count > b.count or (a.count == b.count and a.path < b.path) end)
+        for _, row in ipairs(report.census) do
+            lines[#lines + 1] = string.format("%6d  %s  [%s]", row.count, row.path, TOPICS[row.topic].name)
+        end
+    else
+        lines[#lines + 1] = "== Census: still counting, the report is written again when it is done =="
+    end
+
+    return lines
+end
+
+local function write(report, pass)
+    local lines = render(report, pass)
+    local path = outputPath()
+    if path ~= nil then
+        local file = io.open(path, "w")
+        if file ~= nil then
+            file:write(table.concat(lines, "\n") .. "\n")
+            file:close()
+            return path
         end
     end
 
-    return found
+    print(TAG .. "Could not write probe-output.txt, printing the report here instead.\n")
+    for _, line in ipairs(lines) do
+        print(TAG .. line .. "\n")
+    end
+    return nil
 end
 
-local function scan()
-    local functions = {}
-    local classes = {}
-    local properties = {}
-    local allClasses = {}
+-- Counts the live objects of the matched world classes, a few per second so the server does
+-- not stall, then writes the report again with the census. Only the number of objects is
+-- read; none of them is touched.
+local function runCensus(report, pass)
+    local list = report.censusList
+    local nextIndex = 1
+    local queued = false
+
+    local function finish()
+        report.censusDone = true
+        local total = 0
+        for _, row in ipairs(report.census) do total = total + row.count end
+        write(report, pass)
+        print(TAG .. string.format("Census done: %d world objects across %d classes.\n", total, #report.census))
+    end
+
+    if #list == 0 then
+        finish()
+        return
+    end
+
+    LoopAsync(1000, function()
+        if nextIndex > #list then
+            return true
+        end
+        if not queued then
+            queued = true
+            ExecuteInGameThread(function()
+                queued = false
+                for _ = 1, CENSUS_PER_SECOND do
+                    local entry = list[nextIndex]
+                    if entry == nil then break end
+                    nextIndex = nextIndex + 1
+                    progress = "census " .. entry.path
+                    local found = safe(function() return FindAllOf(entry.name) end)
+                    local count = type(found) == "table" and #found or 0
+                    if count > 0 then
+                        table.insert(report.census, { path = entry.path, topic = entry.topic, count = count })
+                    end
+                end
+                if nextIndex > #list then
+                    finish()
+                end
+            end)
+        end
+        return nextIndex > #list
+    end)
+end
+
+local function scan(pass)
+    local report = newReport()
 
     -- FindObjects searches GUObjectArray on the C++ side. Class "Class" (not exact) covers
     -- native classes and Blueprint classes, which derive from it.
-    local noFlags = (type(EObjectFlags) == "table" and EObjectFlags.RF_NoFlags) or 0
+    local allClasses = {}
     local seen = {}
     local function add(class)
         local key = safe(function() return class:GetAddress() end) or class
@@ -259,15 +490,9 @@ local function scan()
         end
     end
 
-    local found = safe(function() return FindObjects(0, "Class", nil, noFlags, noFlags, false) end)
-    local viaFindObjects = 0
-    if type(found) == "table" then
-        for _, class in pairs(found) do
-            add(class)
-            viaFindObjects = viaFindObjects + 1
-        end
-    end
-    print(TAG .. string.format("FindObjects returned %d classes.\n", viaFindObjects))
+    local found = findAll("Class")
+    for _, class in ipairs(found) do add(class) end
+    print(TAG .. string.format("FindObjects returned %d classes.\n", #found))
 
     -- Fallback: look up the Unreal classes that matter most by their full path.
     if #allClasses == 0 then
@@ -282,94 +507,76 @@ local function scan()
 
     local skipped = 0
     for _, class in ipairs(allClasses) do
-        local ok = pcall(inspectClass, class, functions, classes, properties)
-        if not ok then
+        if not pcall(inspectClass, class, report) then
             skipped = skipped + 1
         end
     end
-    local objectCount = #allClasses
+    report.classCount = #allClasses
     if skipped > 0 then
         print(TAG .. string.format("Skipped %d classes that could not be read.\n", skipped))
     end
 
-    table.sort(functions)
-    table.sort(classes)
+    for _, enum in ipairs(findAll("Enum")) do pcall(inspectEnum, enum, report) end
+    for _, struct in ipairs(findAll("ScriptStruct")) do pcall(inspectStruct, struct, report) end
+    for _, dataTable in ipairs(findAll("DataTable")) do
+        local path = pathOf(dataTable)
+        if path ~= nil and string.sub(path, 1, 6) == "/Game/" then
+            table.insert(report.dataTables, path)
+        end
+    end
 
-    local lines = {
-        TITLE,
-        "Generated: " .. os.date("!%Y-%m-%d %H:%M:%S UTC"),
-        string.format("Classes scanned: %d, matching functions: %d, matching classes: %d", objectCount, #functions, #classes),
-        "",
-        "== Functions (Net/NetServer = callable over the network to the server; Exec = console command) ==",
-    }
-    for _, line in ipairs(functions) do table.insert(lines, line) end
-    table.insert(lines, "")
-    table.insert(lines, "== Properties (stored values about admin rights, money, squads, raids and ownership; read from class descriptions only) ==")
-    table.sort(properties)
-    for _, line in ipairs(properties) do table.insert(lines, line) end
-    table.insert(lines, "")
-    table.insert(lines, "== Classes ==")
-    for _, line in ipairs(classes) do table.insert(lines, line) end
-
-    local report = table.concat(lines, "\n") .. "\n"
-    local path = outputPath()
-    local written = false
-
+    local path = write(report, pass)
+    print(TAG .. string.format("Scanned %d classes (%s): %d matching functions, %d matching classes.\n",
+        report.classCount, pass, report.functionCount, report.classMatches))
     if path ~= nil then
-        local file = io.open(path, "w")
-        if file ~= nil then
-            file:write(report)
-            file:close()
-            written = true
-        end
+        print(TAG .. "Full report written to " .. path .. "\n")
     end
 
-    print(TAG .. string.format("Scanned %d classes: %d matching functions, %d matching classes.\n", objectCount, #functions, #classes))
-    if written then
-        print(TAG .. "Full report written to " .. path .. "\n")
-    else
-        print(TAG .. "Could not write probe-output.txt, printing the report here instead.\n")
-        for _, line in ipairs(lines) do
-            print(TAG .. line .. "\n")
-        end
-    end
+    runCensus(report, pass)
 end
 
--- Wait until the world (and with it SCUM's game mode) exists, then scan once on the game thread.
-local done = false
+-- Wait until the world (and with it SCUM's game mode) exists, then scan on the game thread;
+-- scan again LATE_SCAN_MINUTES later to catch classes that load only when they appear.
+local TICK_SECONDS = 10
+local scans = 0
 local queued = false
 local attempts = 0
+local firstScanAt = nil
 
-LoopAsync(10000, function()
-    if done then
-        return true
-    end
-
+LoopAsync(TICK_SECONDS * 1000, function()
     attempts = attempts + 1
-    if attempts > 60 then
+
+    if scans == 0 and attempts > 60 then
         print(TAG .. "Gave up: no game mode appeared within 10 minutes.\n")
         return true
+    end
+    if scans >= 2 or (scans == 1 and LATE_SCAN_MINUTES <= 0) then
+        return true
+    end
+    if scans == 1 and (attempts - firstScanAt) * TICK_SECONDS < LATE_SCAN_MINUTES * 60 then
+        return false
     end
 
     if not queued then
         queued = true
         ExecuteInGameThread(function()
             queued = false
-            if done then
-                return
+
+            if scans == 0 then
+                -- Blueprint classes load with the map, so prefer to wait for a game mode. Native
+                -- classes exist from startup, so after two minutes scan regardless.
+                local gameMode = safe(function() return FindFirstOf("GameModeBase") end)
+                local ready = gameMode ~= nil and safe(function() return gameMode:IsValid() end)
+                if not ready and attempts < 12 then
+                    return
+                end
+                firstScanAt = attempts
             end
 
-            -- Blueprint classes load with the map, so prefer to wait for a game mode. Native
-            -- classes exist from startup, so after two minutes scan regardless.
-            local gameMode = safe(function() return FindFirstOf("GameModeBase") end)
-            local ready = gameMode ~= nil and safe(function() return gameMode:IsValid() end)
-            if not ready and attempts < 12 then
-                return
-            end
-
-            done = true
-            print(TAG .. "World loaded, scanning reflection data (read-only)...\n")
-            local ok, err = pcall(scan)
+            scans = scans + 1
+            local pass = scans == 1 and "first scan, world loaded" or ("second scan, " .. LATE_SCAN_MINUTES .. " min later")
+            print(TAG .. "Scanning reflection data (read-only, " .. pass .. ")...\n")
+            local ok, err = pcall(scan, pass)
             if not ok then
                 print(TAG .. "Scan failed while reading " .. tostring(progress) .. ": " .. tostring(err) .. "\n")
             end

@@ -94,6 +94,42 @@ local blueprintClasses = {
     Class("BlueprintGeneratedClass", "/Game/ConZ/BP_AdminTools.BP_AdminTools_C", {
         Function("/Game/ConZ/BP_AdminTools.BP_AdminTools_C:KickPlayer", 0x00020400, { { "PlayerId", "StrProperty" } }),
     }),
+    -- User interface Blueprints are noise, even when a name matches.
+    Class("WidgetBlueprintGeneratedClass", "/Game/UI/WBP_ChatBox.WBP_ChatBox_C", {
+        Function("/Game/UI/WBP_ChatBox.WBP_ChatBox_C:SendChat", 0x00020400),
+    }),
+}
+
+-- A world class: parent, an event (delegate), an unrelated event and a false "flag" match.
+table.insert(nativeClasses, Object("Class", "/Script/ConZ.VehicleBase", {
+    ForEachFunction = function() end,
+    GetSuperStruct = function() return Object("Class", "/Script/Engine.Pawn") end,
+    ForEachProperty = function(_, callback)
+        callback(Property("MulticastInlineDelegateProperty", "/Script/ConZ.VehicleBase", "OnVehicleDestroyed"))
+        callback(Property("MulticastInlineDelegateProperty", "/Script/ConZ.VehicleBase", "OnSomethingElse"))
+        callback(Property("IntProperty", "/Script/ConZ.VehicleBase", "ObjectFlags"))
+    end,
+}))
+
+local enums = {
+    Object("Enum", "/Script/ConZ.ESquadMemberRank", {
+        ForEachName = function(_, callback)
+            callback(FName("ESquadMemberRank::Member"), 0)
+            callback(FName("ESquadMemberRank::Leader"), 1)
+        end,
+    }),
+    Object("Enum", "/Script/ConZ.EWeaponSlot", { ForEachName = function() end }),   -- no keyword
+}
+local structs = {
+    Object("ScriptStruct", "/Script/ConZ.SquadMemberInfo", {
+        ForEachProperty = function(_, callback)
+            callback(Property("StrProperty", "/Script/ConZ.SquadMemberInfo", "UserId"))
+            callback(Property("ByteProperty", "/Script/ConZ.SquadMemberInfo", "Rank"))
+        end,
+    }),
+}
+local dataTables = {
+    Object("DataTable", "/Game/ConZ/Data/DT_LootSpawners.DT_LootSpawners"),
 }
 
 -- ------------------------------------------------------------------ fake UE4SS globals
@@ -102,15 +138,23 @@ local log = {}
 local scannedAtTick = nil
 function print(text)
     table.insert(log, text)
-    if string.find(text, "scanning reflection data", 1, true) then scannedAtTick = loopTicks end
+    if string.find(text, "Scanning reflection data", 1, true) and not scannedAtTick then scannedAtTick = loopTicks end
 end
 function ForEachUObject() error("the probe must not walk every object") end
 -- Real UE4SS: FindAllOf never returns class definitions, only live instances.
-function FindAllOf() return nil end
+-- The census counts live vehicles; nothing else exists in this fake world.
+function FindAllOf(name)
+    if name == "VehicleBase" then return { {}, {}, {} } end
+    return nil
+end
 local findObjectsWorks = true
 function FindObjects(count, className, objectName, banned, required, exact)
     if not findObjectsWorks then return {} end
-    assert(count == 0 and className == "Class" and objectName == nil and exact == false)
+    assert(count == 0 and objectName == nil and exact == false)
+    if className == "Enum" then return enums end
+    if className == "ScriptStruct" then return structs end
+    if className == "DataTable" then return dataTables end
+    assert(className == "Class")
     local all = {}
     for _, c in ipairs(nativeClasses) do all[#all + 1] = c end
     for _, c in ipairs(blueprintClasses) do all[#all + 1] = c end
@@ -148,12 +192,14 @@ local source = assert(io.open("mods/ScumCommandProbe/Scripts/main.lua")):read("a
 local copy = tmp .. "/ScumCommandProbe/Scripts/main.lua"
 assert(io.open(copy, "w")):write(source):close()
 
+assert(io.open(tmp .. "/ScumCommandProbe/probe.lua", "w")):write("return { title = \"Old item probe\", keywords = { \"inventory\" } }"):close()
 dofile(copy)
 
 local reportFile = io.open(tmp .. "/ScumCommandProbe/probe-output.txt")
 check("report file written", reportFile ~= nil)
 local report = reportFile and reportFile:read("a") or ""
 
+check("old probe.lua ignored", string.sub(report, 1, 19) == "ExclsvProbe report\n")
 check("waited for the game mode before scanning", scannedAtTick == 2)
 check("admin command function listed with parameter",
     string.find(report, "/Script/ConZ.ConZPlayerController:Server_ProcessAdminCommand (Command: StrProperty)", 1, true) ~= nil)
@@ -169,19 +215,36 @@ check("unrelated property skipped", string.find(report, ".Health:", 1, true) == 
 check("non-matching class skipped", string.find(report, "ConZ.Weapon", 1, true) == nil)
 check("blueprint function listed", string.find(report, "/Game/ConZ/BP_AdminTools.BP_AdminTools_C:KickPlayer (PlayerId: StrProperty)", 1, true) ~= nil)
 check("broken class still listed by name, others unaffected", string.find(report, "/Script/ConZ.BrokenChatThing", 1, true) ~= nil)
-check("counts", string.find(report, "Classes scanned: 11, matching functions: 4, matching classes: 3", 1, true) ~= nil)
+check("counts", string.find(report, "Classes scanned: 13, matching functions: 5, matching classes: 4", 1, true) ~= nil)
+check("admin topic classes, sorted, no false matches (playeRCONtroller)",
+    string.find(report, "######## Admin, rights and commands ########\n\n== Classes ==\n/Game/ConZ/BP_AdminTools.BP_AdminTools_C\n/Script/ConZ.AdminCommandManager\n\n", 1, true) ~= nil)
+check("chat class under the chat topic", string.find(report, "######## Chat, messages and on-screen notices ########\n\n== Classes ==\n/Script/ConZ.BrokenChatThing\n", 1, true) ~= nil)
+check("key class functions listed whole", string.find(report, "== Key classes, every function ==\n/Script/ConZ.ConZGameMode:BroadcastServerMessage", 1, true) ~= nil
+    and string.find(report, "ConZPlayerController:GetInventory", 1, true) ~= nil)
+check("user interface blueprints skipped", string.find(report, "WBP_ChatBox", 1, true) == nil)
+check("class parent shown", string.find(report, "/Script/ConZ.VehicleBase  (parent: /Script/Engine.Pawn)", 1, true) ~= nil)
+check("event under its topic", string.find(report, "== Events (delegates) ==\n/Script/ConZ.VehicleBase.OnVehicleDestroyed: MulticastInlineDelegateProperty", 1, true) ~= nil)
+check("other events kept", string.find(report, "== Other events (delegates) ==\n/Script/ConZ.VehicleBase.OnSomethingElse", 1, true) ~= nil)
+check("Flags is not a base flag", string.find(report, "ObjectFlags", 1, true) == nil)
+check("enum values listed", string.find(report, "/Script/ConZ.ESquadMemberRank: ESquadMemberRank::Member=0, ESquadMemberRank::Leader=1", 1, true) ~= nil)
+check("unrelated enum skipped", string.find(report, "EWeaponSlot", 1, true) == nil)
+check("struct fields listed", string.find(report, "/Script/ConZ.SquadMemberInfo (UserId: StrProperty, Rank: ByteProperty)", 1, true) ~= nil)
+check("data tables listed", string.find(report, "== Data tables ==\n/Game/ConZ/Data/DT_LootSpawners.DT_LootSpawners", 1, true) ~= nil)
+check("census counted", string.find(report, "     3  /Script/ConZ.VehicleBase  [Vehicles]", 1, true) ~= nil)
+check("summary per topic", string.find(report, "Squads: 0 classes, 0 functions, 0 properties, 0 events, 1 enums, 1 structs", 1, true) ~= nil)
 
 local logText = table.concat(log)
-check("FindObjects count logged", string.find(logText, "FindObjects returned 11 classes", 1, true) ~= nil)
-check("summary logged", string.find(logText, "4 matching functions, 3 matching classes", 1, true) ~= nil)
-check("class names are not false matches (playeRCONtroller)", string.find(report, "== Classes ==\n/Game/ConZ/BP_AdminTools.BP_AdminTools_C\n/Script/ConZ.AdminCommandManager\n/Script/ConZ.BrokenChatThing\n", 1, true) ~= nil)
+check("FindObjects count logged", string.find(logText, "FindObjects returned 13 classes", 1, true) ~= nil)
+check("summary logged", string.find(logText, "5 matching functions, 4 matching classes", 1, true) ~= nil)
+check("census logged", string.find(logText, "Census done: 3 world objects across 1 classes", 1, true) ~= nil)
+check("no second scan within 100 ticks by default", string.find(logText, "second scan", 1, true) == nil)
 check("report path logged", string.find(logText, "probe-output.txt", 1, true) ~= nil)
 
 -- Second scenario: the game mode never appears, so the probe scans after 2 minutes anyway.
 log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick = {}, 0, 0, math.huge, nil
 dofile(copy)
 check("fallback scan after 12 ticks (2 minutes)", scannedAtTick == 12)
-check("fallback scan ran", string.find(table.concat(log), "scanning reflection data", 1, true) ~= nil)
+check("fallback scan ran", string.find(table.concat(log), "Scanning reflection data", 1, true) ~= nil)
 
 -- Third scenario: FindObjects returns nothing, so the fallback looks classes up by path.
 log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick, findObjectsWorks = {}, 0, 0, 1, nil, false
@@ -190,9 +253,9 @@ local fallbackReport = assert(io.open(tmp .. "/ScumCommandProbe/probe-output.txt
 check("fallback lookup logged", string.find(table.concat(log), "Fallback lookup found 1 of 6 known classes", 1, true) ~= nil)
 check("fallback still reports PlayerController functions", string.find(fallbackReport, "/Script/Engine.PlayerController:ServerExec", 1, true) ~= nil)
 
--- Fourth scenario: probe.lua narrows the topic, skips Blueprints and lists whole classes.
-assert(io.open(tmp .. "/ScumCommandProbe/probe.lua", "w")):write([[return {
-    title = "Item probe", keywords = { "inventory" }, nativeOnly = true, wholeClasses = { "gamemode" },
+-- Fourth scenario: probe-settings.lua narrows the topic, skips Blueprints and lists whole classes.
+assert(io.open(tmp .. "/ScumCommandProbe/probe-settings.lua", "w")):write([[return {
+    title = "Item probe", keywords = { "inventory" }, nativeOnly = true, wholeClasses = { "gamemode" }, lateScanMinutes = 1,
 }]]):close()
 log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick, findObjectsWorks = {}, 0, 0, 1, nil, true
 dofile(copy)
@@ -202,6 +265,8 @@ check("probe.lua keywords", string.find(itemReport, "ConZPlayerController:GetInv
     and string.find(itemReport, "Server_ProcessAdminCommand", 1, true) == nil)
 check("probe.lua whole class listed", string.find(itemReport, "ConZGameMode:BroadcastServerMessage", 1, true) ~= nil)
 check("probe.lua native only", string.find(itemReport, "BP_AdminTools", 1, true) == nil)
+check("probe.lua second scan after its minutes", string.find(table.concat(log), "second scan, 1 min later", 1, true) ~= nil
+    and string.find(itemReport, "(second scan, 1 min later)", 1, true) ~= nil)
 
 os.execute("rm -rf '" .. tmp .. "'")
 print = _G.print
