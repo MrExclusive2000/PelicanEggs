@@ -33,6 +33,12 @@ Aimbot signs (report "SUSPECT" lines only, unless strikeOnKillFlags = true):
   - magic bullets      firearm kills (5 m and further) while the killer's aim stayed more
                        than config.magicBulletDegrees away from the victim the whole time
                        before (silent aim); reported after config.magicBulletPattern kills
+Wallhack tracking (EXPERIMENTAL, off until checks.wallTracking = true; "SPECTATE" lines only,
+never strikes): once a second, for each player aiming at another player 5-200 m away, the
+game is asked whether anything blocks the view between them. Aim that stays on a hidden
+player who is moving for config.wallTrackSeconds in a row is flagged. If the game cannot be
+asked on this server, the check switches itself off and says why.
+
 These read SCUM's kill_*.log and sample each player's aim 10 times a second. Aimbots run on
 the cheater's PC, so this cannot prove anything: it points at who to spectate.
 

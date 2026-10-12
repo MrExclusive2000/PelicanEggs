@@ -276,6 +276,7 @@ final class ModSettings
                         'checks.aimSnap' => ['toggle', 'Aim snaps before kills', true],
                         'checks.magicBullet' => ['toggle', 'Magic bullets (kills without aiming at the victim)', true],
                         'checks.adminLog' => ['toggle', 'Admin commands from players not in AdminUsers.ini', true],
+                        'checks.wallTracking' => ['toggle', 'Wallhack tracking (experimental, spectate flags only)', false],
                     ],
                 ],
                 'Movement limits' => [
@@ -303,6 +304,9 @@ final class ModSettings
                         'aimSnapPattern' => ['int', 'Report after this many snapped kills', 3],
                         'magicBulletDegrees' => ['int', 'Magic bullet: aim this many degrees off the victim', 60],
                         'magicBulletPattern' => ['int', 'Report after this many magic bullet kills', 2],
+                        'wallTrackSeconds' => ['int', 'Wallhack: aim follows a hidden player for (s)', 4],
+                        'wallAimMetres' => ['int', 'Wallhack: aim passes within (m) of them', 2],
+                        'wallMaxDistance' => ['int', 'Wallhack: up to this far away (m)', 200],
                         'strikeOnKillFlags' => ['toggle', 'Count aimbot suspicions as strikes', false],
                     ],
                 ],

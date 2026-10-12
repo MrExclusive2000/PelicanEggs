@@ -31,6 +31,9 @@ return {
         aimSnap = true,           -- aim jumping onto targets right before kills
         magicBullet = true,       -- firearm kills without ever aiming at the victim (silent aim)
         adminLog = true,          -- admin commands (SCUM's admin log) from players not in AdminUsers.ini
+        -- EXPERIMENTAL: aim following a moving player hidden behind cover (wallhack). Only
+        -- reports "SPECTATE" lines, never strikes. Try it with a friend before leaving it on.
+        wallTracking = false,
     },
 
     -- Speed limits. Sprinting is about 7 m/s; the fastest vehicles stay well under 100.
@@ -105,6 +108,14 @@ return {
     -- victim for the whole few seconds before. Report a player after this many such kills.
     magicBulletDegrees = 60,
     magicBulletPattern = 2,
+
+    -- Wall tracking: aim passing within wallAimMetres of a hidden, moving player for
+    -- wallTrackSeconds checks in a row (one a second), between wallMinDistance and
+    -- wallMaxDistance metres away.
+    wallTrackSeconds = 4,
+    wallAimMetres = 2,
+    wallMinDistance = 5,
+    wallMaxDistance = 200,
 
     -- Also count aimbot suspicions as strikes (so they can lead to a kick/ban). Off by default.
     strikeOnKillFlags = false,

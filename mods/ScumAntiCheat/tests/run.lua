@@ -619,6 +619,72 @@ aimTick()
 check("aim sampler never touches a controller from an earlier tick", not touched)
 check("no game world is used for timing", not string.find(source, "GetRealTimeSeconds", 1, true))
 
+-- ------------------------------------------------------------------ wallhack tracking (experimental)
+local traceLibrary = object()
+local viewBlockedNow, traces = true, 0
+function traceLibrary:LineTraceSingle(context, from, to, channel, complex, ignore, debug, hit, ignoreSelf)
+    traces = traces + 1
+    assert(context ~= nil and ignoreSelf == true and channel == 0)
+    return viewBlockedNow
+end
+local savedStaticFind = StaticFindObject
+function StaticFindObject(path)
+    if path == "/Script/Engine.Default__KismetSystemLibrary" then return traceLibrary end
+    return savedStaticFind(path)
+end
+start([[return { checks = { wallTracking = true } }]])
+check("wall tracking listed when on", has(acLog(), "wallTracking."))
+local watcher = Player("Watcher", Pawn("BP_Prisoner_C", 0, 0, 0))
+local hider = Player("Hider", Pawn("BP_Prisoner_C", 50, 0, 0))
+login("76561198000000101", "Watcher")
+login("76561198000000102", "Hider")
+players = { watcher, hider }
+watcher.yaw, watcher.pitch = 0, 0     -- looking east, straight at Hider
+hider.yaw = 180                       -- looking west, away from Watcher's cover... and at Watcher
+tick()
+-- Hider is behind a wall and moving; Watcher's aim follows for 4 s.
+for _ = 1, 4 do hider.pawn.x = hider.pawn.x + 2 step() end
+text = acLog()
+check("aim following a hidden moving player flagged", has(text,
+    "SPECTATE Watcher (76561198000000101): aim followed Hider behind cover for 4 s at"))
+check("wall tracking is never a strike", not string.find(text, "Watcher[^\n]*%[strike"))
+-- Flagged once per pair, then a cooldown.
+for _ = 1, 6 do hider.pawn.x = hider.pawn.x + 2 step() end
+local _, flags = string.gsub(acLog(), "SPECTATE Watcher", "")
+check("same pair not flagged again right away", flags == 1)
+
+-- In plain view: no flag. Hidden but standing still (a known bush): no flag.
+start([[return { checks = { wallTracking = true } }]])
+players = { watcher, hider }
+viewBlockedNow = false
+tick()
+for _ = 1, 5 do hider.pawn.x = hider.pawn.x + 2 step() end
+check("aim on a visible player not flagged", not has(acLog(), "SPECTATE"))
+viewBlockedNow = true
+for _ = 1, 6 do step() end
+check("hidden but not moving not flagged", not has(acLog(), "SPECTATE Watcher"))
+-- Aim pointing elsewhere: the game is not even asked.
+watcher.yaw, hider.yaw = 90, 90
+local tracesBefore = traces
+for _ = 1, 3 do hider.pawn.x = hider.pawn.x + 2 step() end
+check("no view check without aim on someone", traces == tracesBefore)
+
+-- If the game cannot be asked, the check switches itself off once.
+function traceLibrary:LineTraceSingle() error("bad parameters") end
+watcher.yaw, hider.yaw = 0, 180
+start([[return { checks = { wallTracking = true } }]])
+players = { watcher, hider }
+tick()
+for _ = 1, 3 do hider.pawn.x = hider.pawn.x + 2 step() end
+local _, offs = string.gsub(acLog(), "Wall tracking check switched off", "")
+check("broken view check switches itself off once", offs == 1 and has(acLog(), "bad parameters"))
+
+-- Off by default.
+start("return {}")
+check("wall tracking off by default", not has(acLog(), "wallTracking"))
+StaticFindObject = savedStaticFind
+players = {}
+
 -- ------------------------------------------------------------------ scenario 5: broken config
 start("return {")
 check("broken config reported", has(acLog(), "config.lua could not be read, using defaults"))

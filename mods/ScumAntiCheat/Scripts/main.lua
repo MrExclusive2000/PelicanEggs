@@ -54,7 +54,7 @@ local DEFAULTS = {
     checks = {
         speed = true, teleport = true, flying = true, hovering = true, mapBounds = true,
         unauthorizedAdmin = true, names = true, watchlist = true, gameLogs = true,
-        killLog = true, aimSnap = true, magicBullet = true, adminLog = true,
+        killLog = true, aimSnap = true, magicBullet = true, adminLog = true, wallTracking = false,
     },
     maxFootSpeed = 21,
     maxVehicleSpeed = 120,
@@ -83,6 +83,10 @@ local DEFAULTS = {
     aimSnapPattern = 3,
     magicBulletDegrees = 60,
     magicBulletPattern = 2,
+    wallTrackSeconds = 4,
+    wallAimMetres = 2,
+    wallMinDistance = 5,
+    wallMaxDistance = 200,
     strikeOnKillFlags = false,
     kickReason = "Kicked by anti-cheat.",
 }
@@ -978,6 +982,119 @@ local function check(controller, time, seen)
     checkMovement(player, controller, pawn, position, previous, elapsed, time, vehicle)
 end
 
+-- ------------------------------------------------------------------ wallhack tracking
+-- EXPERIMENTAL, off by default. A wallhack shows players through walls; the giveaway is aim
+-- that follows someone the player cannot see. Once a second, for each player aiming at another
+-- player, the game is asked whether anything blocks the view between them. Aim that stays on a
+-- hidden player who is moving, for wallTrackSeconds in a row, is flagged for an admin to
+-- spectate. Never a strike.
+
+local TRACE_LIBRARY = "/Script/Engine.Default__KismetSystemLibrary"
+local EYE_HEIGHT = 0.6        -- metres above a character's location (its middle) to its eyes
+local CHEST_HEIGHT = 0.3      -- metres above a character's location to aim at
+local TRACE_STOP_SHORT = 0.6  -- metres: end the view check before the target's own body
+local WALL_PAIR_COOLDOWN = 300   -- seconds before the same pair is flagged again
+local wallState = {}          -- "watcherId>targetId" -> { streak, last = position, flagged }
+local wallCheckBroken = false
+
+local function aimDirection(yaw, pitch)
+    if pitch > 180 then pitch = pitch - 360 end
+    local y, p = math.rad(yaw), math.rad(pitch)
+    return { x = math.cos(p) * math.cos(y), y = math.cos(p) * math.sin(y), z = math.sin(p) }
+end
+
+-- True when something blocks the view from one point to another (metres), false when the view
+-- is clear, nil when the game could not be asked.
+local function viewBlocked(watcherPawn, from, to)
+    local library = safe(function() return StaticFindObject(TRACE_LIBRARY) end)
+    if not isValid(library) then return nil, "the game's trace library was not found" end
+    local start = { X = from.x * CM_PER_M, Y = from.y * CM_PER_M, Z = from.z * CM_PER_M }
+    local finish = { X = to.x * CM_PER_M, Y = to.y * CM_PER_M, Z = to.z * CM_PER_M }
+    local colour = { R = 0, G = 0, B = 0, A = 0 }
+    local ok, result = pcall(function()
+        -- Visibility channel, simple collision, nothing extra ignored, no debug drawing,
+        -- ignoring the watcher's own character (the world context).
+        return library:LineTraceSingle(watcherPawn, start, finish, 0, false, {}, 0, {}, true, colour, colour, 0)
+    end)
+    if not ok then return nil, tostring(result) end
+    if type(result) ~= "boolean" then return nil, "unexpected answer from the game: " .. tostring(result) end
+    return result
+end
+
+local function wallCheck(time)
+    if not config.checks.wallTracking or wallCheckBroken then return end
+    local people = {}
+    for _, controller in ipairs(findAll(CONTROLLER_CLASSES)) do
+        local player = tracked[address(controller)]
+        local pawn = player and safe(function() return controller:K2_GetPawn() end)
+        if player and isValid(pawn) and isCharacter(pawn) and not inVehicle(pawn) and not knockedOut(pawn) then
+            local at = location(pawn)
+            local yaw, pitch = rotation(controller)
+            if at then
+                people[#people + 1] = { player = player, controller = controller, pawn = pawn, at = at, yaw = yaw, pitch = pitch }
+            end
+        end
+    end
+
+    for _, watcher in ipairs(people) do
+        local player = watcher.player
+        local skip = watcher.yaw == nil or player.steamId == nil or (config.ignoreAdmins and player.verifiedAdmin)
+            or config.ignoredIds[player.steamId] or config.ignored[string.lower(player.name)]
+        if not skip then
+            local eye = { x = watcher.at.x, y = watcher.at.y, z = watcher.at.z + EYE_HEIGHT }
+            local aim = aimDirection(watcher.yaw, watcher.pitch)
+            for _, target in ipairs(people) do
+                if target ~= watcher and target.player.steamId then
+                    local key = player.steamId .. ">" .. target.player.steamId
+                    local state = wallState[key] or { streak = 0 }
+                    wallState[key] = state
+                    local chest = { x = target.at.x, y = target.at.y, z = target.at.z + CHEST_HEIGHT }
+                    local dx, dy, dz = chest.x - eye.x, chest.y - eye.y, chest.z - eye.z
+                    local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+                    local hidden = false
+                    if distance >= config.wallMinDistance and distance <= config.wallMaxDistance then
+                        -- How far the aim line passes from the target.
+                        local along = dx * aim.x + dy * aim.y + dz * aim.z
+                        local miss = along > 0 and math.sqrt(math.max(0, distance * distance - along * along)) or math.huge
+                        if miss <= config.wallAimMetres then
+                            local scale = (distance - TRACE_STOP_SHORT) / distance
+                            local stop = { x = eye.x + dx * scale, y = eye.y + dy * scale, z = eye.z + dz * scale }
+                            local blocked, why = viewBlocked(watcher.pawn, eye, stop)
+                            if blocked == nil then
+                                wallCheckBroken = true
+                                output("Wall tracking check switched off: the game could not be asked about line of sight (" .. tostring(why) .. ").")
+                                return
+                            end
+                            hidden = blocked
+                        end
+                    end
+
+                    local moved = state.last and math.sqrt((target.at.x - state.last.x) ^ 2 + (target.at.y - state.last.y) ^ 2) or 0
+                    if not hidden then
+                        state.streak = 0
+                    elseif moved >= 1 then
+                        state.streak = state.streak + 1   -- following a hidden, moving player
+                    end
+                    state.last = target.at
+                    if state.streak >= config.wallTrackSeconds and (state.flagged == nil or time - state.flagged >= WALL_PAIR_COOLDOWN) then
+                        state.flagged, state.streak = time, 0
+                        output(string.format("SPECTATE %s: aim followed %s behind cover for %d s at %.0f m (at %.0f, %.0f, %.0f). Possible wallhack.",
+                            describe(player), target.player.name, config.wallTrackSeconds, distance, watcher.at.x, watcher.at.y, watcher.at.z))
+                    end
+                end
+            end
+        end
+    end
+
+    -- Forget pairs whose players left.
+    local online = {}
+    for _, person in ipairs(people) do if person.player.steamId then online[person.player.steamId] = true end end
+    for key in pairs(wallState) do
+        local a, b = string.match(key, "^(%d+)>(%d+)$")
+        if not (online[a] and online[b]) then wallState[key] = nil end
+    end
+end
+
 local playerCount = -1
 
 local function checkAll()
@@ -998,6 +1115,9 @@ local function checkAll()
     end
 
     processKills(time)
+
+    local walled, wallError = pcall(wallCheck, time)
+    if not walled then output("Wall tracking check failed: " .. tostring(wallError)) end
 
     -- Controllers are only good for this tick.
     for _, player in pairs(tracked) do player.controller = nil end
@@ -1048,7 +1168,7 @@ if config.checks.aimSnap or config.checks.magicBullet then
 end
 
 local enabled = {}
-for _, name in ipairs({ "speed", "teleport", "flying", "hovering", "mapBounds", "unauthorizedAdmin", "names", "watchlist", "gameLogs", "killLog", "aimSnap", "magicBullet", "adminLog" }) do
+for _, name in ipairs({ "speed", "teleport", "flying", "hovering", "mapBounds", "unauthorizedAdmin", "names", "watchlist", "gameLogs", "killLog", "aimSnap", "magicBullet", "adminLog", "wallTracking" }) do
     if config.checks[name] then enabled[#enabled + 1] = name end
 end
 output(string.format("Active. action=%s, %d strikes in %d s. Checks: %s.",
