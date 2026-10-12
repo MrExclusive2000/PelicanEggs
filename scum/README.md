@@ -84,7 +84,7 @@ Our own UE4SS mods ship with the SCUM Manager plugin and are installed together 
 | Mod | What it does |
 |-----|--------------|
 | `PelicanConsole` | Runs admin commands from the SCUM Admin Console page or the Pelican console (above) |
-| `PlayerTools` | Chat commands (`!help`, `!rules`, `!discord`, `!online`, `!stats`, `!top`, `!vote`, `!info`, `!bounty`, `!tp`, `!report`, `!seen`, `!manhunt`), kill feed, stats and leaderboard, kill streaks, streak bounties, AFK kicker, votes for time and weather, new-player welcome and starter kit, welcome back, playtime rewards and a daily bonus, paid teleports, player reports, death recap, combat hotspots, `!seen`, Manhunt and King of the Hill events, and feature tips |
+| `PlayerTools` | Chat commands (`!help`, `!rules`, `!discord`, `!online`, `!stats`, `!top`, `!vote`, `!info`, `!bounty`, `!tp`, `!tpto`, `!report`, `!seen`, `!manhunt`), kill feed, stats and leaderboard, kill streaks, streak bounties, AFK kicker, votes for time and weather, new-player welcome and starter kit, welcome back, playtime rewards and a daily bonus, paid teleports, player reports, death recap, combat hotspots, `!seen`, Manhunt and King of the Hill events, and feature tips |
 | `ServerMessages` | Welcome message, rotating announcements, join/leave log, restart countdown warnings |
 | `ScumAntiCheat` | Server-side anti-cheat: speed, teleport, fly and hover hacks, out-of-map/under-map, admin rights not in AdminUsers.ini, staff impersonation names, aimbot signs from the kill log and aim snaps (reported as suspects), a watchlist, and SCUM's own violation and admin logs in the console. It can kick or ban (via BannedUsers.ini), but only logs until you change its action |
 

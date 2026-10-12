@@ -12,7 +12,8 @@
       - Kill streaks:  "Alice is on a 5 kill streak!" and who ended it
       - Bounties:      a server bounty on players with a kill streak (and, optionally, bounties
                        players place with !bounty), paid to whoever kills them
-      - Teleports:     !tp <place> for a price, after standing still for a few seconds
+      - Teleports:     !tp <place> for a price, after standing still for a few seconds;
+                       !tpto <name> to another player who accepts with !tpaccept
       - Info:          !info with uptime, players online and the next restart
       - Reports:       !report <name> <reason>, logged to reports.log and sent to online admins
       - Feature tips:  what the server offers, to each player on joining and as rotating tips
@@ -79,6 +80,7 @@ local DEFAULTS = {
         command = "Teleport {steamId} {x} {y} {z}",
         chargeCommand = "ChangeCurrencyBalance Normal -{price} {steamId}",
         locations = {},
+        toPlayer = true, toPlayerPrice = 0, requestSeconds = 60,
     },
     info = { enabled = true, lines = {} },
     reports = { enabled = true, cooldownSeconds = 60 },
@@ -1105,6 +1107,65 @@ local function teleportCommand(session, rest, time)
     tell(session, string.format("Teleporting to %s in %d s. Do not move.", place.name, wait))
 end
 
+-- !tpto <name> asks to teleport to another player; they answer with !tpaccept or !tpdeny.
+local function onlineByName(name)
+    local wanted = string.lower(name)
+    local partial, partials = nil, 0
+    for _, candidate in pairs(sessions) do
+        local candidateName = string.lower(candidate.name or "")
+        if candidateName == wanted then return candidate end
+        if wanted ~= "" and string.sub(candidateName, 1, #wanted) == wanted then
+            partial, partials = candidate, partials + 1
+        end
+    end
+    return partials == 1 and partial or nil
+end
+
+local function playerTeleportCommand(session, word, rest, time)
+    local teleports = config.teleports
+    local prefix = config.chatCommands.prefix
+    if not teleports.toPlayer then return tell(session, "Teleporting to players is turned off on this server.") end
+
+    if word == "tpto" then
+        if rest == "" then return tell(session, "Usage: " .. prefix .. "tpto <player name>") end
+        local target = onlineByName(rest)
+        if target == nil then return tell(session, "No player online called " .. rest .. ".") end
+        if target == session then return tell(session, "You cannot teleport to yourself.") end
+        local cooldown = (tonumber(teleports.cooldownMinutes) or 0) * 60
+        local entry = session.steamId and records[session.steamId]
+        if entry and entry.lastTeleport and time - entry.lastTeleport < cooldown then
+            return tell(session, "You can teleport again in " .. duration(cooldown - (time - entry.lastTeleport)) .. ".")
+        end
+        if characterOf(session.controller) == nil or session.steamId == nil then return tell(session, "You need to be alive to teleport.") end
+        if target.steamId == nil then return tell(session, target.name .. " cannot be teleported to right now.") end
+        local seconds = tonumber(teleports.requestSeconds) or 60
+        target.tpRequest = { from = session.steamId, name = session.name, expires = time + seconds }
+        local price = tonumber(teleports.toPlayerPrice) or 0
+        tell(target, string.format("%s wants to teleport to you. Type %stpaccept or %stpdeny (%d s).", session.name, prefix, prefix, seconds))
+        return tell(session, string.format("Asked %s. They have %d s to accept%s.", target.name, seconds,
+            price > 0 and (" (costs you " .. price .. ")") or ""))
+    end
+
+    local request = session.tpRequest
+    session.tpRequest = nil
+    if request == nil or time > request.expires then return tell(session, "Nobody is asking to teleport to you.") end
+    local requester = sessionById(request.from)
+    if requester == nil then return tell(session, request.name .. " is no longer online.") end
+    if word == "tpdeny" then
+        tell(requester, session.name .. " said no to your teleport.")
+        return tell(session, "Teleport refused.")
+    end
+    local pawn = characterOf(requester.controller)
+    if pawn == nil then return tell(session, request.name .. " cannot teleport right now.") end
+    local wait = tonumber(teleports.standStillSeconds) or 0
+    requester.teleport = {
+        place = { name = session.name, price = tonumber(teleports.toPlayerPrice) or 0, toSteamId = session.steamId },
+        at = time + wait, from = location(pawn),
+    }
+    tell(session, request.name .. " will be teleported to you in " .. wait .. " s.")
+    tell(requester, string.format("%s accepted. Teleporting in %d s. Do not move.", session.name, wait))
+end
+
 local function teleportCheck(session, time)
     local pending = session.teleport
     if pending == nil then return end
@@ -1118,6 +1179,14 @@ local function teleportCheck(session, time)
     session.teleport = nil
 
     local place, values = pending.place, nil
+    if place.toSteamId then
+        -- Teleport to a player: wherever they are now, a step to the side.
+        local target = sessionById(place.toSteamId)
+        local targetPawn = target and characterOf(target.controller)
+        local at = targetPawn and location(targetPawn)
+        if at == nil then return tell(session, "Teleport cancelled: " .. place.name .. " is not available right now.") end
+        place = { name = place.name, price = place.price, x = math.floor(at.x + 150), y = math.floor(at.y), z = math.floor(at.z + 50) }
+    end
     local price = tonumber(place.price) or 0
     values = { x = place.x, y = place.y, z = place.z, price = price, steamId = session.steamId, name = session.name }
     local affordable, why = canAfford(session, price, config.teleports.checkBalance)
@@ -1130,6 +1199,7 @@ local function teleportCheck(session, time)
     if config.teleports.method == "direct" then
         ok, detail = teleportDirect(session, tonumber(place.x), tonumber(place.y), tonumber(place.z))
     else
+        allowTeleport(session.name)
         ok, detail = runAdminCommand(fill(config.teleports.command, values))
     end
     if not ok then return tell(session, "Teleports are not available right now (" .. detail .. ").") end
@@ -1572,6 +1642,7 @@ local function handleChat(chat, time)
         if config.info.enabled then more[#more + 1] = prefix .. "info" end
         if config.bounties.enabled then more[#more + 1] = prefix .. "bounty" end
         if config.teleports.enabled then more[#more + 1] = prefix .. "tp" end
+        if config.teleports.enabled and config.teleports.toPlayer then more[#more + 1] = prefix .. "tpto <name>" end
         more[#more + 1] = prefix .. "seen <name>"
         if config.manhunt.enabled then more[#more + 1] = prefix .. "manhunt" end
         if config.reports.enabled then more[#more + 1] = prefix .. "report <name> <what happened>" end
@@ -1613,6 +1684,8 @@ local function handleChat(chat, time)
         bountyCommand(session, rest)
     elseif word == "tp" and config.teleports.enabled then
         teleportCommand(session, rest, time)
+    elseif (word == "tpto" or word == "tpaccept" or word == "tpdeny") and config.teleports.enabled then
+        playerTeleportCommand(session, word, rest, time)
     elseif word == "seen" then
         local id, entry = findPlayerRecord(rest)
         if id == nil or entry == nil then return tell(session, rest == "" and ("Usage: " .. prefix .. "seen <name>") or ("No player called " .. rest .. ".")) end

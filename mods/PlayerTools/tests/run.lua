@@ -430,6 +430,34 @@ eve.pawn.x = eve.pawn.x + 5
 step()
 check("moving cancels the teleport", lastPrivate("Eve") == "Teleport cancelled: you moved.")
 
+-- Teleport to a player: they have to accept, and you land next to where they are then.
+chat("76561198000000010", "Dave", "!tpaccept")
+step()
+check("accept with no request", lastPrivate("Dave") == "Nobody is asking to teleport to you.")
+chat("76561198000000011", "Eve", "!tpto nobody")
+step()
+check("tpto unknown player", lastPrivate("Eve") == "No player online called nobody.")
+chat("76561198000000011", "Eve", "!tpto da")
+step()
+check("tpto asks the other player", lastPrivate("Dave") == "Eve wants to teleport to you. Type !tpaccept or !tpdeny (60 s).")
+check("tpto confirms the request", lastPrivate("Eve") == "Asked Dave. They have 60 s to accept.")
+chat("76561198000000010", "Dave", "!tpdeny")
+step()
+check("tpdeny tells the asker", lastPrivate("Eve") == "Dave said no to your teleport.")
+check("no teleport after a no", ran("Teleport 76561198000000011 1150 0 50") == nil)
+chat("76561198000000011", "Eve", "!tpto Dave")
+step()
+chat("76561198000000010", "Dave", "!tpaccept")
+step()
+check("tpaccept starts the teleport", lastPrivate("Eve") == "Dave accepted. Teleporting in 5 s. Do not move.")
+dave.pawn.x = 10   -- Dave walks off; Eve lands where he is when the teleport happens
+step(5)
+check("teleported next to the player", ran("Teleport 76561198000000011 1150 0 50") ~= nil
+    and lastPrivate("Eve") == "Teleported to Dave.")
+chat("76561198000000011", "Eve", "!tpto Dave")
+step()
+check("tpto has the teleport cooldown", has(lastPrivate("Eve"), "You can teleport again in"))
+
 -- Info, where, reports.
 chat("76561198000000010", "Dave", "!info")
 step()

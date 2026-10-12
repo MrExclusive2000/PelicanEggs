@@ -20,6 +20,8 @@ Quality-of-life features for SCUM players:
                  (!bounty <name> <amount>) are off: the mod cannot check balances yet.
   Teleports      !tp <place>: stand still 10 s, pay, teleport. Admins set places on the
                  settings page; !where (admins only) shows your coordinates.
+                 !tpto <name> asks to teleport to another player; they type !tpaccept
+                 (or !tpdeny) within 60 s. Same cooldown and stand-still time.
   Info           !info: server time, uptime, players online, next restart.
   Reports        !report <name> <what happened>: reports.log, the Admin Console page and
                  every online admin.

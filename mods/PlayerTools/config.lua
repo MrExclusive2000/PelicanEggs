@@ -138,6 +138,11 @@ return {
         locations = {
             -- { name = "trader", x = 0, y = 0, z = 0, price = 500 },
         },
+        -- !tpto <name>: teleport to another player once they type !tpaccept. Same cooldown,
+        -- stand-still time and teleport method as above.
+        toPlayer = true,
+        toPlayerPrice = 0,
+        requestSeconds = 60,   -- how long the other player has to accept
     },
 
     -- !info: server time, uptime, players online, next restart (from ServerMessages), plus these lines.

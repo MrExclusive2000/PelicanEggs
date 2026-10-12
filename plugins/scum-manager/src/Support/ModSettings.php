@@ -144,6 +144,9 @@ final class ModSettings
                         'teleports.locations' => ['rows', 'Destinations', [], 'numeric' => [1, 2, 3, 4], 'columns' => ['name' => 'Name (!tp name)', 'x' => 'X', 'y' => 'Y', 'z' => 'Z', 'price' => 'Price']],
                         'teleports.command' => ['text', 'Teleport command ({steamId} {x} {y} {z})', 'Teleport {steamId} {x} {y} {z}'],
                         'teleports.chargeCommand' => ['text', 'Charge command ({price} {steamId})', 'ChangeCurrencyBalance Normal -{price} {steamId}'],
+                        'teleports.toPlayer' => ['toggle', 'Teleport to players (!tpto name, they !tpaccept)', true],
+                        'teleports.toPlayerPrice' => ['int', 'Price to teleport to a player', 0],
+                        'teleports.requestSeconds' => ['int', 'Time to accept a teleport request (s)', 60],
                     ],
                 ],
                 'Feature tips' => [
