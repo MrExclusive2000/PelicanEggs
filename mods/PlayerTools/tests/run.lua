@@ -687,6 +687,7 @@ function FindFirstOf(className) if className == "World" then return helperWorld 
 local function startHelperRun()
     write(dir .. "/players.tsv", "")
     write(dir .. "/config.lua", [[return {
+        noAdminFallback = true,
         newPlayers = { starterKit = false },
         playtimeRewards = { enabled = true, everyMinutes = 0, commands = {},
             dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" }, dailyMessage = "Daily!" },
@@ -698,6 +699,23 @@ local function startHelperRun()
     login("76561198000000050", "Ivy")
     players = { ivy }
 end
+
+-- Off by default: no balances are read and nothing is sent without an admin.
+local balanceReads = 0
+write(dir .. "/players.tsv", "")
+write(dir .. "/config.lua", [[return {
+    newPlayers = { starterKit = false },
+    playtimeRewards = { enabled = true, everyMinutes = 0, commands = {},
+        dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" }, dailyMessage = "Daily!" },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 },
+}]])
+dofile(dir .. "/Scripts/main.lua")
+local quiet = Player("Ivy")
+function quiet:GetCurrencyBalanceText() balanceReads = balanceReads + 1 return { ToString = function() return "1000" end } end
+login("76561198000000050", "Ivy")
+players = { quiet }
+step(20)
+check("no-admin test off by default: no balance reads, nothing sent", balanceReads == 0 and #helperSent == 0)
 
 -- The helper works (here only with the "#"): found by a 1-coin round trip, then used.
 helperForm = "#"

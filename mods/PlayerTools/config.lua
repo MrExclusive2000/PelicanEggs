@@ -221,7 +221,8 @@ return {
         enabled = false,
     },
 
-    -- With no admin online, try SCUM's own command helper for cash rewards and teleports. It is
-    -- tested once per run (1 coin added and taken back) and only used if SCUM accepts it.
-    noAdminFallback = true,
+    -- EXPERIMENTAL: with no admin online, try SCUM's own command helper for cash rewards and
+    -- teleports. It is tested once per run (1 coin added and taken back) and only used if SCUM
+    -- accepts it. The test reads players' balances, which may have crashed a server: off.
+    noAdminFallback = false,
 }

@@ -59,7 +59,8 @@ Good to know:
    (SetTime, ChangeCurrencyBalance, Teleport <player> <x> <y> <z>...) through an online admin's chat command
    channel, exactly as if that admin typed them. So an admin from AdminUsers.ini must be
    online. Rewards, kits and payouts wait until one is; votes, bounties and teleports say
-   they cannot be done right now. With noAdminFallback on (default), PlayerTools checks once
+   they cannot be done right now. With noAdminFallback on (EXPERIMENTAL, off by default: it
+   reads balances, which may have crashed a server), PlayerTools checks once
    per run whether SCUM accepts these commands without an admin (1 coin added to a player
    and taken back) and uses that route if it works. The log says which way it went.
  - Starter kit items: while starterKitItems is empty, starterKitPreset = "basic" gives 2

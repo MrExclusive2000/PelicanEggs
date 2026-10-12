@@ -87,10 +87,10 @@ final class ModSettings
                         'itemRewards.enabled' => ['toggle', 'Give items', false],
                     ],
                 ],
-                'Without an admin online' => [
+                'Without an admin online (experimental)' => [
                     'description' => 'Cash rewards, the starter kit cash and paid teleports normally run as an online admin and wait until one is on. With this on, PlayerTools checks once per server run whether SCUM accepts the commands without an admin (it adds 1 coin to a player and takes it back) and uses that if it works. The result is in the PlayerTools log.',
                     'fields' => [
-                        'noAdminFallback' => ['toggle', 'Try without an admin', true],
+                        'noAdminFallback' => ['toggle', 'Try without an admin (experimental: reads balances, suspected in a server crash)', false],
                     ],
                 ],
                 'Welcome back' => [

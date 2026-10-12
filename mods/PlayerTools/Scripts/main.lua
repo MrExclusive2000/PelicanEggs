@@ -87,7 +87,7 @@ local DEFAULTS = {
     reports = { enabled = true, cooldownSeconds = 60 },
     featureTips = { onJoin = true, announceEveryMinutes = 20, extraTips = {} },
     itemRewards = { enabled = false },
-    noAdminFallback = true,
+    noAdminFallback = false,
     deathRecap = { enabled = true, message = "You were killed by {killer} with {weapon} from {distance} m." },
     hotspots = {
         enabled = true, kills = 3, withinMinutes = 5, radius = 500, cooldownMinutes = 10,
@@ -658,7 +658,7 @@ local function runAdminCommand(command)
         if isAdmin(session.controller) then admins[key] = session end
     end
     if next(admins) == nil then
-        if config.noAdminFallback == false then return false, "no admin is online" end
+        if config.noAdminFallback ~= true then return false, "no admin is online" end
         if noAdmin.state == "works" then
             local text = noAdmin.form .. string.gsub(command, "^#+", "")
             local ok, detail = sendWithoutAdmin(text)
@@ -914,9 +914,10 @@ local function noAdminTick(time)
                 return
             end
         end
-        -- Said once: without a readable balance there is no way to tell whether a command worked.
-        if next(sessions) ~= nil and not noAdmin.unreadableReported then
-            noAdmin.unreadableReported = true
+        -- Without a readable balance there is no way to tell whether a command worked. Give up
+        -- for this run rather than asking the game for balances every second.
+        if next(sessions) ~= nil then
+            noAdmin.state = "ignored"
             output("No admin online, and no player's balance can be read, so it cannot be checked whether SCUM runs commands without an admin. Rewards wait for an admin.")
         end
         return
