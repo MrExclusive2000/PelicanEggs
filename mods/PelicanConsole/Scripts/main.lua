@@ -278,7 +278,8 @@ local function balance(text)
         return safe(function() return player.controller:GetCurrencyBalanceText(kind):ToString() end) or "?"
     end
     local fame = safe(function() return player.controller:GetFamePointsRounded() end)
-    output(string.format("%s: money %s, gold %s, fame %s", player.name, currency(0), currency(1), tostring(fame or "?")))
+    -- SCUM's ECurrencyType (from the game, via ExclsvProbe): 0 None, 1 Normal (cash), 2 Gold.
+    output(string.format("%s: money %s, gold %s, fame %s", player.name, currency(1), currency(2), tostring(fame or "?")))
 end
 
 -- Tell ScumAntiCheat (if installed) that this teleport is ours, so it is not flagged.

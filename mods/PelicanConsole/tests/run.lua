@@ -218,7 +218,7 @@ local function ExpPlayer(name)
     function pawn:HasItem(item) return self.items[item] == true end
     controller.pawn = pawn
     function controller:K2_GetPawn() return self.pawn end
-    function controller:GetCurrencyBalanceText(kind) return { ToString = function() return kind == 0 and "1,250" or "3" end } end
+    function controller:GetCurrencyBalanceText(kind) return { ToString = function() return ({ [0] = "0", [1] = "1,250", [2] = "3" })[kind] end } end
     function controller:GetFamePointsRounded() return 42 end
     return controller
 end

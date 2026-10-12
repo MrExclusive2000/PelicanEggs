@@ -660,7 +660,8 @@ function gus.pawn:PlaceItemInInventoryOrHolster(item) inventory[#inventory + 1] 
 local teleported = nil
 function gus.pawn:K2_TeleportTo(location) teleported = location return true end
 local money = "250"
-function gus:GetCurrencyBalanceText() return { ToString = function() return money end } end
+-- Only cash (ECurrencyType 1) holds the balance; None (0) and Gold (2) read differently.
+function gus:GetCurrencyBalanceText(kind) return { ToString = function() return kind == 1 and money or "0" end } end
 login("76561198000000040", "Gus")
 players = { gus }
 step(12)
@@ -747,7 +748,7 @@ local function startHelperRun()
     }]])
     dofile(dir .. "/Scripts/main.lua")
     local ivy = Player("Ivy")
-    function ivy:GetCurrencyBalanceText() return { ToString = function() return tostring(balance) end } end
+    function ivy:GetCurrencyBalanceText(kind) return { ToString = function() return kind == 1 and tostring(balance) or "0" end } end
     login("76561198000000050", "Ivy")
     players = { ivy }
 end

@@ -13,6 +13,16 @@ what our mods can do is listed.
 - **`ERaidProtectionType`**: 0 None, 1 OfflineRaidProtection, 2 FlagSpecificRaidProtection,
   3 GlobalRaidProtection. The Server settings page shows `scum.RaidProtectionType` as a dropdown.
 
+## Fixed because of it
+
+- **`ECurrencyType`** is 0 None, 1 Normal (cash), 2 Gold. PlayerTools read balances with 0 and
+  PelicanConsole's Balance command showed 0 as money and 1 as gold. Both now read 1 for cash and
+  2 for gold. This affected the balance check before paid teleports and bounties, and the
+  automatic "does SCUM run commands without an admin" test, which compares balances.
+- Every SCUM function the mods call (KickPlayer, SendMessageToClient, SendHUDMessageToAll,
+  IsUserAdmin, GetCurrencyBalanceText, GetFamePointsRounded, Chat_Server_ProcessAdminCommand,
+  Test_ProcessAdminCommand, GetSquad) exists with the parameters we pass.
+
 ## Not possible (no safe route in the game)
 
 - **Money without an admin:** the only setter is `ConZPlayerController:SetCurrencyBalanceRep`,
