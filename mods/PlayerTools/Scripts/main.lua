@@ -878,6 +878,11 @@ local function noAdminTick(time)
                 return
             end
         end
+        -- Said once: without a readable balance there is no way to tell whether a command worked.
+        if next(sessions) ~= nil and not noAdmin.unreadableReported then
+            noAdmin.unreadableReported = true
+            output("No admin online, and no player's balance can be read, so it cannot be checked whether SCUM runs commands without an admin. Rewards wait for an admin.")
+        end
         return
     end
     if noAdmin.state ~= "testing" then return end

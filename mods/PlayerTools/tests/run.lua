@@ -685,6 +685,14 @@ check("nothing paid when the helper is ignored", balance == 1000 and lastPrivate
 local sentWhenIgnored = #helperSent
 step(10)
 check("helper not tried again once ignored", #helperSent == sentWhenIgnored)
+-- No readable balance: said once, and nothing is sent.
+helperWorks, helperSent = true, {}
+local _, unreadableBefore = string.gsub(read(dir .. "/playertools.log"), "no player's balance can be read", "")
+startHelperRun()
+players[1].GetCurrencyBalanceText = function() return { ToString = function() return "" end } end
+step(20)
+local _, unreadable = string.gsub(read(dir .. "/playertools.log"), "no player's balance can be read", "")
+check("unreadable balance reported once, nothing sent", unreadable == unreadableBefore + 1 and #helperSent == 0)
 StaticFindObject, FindFirstOf = savedStatic, savedFirst
 players = {}
 
