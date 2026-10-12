@@ -19,6 +19,11 @@ return [
     // Install the mods that ship with the plugin (resources/mods) together with a fresh UE4SS install.
     'install_bundled_mods' => (bool) env('SCUM_MANAGER_INSTALL_BUNDLED_MODS', true),
 
+    // Where "Install our mods" gets the latest mod zips (manifest.json and <Mod>.zip, checked by
+    // sha256). Empty = only the copies bundled with the plugin. The bundled copies are also the
+    // fallback when this cannot be reached.
+    'mods_source' => env('SCUM_MANAGER_MODS_SOURCE', 'https://raw.githubusercontent.com/MrExclusive2000/PelicanEggs/HEAD/mods/dist'),
+
     // Limits for uploaded mod archives.
     'mod_upload_max_kb' => (int) env('SCUM_MANAGER_MOD_UPLOAD_MAX_KB', 51200),
     'mod_max_extracted_bytes' => 200 * 1024 * 1024,

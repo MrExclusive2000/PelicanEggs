@@ -437,5 +437,25 @@ check('layout: no anti-cheat section left in "Other"', array_key_exists('Other',
 check('layout: section switch found', ModSettings::sectionSwitch(['fields' => ['a.price' => ['number', 'x', 1], 'a.enabled' => ['toggle', 'x', true]]]), 'a.enabled');
 check('layout: no switch, no collapse', ModSettings::sectionSwitch(['fields' => ['a.price' => ['number', 'x', 1]]]), null);
 
+// ---------------------------------------------------------------- mod updates from GitHub
+use MrExclusive\ScumManager\Support\ModManifest;
+$published = ModManifest::parse(file_get_contents(__DIR__ . '/../../../mods/dist/manifest.json'));
+check('manifest: every shipped mod published', array_keys($published['mods']), ['PelicanConsole', 'PlayerTools', 'ScumAntiCheat', 'ScumCommandProbe', 'ServerMessages']);
+foreach ($published['mods'] as $name => $entry) {
+    $zip = file_get_contents(__DIR__ . "/../../../mods/dist/$name.zip");
+    check("manifest: $name zip matches its sha256", (function () use ($zip, $entry, $name) { ModManifest::verify($zip, $entry, $name); return true; })(), true);
+}
+check('manifest: lists the manager version', $published['manager'], json_decode(file_get_contents(__DIR__ . '/../plugin.json'), true)['version']);
+$entry = $published['mods']['PlayerTools'];
+throws('manifest: truncated download refused', fn () => ModManifest::verify(substr(file_get_contents(__DIR__ . '/../../../mods/dist/PlayerTools.zip'), 0, -1), $entry, 'PlayerTools'), 'does not match');
+throws('manifest: changed download refused', fn () => ModManifest::verify(str_repeat('x', $entry['bytes']), $entry, 'PlayerTools'), 'does not match');
+$foreign = ModManifest::parse('{"format":"exclsv-mods","mods":{"SomeoneElsesMod":{"file":"SomeoneElsesMod.zip","build":"abcdef","sha256":"' . str_repeat('a', 64) . '","bytes":1}}}');
+check('manifest: mods that are not ours are ignored', $foreign['mods'], []);
+throws('manifest: path tricks refused', fn () => ModManifest::parse('{"format":"exclsv-mods","mods":{"PlayerTools":{"file":"../../evil.zip","build":"abcdef","sha256":"' . str_repeat('a', 64) . '","bytes":1}}}'), 'malformed');
+throws('manifest: other JSON refused', fn () => ModManifest::parse('{"mods":{}}'), 'not an Exclsv mod manifest');
+check('manifest: url built next to the manifest', ModManifest::url('https://raw.githubusercontent.com/MrExclusive2000/PelicanEggs/HEAD/mods/dist/', 'PlayerTools.zip'), 'https://raw.githubusercontent.com/MrExclusive2000/PelicanEggs/HEAD/mods/dist/PlayerTools.zip');
+throws('manifest: plain http refused', fn () => ModManifest::url('http://example.com/mods', 'PlayerTools.zip'), 'https://');
+check('manifest: newer manager detected', [ModManifest::isNewer('1.14.0', '1.13.9'), ModManifest::isNewer('1.13.0', '1.13.0'), ModManifest::isNewer(null, '1.0')], [true, false, false]);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

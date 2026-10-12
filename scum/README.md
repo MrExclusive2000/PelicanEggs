@@ -79,7 +79,7 @@ Commands typed while the server is starting or stopped are dropped.
 
 ## Server mods
 
-Our own UE4SS mods ship with the SCUM Manager plugin and are installed together with UE4SS (or with **Install our mods** on the **SCUM Mods** page). They are also in [`mods/dist`](../mods/dist) for manual upload.
+Our own UE4SS mods ship with the SCUM Manager plugin and are installed together with UE4SS (or with **Install / update our mods** on the **ExclsvSCUM > Mods** page, which pulls the latest builds from GitHub and keeps their settings). They are also in [`mods/dist`](../mods/dist) for manual upload.
 
 | Mod | What it does |
 |-----|--------------|

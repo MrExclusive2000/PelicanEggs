@@ -185,6 +185,38 @@ class ScumModsPage extends Page implements HasTable
             ]);
     }
 
+    /** What "Install / update our mods" will do, mod by mod. */
+    private function updateSummary(ScumServerService $service): string
+    {
+        $server = $this->getServer();
+        $installed = $service->installedModsOf($server, array_keys(Brand::MODS));
+
+        try {
+            $latest = $service->modSource() !== null ? $service->latestModManifest() : null;
+        } catch (Exception) {
+            $latest = null;
+        }
+
+        $wanted = array_values(array_unique(array_merge(array_keys(ScumServerService::bundledMods()), $installed)));
+        $lines = [];
+        foreach ($wanted as $mod) {
+            $build = in_array($mod, $installed, true) ? $service->installedBuild($server, $mod) : null;
+            $newest = $latest['mods'][$mod]['build'] ?? ScumServerService::bundledBuilds()[$mod]['build'] ?? null;
+            $lines[] = Brand::mod($mod) . ': ' . match (true) {
+                !in_array($mod, $installed, true) => 'will be installed',
+                $newest === null => 'kept as it is',
+                $build === $newest => 'up to date (reinstalled)',
+                default => 'update available',
+            };
+        }
+
+        $from = $latest !== null
+            ? 'The latest versions are downloaded from GitHub and checked before installing.'
+            : 'GitHub is not reachable or not set, so the copies bundled with the panel are used.';
+
+        return $from . ' Settings (config.lua) are kept. ' . implode('. ', $lines) . '. Restart the server afterwards.';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -258,19 +290,31 @@ class ScumModsPage extends Page implements HasTable
                     }
                 }),
             Action::make('install_bundled')
-                ->label('Install our mods')
+                ->label('Install / update our mods')
                 ->icon('tabler-package')
                 ->color('gray')
-                ->visible(fn () => ($this->ue4ss['installed'] ?? false) && ScumServerService::bundledMods() !== [])
+                ->visible(fn () => ($this->ue4ss['installed'] ?? false) && (ScumServerService::bundledMods() !== [] || app(ScumServerService::class)->modSource() !== null))
                 ->authorize(fn () => user()?->can(SubuserPermission::FileCreate, $this->getServer()))
                 ->requiresConfirmation()
                 ->modalHeading('Install or update the ' . Brand::MANAGER . ' mods?')
-                ->modalDescription(fn () => 'Installs ' . implode(', ', array_keys(ScumServerService::bundledMods())) . ' and enables them. Mods you already have are updated, and their settings (config.lua) are kept. Restart the server to load them.')
+                ->modalDescription(fn (ScumServerService $service) => $this->updateSummary($service))
                 ->action(function (ScumServerService $service) {
                     try {
-                        $installed = $service->installBundledMods($this->getServer());
+                        $result = $service->installLatestMods($this->getServer());
+                        $names = implode(', ', array_map(Brand::mod(...), $result['installed']));
+                        $body = array_merge(
+                            [$result['fromSource'] !== [] ? 'Latest versions downloaded from GitHub; settings kept.' : 'Bundled versions installed; settings kept.'],
+                            $result['notes'],
+                            $result['manager'] !== null ? [Brand::MANAGER . ' ' . $result['manager'] . ' is available: import the new plugin zip to update the panel itself.'] : [],
+                            ['Restart the server to load them.'],
+                        );
 
-                        Notification::make()->title('Installed ' . implode(', ', $installed))->body('Restart the server to load them.')->success()->send();
+                        Notification::make()
+                            ->title($names === '' ? 'Nothing was installed' : 'Installed ' . $names)
+                            ->body(implode(' ', $body))
+                            ->status($result['notes'] === [] ? 'success' : 'warning')
+                            ->persistent($result['notes'] !== [] || $result['manager'] !== null)
+                            ->send();
                     } catch (Exception $exception) {
                         report($exception);
                         Notification::make()->title('Could not install the mods')->body($exception->getMessage())->danger()->persistent()->send();

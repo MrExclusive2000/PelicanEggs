@@ -9,6 +9,7 @@ use App\Repositories\Daemon\DaemonFileRepository;
 use App\Repositories\Daemon\DaemonServerRepository;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\ConsoleCommand;
@@ -16,6 +17,8 @@ use MrExclusive\ScumManager\Support\LuaTable;
 use MrExclusive\ScumManager\Support\TeleportDestinations;
 use MrExclusive\ScumManager\Support\ModArchive;
 use MrExclusive\ScumManager\Support\ModList;
+use MrExclusive\ScumManager\Support\ModManifest;
+use Throwable;
 use MrExclusive\ScumManager\Support\Ue4ssSettings;
 use RuntimeException;
 use MrExclusive\ScumManager\Support\Brand;
@@ -346,7 +349,7 @@ class ScumServerService
 
         // Our own mods (admin console, anti-cheat, messages, player tools) come with a fresh install.
         if (!$current['installed'] && config('scum-manager.install_bundled_mods', true)) {
-            $this->installBundledMods($server);
+            $this->installLatestMods($server);
         }
 
         Activity::event('server:file.pull')
@@ -532,6 +535,151 @@ class ScumServerService
         }
 
         return $installed;
+    }
+
+    /** Where the latest mod zips and manifest.json are published, or null to use the bundled copies only. */
+    public function modSource(): ?string
+    {
+        $source = config('scum-manager.mods_source');
+
+        return filled($source) ? rtrim(trim($source), '/') : null;
+    }
+
+    /**
+     * The published manifest (cached for five minutes unless $fresh).
+     *
+     * @return array{manager: ?string, mods: array<string, array{file: string, build: string, sha256: string, bytes: int}>}
+     */
+    public function latestModManifest(bool $fresh = false): array
+    {
+        $source = $this->modSource() ?? throw new RuntimeException('No mod source is set.');
+        $key = 'scum-manager:mod-manifest:' . sha1($source);
+        $fetch = fn () => ModManifest::parse(
+            Http::timeout(15)->connectTimeout(5)->throw()->get(ModManifest::url($source, 'manifest.json'))->body()
+        );
+
+        if ($fresh) {
+            Cache::forget($key);
+        }
+
+        return Cache::remember($key, 300, $fetch);
+    }
+
+    /** @return array<string, array{file: string, build: string, sha256: string, bytes: int}> builds of the bundled zips */
+    public static function bundledBuilds(): array
+    {
+        $path = dirname(__DIR__, 2) . '/resources/mods/manifest.json';
+        try {
+            return is_file($path) ? ModManifest::parse((string) file_get_contents($path))['mods'] : [];
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /** This plugin's version, from plugin.json. */
+    public static function managerVersion(): string
+    {
+        $plugin = json_decode((string) @file_get_contents(dirname(__DIR__, 2) . '/plugin.json'), true);
+
+        return is_array($plugin) && is_string($plugin['version'] ?? null) ? $plugin['version'] : '0';
+    }
+
+    /** The build an installed mod came from, or null when unknown (installed by hand or before builds were recorded). */
+    public function installedBuild(Server $server, string $mod): ?string
+    {
+        $this->assertModName($mod);
+        $build = $this->read($server, $this->ue4ss($server)['mods'] . "/$mod/" . ModManifest::BUILD_FILE);
+
+        return $build === null ? null : (trim($build) ?: null);
+    }
+
+    private function writeBuild(Server $server, string $mod, string $build): void
+    {
+        $this->files($server)->putContent($this->ue4ss($server)['mods'] . "/$mod/" . ModManifest::BUILD_FILE, $build . "\n");
+    }
+
+    /**
+     * Install or update our mods from the published source (GitHub), falling back to the copies
+     * bundled with the plugin. Settings (config.lua) are kept. The probe is only updated where
+     * it is already installed.
+     *
+     * @return array{installed: list<string>, fromSource: list<string>, notes: list<string>, manager: ?string}
+     */
+    public function installLatestMods(Server $server): array
+    {
+        $wanted = array_keys(self::bundledMods());
+        foreach ($this->installedModsOf($server, array_keys(Brand::MODS)) as $mod) {
+            if (!in_array($mod, $wanted, true)) {
+                $wanted[] = $mod;
+            }
+        }
+
+        $notes = [];
+        $latest = null;
+        if ($this->modSource() !== null) {
+            try {
+                $latest = $this->latestModManifest(fresh: true);
+            } catch (Throwable $exception) {
+                report($exception);
+                $notes[] = 'The latest versions could not be fetched (' . $exception->getMessage() . '), so the copies bundled with the panel were used.';
+            }
+        }
+
+        $bundled = self::bundledMods();
+        $bundledBuilds = self::bundledBuilds();
+        $installed = [];
+        $fromSource = [];
+
+        foreach ($wanted as $name) {
+            $entry = $latest['mods'][$name] ?? null;
+            if ($entry !== null) {
+                try {
+                    $this->installFromSource($server, $name, $entry);
+                    $installed[] = $name;
+                    $fromSource[] = $name;
+                    continue;
+                } catch (Throwable $exception) {
+                    report($exception);
+                    $notes[] = Brand::mod($name) . ': ' . $exception->getMessage() . (isset($bundled[$name]) ? ' The bundled copy was used.' : '');
+                }
+            }
+
+            if (!isset($bundled[$name])) {
+                continue; // e.g. the probe when the source is unreachable: left as it is
+            }
+            array_push($installed, ...$this->installModArchive($server, $bundled[$name], "$name.zip", keepSettings: true));
+            if (isset($bundledBuilds[$name])) {
+                $this->writeBuild($server, $name, $bundledBuilds[$name]['build']);
+            }
+        }
+
+        return [
+            'installed' => array_values(array_unique($installed)),
+            'fromSource' => $fromSource,
+            'notes' => $notes,
+            'manager' => ModManifest::isNewer($latest['manager'] ?? null, self::managerVersion()) ? $latest['manager'] : null,
+        ];
+    }
+
+    /** @param array{file: string, build: string, sha256: string, bytes: int} $entry */
+    private function installFromSource(Server $server, string $name, array $entry): void
+    {
+        if ($entry['bytes'] > (int) config('scum-manager.mod_upload_max_kb') * 1024) {
+            throw new RuntimeException('The published zip is larger than the upload limit.');
+        }
+
+        $contents = Http::timeout(120)->connectTimeout(5)->throw()->get(ModManifest::url($this->modSource(), $entry['file']))->body();
+        ModManifest::verify($contents, $entry, $name);
+
+        $zip = tempnam(sys_get_temp_dir(), 'exclsv-mod-');
+        try {
+            file_put_contents($zip, $contents);
+            $this->installModArchive($server, $zip, $entry['file'], keepSettings: true);
+        } finally {
+            @unlink($zip);
+        }
+
+        $this->writeBuild($server, $name, $entry['build']);
     }
 
     /**

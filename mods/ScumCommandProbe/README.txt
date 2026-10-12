@@ -14,7 +14,8 @@ It only reads Unreal's reflection data and counts objects. It does not call or c
 anything in the game.
 
 Use:
- 1. Install it (ExclsvSCUM > Mods > "Install our mods", or upload this zip).
+ 1. Upload this zip on ExclsvSCUM > Mods. Once it is installed, "Install / update our mods"
+    keeps it up to date.
  2. Restart the server. The first report is written about 2-3 minutes after it is online,
     the census a minute after that.
  3. For the best report, let people play for 45 minutes: the probe scans again then and
