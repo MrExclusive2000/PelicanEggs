@@ -74,10 +74,10 @@ local DEFAULTS = {
         playerBounties = false, minAmount = 100, maxAmount = 5000,
         payCommand = "ChangeCurrencyBalance Normal {amount} {steamId}",
         chargeCommand = "ChangeCurrencyBalance Normal -{amount} {steamId}",
-        checkBalance = false,
+        checkBalance = true,
     },
     teleports = {
-        enabled = true, cooldownMinutes = 30, standStillSeconds = 10, method = "admin", checkBalance = false,
+        enabled = true, cooldownMinutes = 30, standStillSeconds = 10, method = "admin", checkBalance = true,
         command = "Teleport {steamId} {x} {y} {z}",
         chargeCommand = "ChangeCurrencyBalance Normal -{price} {steamId}",
         locations = {},
@@ -87,7 +87,6 @@ local DEFAULTS = {
     reports = { enabled = true, cooldownSeconds = 60 },
     featureTips = { onJoin = true, announceEveryMinutes = 20, extraTips = {} },
     itemRewards = { enabled = false },
-    noAdminFallback = false,
     deathRecap = { enabled = true, message = "You were killed by {killer} with {weapon} from {distance} m." },
     hotspots = {
         enabled = true, kills = 3, withinMinutes = 5, radius = 500, cooldownMinutes = 10,
@@ -718,21 +717,6 @@ local function onlineCount()
     return count
 end
 
--- SCUM's command helper (MiscStatics.Test_ProcessAdminCommand) needs no admin online, but SCUM
--- may ignore what it is sent. It is only used once a test has shown it works (see noAdminTick).
-local NO_ADMIN_PROCESSOR = "/Script/SCUM.Default__MiscStatics"
-local NO_ADMIN_FORMS = { "", "#" }   -- tried without and with the "#"
-local noAdmin = { state = nil, wanted = false }   -- state: nil (untested), "testing", "works", "ignored"
-
-local function sendWithoutAdmin(text)
-    local processor = safe(function() return StaticFindObject(NO_ADMIN_PROCESSOR) end)
-    local world = findFirst({ "World" })
-    if not isValid(processor) or world == nil then return false, "SCUM's command helper was not found" end
-    local ok, err = pcall(function() processor:Test_ProcessAdminCommand(world, text) end)
-    if not ok then return false, tostring(err) end
-    return true
-end
-
 -- ------------------------------------------------------------------ commands without an admin
 -- Same route as ExclsvConsole's (confirmed on a live server): every SCUM admin command keeps the
 -- lowest executor level allowed to run it (_requiredExecutorLevel; 0 Regular, 1 Admin, ...).
@@ -864,8 +848,8 @@ end
 end)()
 
 -- Runs an admin command through an online admin's chat command channel, as if they typed it.
--- With no admin online, the no-admin route above runs the commands it covers; otherwise SCUM's
--- command helper is used once it is known to work.
+-- With no admin online, the no-admin route above runs the commands it covers (when switched on);
+-- anything else waits until an admin is online.
 local function runAdminCommand(command)
     local admins = {}
     for key, session in pairs(sessions) do
@@ -874,14 +858,6 @@ local function runAdminCommand(command)
     if next(admins) == nil then
         local elevated, how = runElevated(command)
         if elevated ~= nil then return elevated, how end
-        if config.noAdminFallback ~= true then return false, "no admin is online" end
-        if noAdmin.state == "works" then
-            local text = noAdmin.form .. string.gsub(command, "^#+", "")
-            local ok, detail = sendWithoutAdmin(text)
-            if ok then return true, "SCUM's command helper" end
-            return false, detail
-        end
-        if noAdmin.state == nil then noAdmin.wanted = true end
         return false, "no admin is online"
     end
 
@@ -1130,10 +1106,10 @@ local function finishVote(time)
     end
 end
 
--- ------------------------------------------------------------------ experimental direct routes
--- Found by the probe and not yet confirmed on a live server: giving items straight into a
--- player's inventory, reading their balance, and teleporting without an admin. They are only
--- used where the settings switch them on (item lists, method = "direct", checkBalance).
+-- ------------------------------------------------------------------ direct routes
+-- Reading a player's balance (confirmed on a live server), and two routes not yet confirmed
+-- there: giving items straight into a player's inventory, and teleporting without the Teleport
+-- command. Those two are only used where the settings switch them on (item lists, method = "direct").
 
 -- Money the player has, read from the game (nil when it cannot be read). This is the plain
 -- value the controller keeps for the player's screen; calling SCUM's GetCurrencyBalanceText
@@ -1141,57 +1117,6 @@ end
 local function balanceOf(session)
     local money = safe(function() return session.controller._moneyBalanceRep end)
     return type(money) == "number" and math.floor(money) or nil
-end
-
--- Finds out once per run whether SCUM runs commands sent without an admin: 1 coin is added to a
--- player whose balance can be read, and taken back again if it arrived. Nothing waiting for an
--- admin is paid this way until that has worked.
-local NO_ADMIN_WAIT = 6   -- seconds to wait for the coin before trying the next form
-
-local function noAdminTick(time)
-    if noAdmin.state == nil and noAdmin.wanted then
-        for _, session in pairs(sessions) do
-            local before = session.steamId and balanceOf(session)
-            if before then
-                noAdmin.state = "testing"
-                noAdmin.test = { steamId = session.steamId, before = before, form = 1, started = time }
-                sendWithoutAdmin(NO_ADMIN_FORMS[1] .. "ChangeCurrencyBalance Normal 1 " .. session.steamId)
-                output("No admin online: checking whether SCUM runs commands without one (1 coin to " .. session.name .. ", taken back).")
-                return
-            end
-        end
-        -- Without a readable balance there is no way to tell whether a command worked. Give up
-        -- for this run rather than asking the game for balances every second.
-        if next(sessions) ~= nil then
-            noAdmin.state = "ignored"
-            output("No admin online, and no player's balance can be read, so it cannot be checked whether SCUM runs commands without an admin. Rewards wait for an admin.")
-        end
-        return
-    end
-    if noAdmin.state ~= "testing" then return end
-
-    local test = noAdmin.test
-    local session = sessionById(test.steamId)
-    if session == nil then
-        noAdmin.state, noAdmin.test = nil, nil   -- they left; test again with someone else
-        return
-    end
-    local now = balanceOf(session)
-    if now and now >= test.before + 1 then
-        noAdmin.state, noAdmin.form, noAdmin.test = "works", NO_ADMIN_FORMS[test.form], nil
-        sendWithoutAdmin(noAdmin.form .. "ChangeCurrencyBalance Normal -1 " .. test.steamId)
-        output("SCUM runs commands without an admin online. Rewards and teleports no longer wait for one.")
-    elseif time - test.started >= NO_ADMIN_WAIT then
-        test.form = test.form + 1
-        if NO_ADMIN_FORMS[test.form] == nil then
-            noAdmin.state, noAdmin.test = "ignored", nil
-            output("SCUM ignores commands sent without an admin online. Rewards and teleports wait for an admin.")
-            return
-        end
-        test.started = time
-        test.before = now or test.before
-        sendWithoutAdmin(NO_ADMIN_FORMS[test.form] .. "ChangeCurrencyBalance Normal 1 " .. test.steamId)
-    end
 end
 
 local function canAfford(session, price, check)
@@ -2456,7 +2381,7 @@ local function handleChat(chat, time)
         if rest == "" and entry and rewards.enabled and every > 0 and #(rewards.commands or {}) > 0 then
             local left = every - (entry.playtime - (entry.rewarded or 0))
             lines[#lines + 1] = left > 0 and string.format("Next playtime reward in %d min.", math.ceil(left / 60))
-                or "Playtime reward due now (needs an admin online)."
+                or "Playtime reward due now: it is paid as soon as it can be."
         end
         tell(session, lines)
     elseif word == "top" and config.stats.enabled then
@@ -2773,9 +2698,6 @@ local function tick()
 
     local wrote, writeError = pcall(writeOnline, time)
     if not wrote then output("Writing online.tsv failed: " .. tostring(writeError)) end
-
-    local tested, testError = pcall(noAdminTick, time)
-    if not tested then output("Checking for commands without an admin failed: " .. tostring(testError)) end
 
     local online = onlineCount()
     for _, session in pairs(sessions) do

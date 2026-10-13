@@ -73,7 +73,7 @@ SCUM has no RCON and doesn't read admin commands from its console. The [PelicanC
 How commands run:
 - **`Announce <message>`** shows the message on every player's screen, and **`ListPlayers`** lists who is online in the console. **`Kick <name>`** kicks an online player by name. These work with no admin in game.
 - **Every other command** (SetTime, SetWeather, Ban, Teleport...) runs through an online admin's chat command channel, exactly as if that admin typed it in chat, and SCUM's reply appears in their chat. So an admin from `AdminUsers.ini` must be online.
-- With no admin online, the mod tries SCUM's internal `MiscStatics.Test_ProcessAdminCommand`, which SCUM ignores for most commands on a dedicated server. The console says so.
+- With no admin online, SCUM does not run admin commands and the console says so. Money, fame, `SpawnItem` and `Teleport` commands can still run when `no-admin-commands.txt` exists in the PelicanConsole mod folder (see that mod's README).
 
 Commands typed while the server is starting or stopped are dropped.
 

@@ -21,9 +21,6 @@ return {
     -- Write joins and leaves to the Pelican console and players.log.
     logJoinsAndLeaves = true,
 
-    -- Same as PelicanConsole: SCUM admin commands start with "#".
-    commandPrefix = "#",
-
     -- Daily restart times, "HH:MM" in UTC. Countdown announcements go out the given number of
     -- minutes before each. The restart itself is a Pelican schedule (Schedules > New).
     restartTimes = {

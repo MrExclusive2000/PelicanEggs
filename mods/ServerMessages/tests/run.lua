@@ -163,7 +163,6 @@ writeConfig([[return {
     announcements = { "One", "Two" },
     onlyWhenPlayersOnline = false,
     logJoinsAndLeaves = false,
-    commandPrefix = "",
 }]])
 dofile(dir .. "/Scripts/main.lua")
 check("no Pelican console mirror without PelicanConsole", read(mods .. "/PelicanConsole/console.log") == "")
@@ -186,10 +185,10 @@ advance(60)
 advance(60)
 check("rotation wraps", hud[start + 1] == "One" and hud[start + 2] == "Two" and hud[start + 3] == "One")
 
--- Without a game mode, falls back to the admin command with the configured prefix.
+-- Without a game mode, the announcement is not shown and the log says so (no admin command).
 gameModeAvailable = false
 advance(60)
-check("fallback to admin command uses prefix setting", commands[#commands] == "Announce Two")
+check("no game mode: reported, no admin command", #commands == 0 and string.find(table.concat(log), "Could not show the announcement (the game world is not ready): Two", 1, true) ~= nil)
 gameModeAvailable = true
 
 -- ------------------------------------------------------------------ restart warnings and reload
@@ -226,7 +225,7 @@ local dave = Player("Dave", Pawn("BP_Prisoner_C"))
 players = { dave }
 advance(20)
 local logText = table.concat(log)
-check("missing processor reported", string.find(logText, "admin command processor is not available; cannot send: #Announce Dave joined", 1, true) ~= nil)
+check("announcement without a game world reported", string.find(logText, "Could not show the announcement (the game world is not ready): Dave joined", 1, true) ~= nil)
 check("default welcome off when config omits it", string.find(logText, "Could not send the welcome", 1, true) == nil)
 
 writeConfig([[return { welcome = "Hi {name}" }]])

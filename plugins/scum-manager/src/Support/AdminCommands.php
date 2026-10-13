@@ -32,12 +32,12 @@ final class AdminCommands
             'fields' => ['name' => ['playerName', 'Player']],
         ],
         'whereis' => [
-            'label' => 'Where is a player?', 'anytime' => true, 'experimental' => true, 'template' => 'WhereIs {name}',
+            'label' => 'Where is a player?', 'anytime' => true, 'template' => 'WhereIs {name}',
             'help' => 'Shows the player\'s coordinates, for teleports.',
             'fields' => ['name' => ['playerName', 'Player']],
         ],
         'balance' => [
-            'label' => 'Check a player\'s money and fame', 'anytime' => true, 'experimental' => true, 'template' => 'Balance {name}',
+            'label' => 'Check a player\'s money and fame', 'anytime' => true, 'template' => 'Balance {name}',
             'help' => 'Reads the player\'s money, gold and fame.',
             'fields' => ['name' => ['playerName', 'Player']],
         ],
@@ -48,7 +48,7 @@ final class AdminCommands
         ],
         'giveitem' => [
             'label' => 'Give an item to a player', 'anytime' => true, 'experimental' => true, 'template' => 'GiveItem {name} {item} {amount}',
-            'help' => 'Puts the item in the player\'s inventory (or at their feet if it is full). New: try it on yourself first.',
+            'help' => 'Puts the item in the player\'s inventory (or at their feet if it is full).',
             'fields' => ['name' => ['playerName', 'Player'], 'item' => ['item', 'Item'], 'amount' => ['int', 'Amount', 1, 10]],
         ],
         'settime' => [
@@ -106,10 +106,10 @@ final class AdminCommands
     /** @return array<string, array<string, string>> grouped options for a select */
     public static function options(): array
     {
-        $groups = ['Works any time' => [], 'Works any time (experimental)' => [], 'Needs an admin in game' => [], 'Other' => []];
+        $groups = ['Works any time' => [], 'Works any time (not yet confirmed)' => [], 'Needs an admin in game' => [], 'Other' => []];
         foreach (self::COMMANDS as $key => $command) {
             $group = match (true) {
-                ($command['experimental'] ?? false) => 'Works any time (experimental)',
+                ($command['experimental'] ?? false) => 'Works any time (not yet confirmed)',
                 $command['anytime'] === true => 'Works any time',
                 $command['anytime'] === false => 'Needs an admin in game',
                 default => 'Other',

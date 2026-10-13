@@ -445,13 +445,13 @@ for _ = 1, 60 do step() end
 slow.pawn.x = slow.pawn.x + 20 step()
 check("old strikes expire", has(acLog(), "Slow: moving 20.0 m/s on foot (limit 10) at 40, 0, 0 [strike 1/2]"))
 
--- KickPlayer fails: falls back to the admin command.
+-- KickPlayer fails: said so (SCUM ignores admin commands sent without an admin, so no fallback).
 kickWorks = false
 local other = Player("Other", Pawn("BP_Prisoner_C", 0, 0, 0))
 players = { other }
 tick()
 for _ = 1, 2 do other.pawn.x = other.pawn.x + 20 step() end
-check("falls back to #Kick", adminCommands[1] == "#Kick Other")
+check("failed kick reported, no admin command sent", has(acLog(), "Could not kick Other") and adminCommands[1] == nil)
 kickWorks = true
 
 -- ------------------------------------------------------------------ scenario 3: ban action and game logs

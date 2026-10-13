@@ -1,11 +1,11 @@
 {
   "format": "exclsv-mods",
-  "manager": "1.30.1",
+  "manager": "1.31.0",
   "mods": {
-    "PelicanConsole": { "file": "PelicanConsole.zip", "build": "53d2befe1f30", "sha256": "5e509e871a55ff635b33e7ad89d66851559ea23fd1b5f8aa655ae10abcead229", "bytes": 16354 },
-    "PlayerTools": { "file": "PlayerTools.zip", "build": "2955aed6f329", "sha256": "186945b5f15c82c19a8b1c9c4505f91d3f082dc850634fedf7b66f9d763c765d", "bytes": 42817 },
-    "ScumAntiCheat": { "file": "ScumAntiCheat.zip", "build": "550815c44453", "sha256": "7f091b3cfc8b2730a680c7419c4d4593c1a72410df93bd3ddaba8d28df428879", "bytes": 20346 },
-    "ScumCommandProbe": { "file": "ScumCommandProbe.zip", "build": "fc100c4ae55f", "sha256": "78bf2f81562a550946a4aed1f1e1b7e5160ababa9b12c3bbae624ab2583c6c62", "bytes": 11348 },
-    "ServerMessages": { "file": "ServerMessages.zip", "build": "0eb3fe20ba99", "sha256": "1d2c528f5e85f5ca3b97578e37a63ae024d59fcea520331e5fc6261fe6700ac2", "bytes": 6167 }
+    "PelicanConsole": { "file": "PelicanConsole.zip", "build": "67e68afa9c8e", "sha256": "73066b7f831c15356d7fce7ef4f7418d61210f41223c04f74b3201f2a5aa0db2", "bytes": 16250 },
+    "PlayerTools": { "file": "PlayerTools.zip", "build": "cff74be4c954", "sha256": "9369640695b548d8e1b38b199588544f458758a8149dffd20cfd94c85b59440f", "bytes": 41525 },
+    "ScumAntiCheat": { "file": "ScumAntiCheat.zip", "build": "e6114d02dc12", "sha256": "b3a3207f6fa9ff89be0a9048527179a211524c3be7267aa3eef6c36271b01ae5", "bytes": 20288 },
+    "ScumCommandProbe": { "file": "ScumCommandProbe.zip", "build": "40c61761abec", "sha256": "d766ca8d34e9a380d58bc604dd99bf7e907a02226b2b2ae2949e17e1821acae7", "bytes": 9957 },
+    "ServerMessages": { "file": "ServerMessages.zip", "build": "cdc9b364a1c2", "sha256": "b66115a0c339322055f5d599852ce528b300b0345af72435f6e794411353daf2", "bytes": 5947 }
   }
 }

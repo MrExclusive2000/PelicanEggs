@@ -58,11 +58,12 @@ return {
             "Welcome {name}! Type !help in chat for server commands.",
         },
         -- Starter kit: SCUM admin commands (without "#") run once per new player, after their
-        -- character spawns. {steamId} and {name} are the player. Needs an admin online (or SCUM
-        -- accepting commands without one, see noAdminFallback); the kit waits until then. Use commands that name the player: SpawnItem has no target, so it
+        -- character spawns. {steamId} and {name} are the player. Needs an admin online (or the
+        -- no-admin route: no-admin-commands.txt in the PelicanConsole folder); the kit waits until then. Use commands that name the player: SpawnItem has no target, so it
         -- would drop items in front of the admin instead.
         starterKit = true,
-        -- EXPERIMENTAL: items given straight into the new player's inventory, no admin needed.
+        -- Items given straight into the new player's inventory, no admin needed (not yet
+        -- confirmed on a live server; needs itemRewards on).
         -- Item names as in SpawnItem (find them with "Find an item name" on the Admin Console),
         -- e.g. { item = "Water_05l", amount = 1 }.
         -- "basic": water, tuna, beans, apples, bandages, a knife and a small backpack, used while
@@ -91,7 +92,7 @@ return {
         dailyEnabled = true,
         dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" },
         dailyMessage = "Daily login bonus: +200 cash.",
-        -- EXPERIMENTAL: items given with each reward, e.g. { item = "Water_05l", amount = 1 }.
+        -- Items given with each reward, e.g. { item = "Water_05l", amount = 1 } (needs itemRewards on).
         items = {},
         dailyItems = {},
     },
@@ -120,9 +121,9 @@ return {
         maxAmount = 5000,
         payCommand = "ChangeCurrencyBalance Normal {amount} {steamId}",
         chargeCommand = "ChangeCurrencyBalance Normal -{amount} {steamId}",
-        -- EXPERIMENTAL: read the player's balance first and refuse bounties they cannot pay.
-        -- Turn this on before playerBounties.
-        checkBalance = false,
+        -- Read the player's balance first and refuse bounties they cannot pay. Keep this on
+        -- with playerBounties.
+        checkBalance = true,
     },
 
     -- !tp <name>: the player stands still for standStillSeconds, pays the price and is teleported.
@@ -132,10 +133,10 @@ return {
         cooldownMinutes = 30,
         standStillSeconds = 10,
         -- "admin": SCUM's Teleport command (needs an admin online).
-        -- "direct": EXPERIMENTAL, moves the player directly, no admin needed.
+        -- "direct": moves the player directly, no admin needed (not yet confirmed on a live server).
         method = "admin",
-        -- EXPERIMENTAL: read the player's balance first and refuse teleports they cannot pay.
-        checkBalance = false,
+        -- Read the player's balance first and refuse teleports they cannot pay.
+        checkBalance = true,
         command = "Teleport {steamId} {x} {y} {z}",
         chargeCommand = "ChangeCurrencyBalance Normal -{price} {steamId}",
         locations = {
@@ -187,7 +188,7 @@ return {
 
     -- Players volunteer with !manhunt join. Every so often one becomes the target; their sector
     -- is announced every few minutes. The killer, or the target if they survive, is rewarded.
-    -- Commands need an admin online (rewards wait); items are experimental.
+    -- Commands need an admin online or the no-admin route (rewards wait until then).
     manhunt = {
         enabled = true,
         everyMinutes = 60,
@@ -215,16 +216,12 @@ return {
         rewardItems = {},
     },
 
-    -- EXPERIMENTAL: one switch for every item list above (starter kit, playtime and daily
-    -- rewards, manhunt and King of the Hill rewards). Commands such as cash are not affected.
+    -- One switch for every item list above (starter kit, playtime and daily rewards, manhunt and
+    -- King of the Hill rewards). Commands such as cash are not affected. Not yet confirmed on a
+    -- live server: try it on yourself first.
     itemRewards = {
         enabled = false,
     },
-
-    -- EXPERIMENTAL: with no admin online, try SCUM's own command helper for cash rewards and
-    -- teleports. It is tested once per run (1 coin added and taken back) and only used if SCUM
-    -- accepts it. The test reads players' balances, which may have crashed a server: off.
-    noAdminFallback = false,
 
     -- Economy. Money moves with ChangeCurrencyBalance, so these need an admin online or the
     -- no-admin route (no-admin-commands.txt in the PelicanConsole folder). Spending always checks

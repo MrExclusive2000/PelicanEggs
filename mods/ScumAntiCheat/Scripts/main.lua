@@ -652,17 +652,9 @@ end
 
 local function kick(controller, name)
     local gameMode = findFirst(GAME_MODE_CLASSES)
-    if gameMode and safe(function() return gameMode:KickPlayer(controller, config.kickReason) end) ~= nil then
-        return true
-    end
-
-    -- Fall back to SCUM's own admin command.
-    local processor = safe(function() return StaticFindObject("/Script/SCUM.Default__MiscStatics") end)
-    local world = findFirst({ "World" })
-    if isValid(processor) and world then
-        return pcall(function() processor:Test_ProcessAdminCommand(world, "#Kick " .. name) end)
-    end
-    return false
+    -- SCUM ignores admin commands sent without an admin in game, so there is no fallback: the
+    -- caller says the kick failed and an admin kicks them by hand.
+    return gameMode ~= nil and safe(function() return gameMode:KickPlayer(controller, config.kickReason) end) ~= nil
 end
 
 -- ------------------------------------------------------------------ actions

@@ -54,14 +54,12 @@ purchase checks the player's balance first; winnings wait in players.tsv until p
   Squad bonus    Every hour, a little for every squadmate online with you.
   Kills between squadmates, and suicides, never count for tasks or the race.
 
-Experimental (found by the probe, not yet confirmed on a live server; off unless set):
+Not yet confirmed on a live server (off unless set; try them on yourself first):
  - Item lists for the starter kit, hourly rewards, the daily bonus, manhunt and King of the
    Hill: items go straight into the player's inventory (or at their feet when it is full),
    no admin needed. One switch turns all item giving on or off: itemRewards.enabled
    ("Item rewards" on the settings page). Off by default.
  - teleports.method = "direct": moves the player without an admin.
- - checkBalance (bounties, teleports): reads the player's money first and refuses what they
-   cannot pay. Turn it on for bounties before allowing player bounties.
 
 Settings: config.lua in this folder, or the "SCUM Mod Settings" page of the SCUM Manager
 plugin. Changes are picked up within 30 seconds.
@@ -71,12 +69,10 @@ Good to know:
    (chat_*.log and kill_*.log). Only chat written after the server started is read.
  - Votes, starter kits, rewards, bounty payouts and teleports run SCUM admin commands
    (SetTime, ChangeCurrencyBalance, Teleport <player> <x> <y> <z>...) through an online admin's chat command
-   channel, exactly as if that admin typed them. So an admin from AdminUsers.ini must be
-   online. Rewards, kits and payouts wait until one is; votes, bounties and teleports say
-   they cannot be done right now. With noAdminFallback on (EXPERIMENTAL, off by default: it
-   reads balances, which may have crashed a server), PlayerTools checks once
-   per run whether SCUM accepts these commands without an admin (1 coin added to a player
-   and taken back) and uses that route if it works. The log says which way it went.
+   channel, exactly as if that admin typed them. Rewards, kits and payouts wait until an admin
+   is online; votes, bounties and teleports say they cannot be done right now, unless the
+   no-admin route below covers them.
+ - Bounties and teleports check the player's balance before charging (checkBalance, on).
  - Without an admin (confirmed on a live server): when the file no-admin-commands.txt exists
    in the PelicanConsole mod folder, ChangeCurrencyBalance, ChangeFamePoints, SpawnItem and
    Teleport run with no admin online, as the player they are for (see PelicanConsole's

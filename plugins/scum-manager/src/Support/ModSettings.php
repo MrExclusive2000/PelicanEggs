@@ -71,26 +71,20 @@ final class ModSettings
                     ],
                 ],
                 'New players' => [
-                    'description' => 'For a player\'s first join. Placeholders: {name} {steamId}. Starter kit items go straight into the new player\'s inventory (experimental). Starter kit admin commands (without #) run as an online admin, e.g. ChangeCurrencyBalance Normal 500 {steamId}; with commands set, the whole kit waits until an admin is online. Do not use SpawnItem there: it drops items in front of the admin.',
+                    'description' => 'For a player\'s first join. Placeholders: {name} {steamId}. Starter kit items go straight into the new player\'s inventory (not yet confirmed on a live server). Starter kit admin commands (without #) run as an online admin, e.g. ChangeCurrencyBalance Normal 500 {steamId}; with commands set, the whole kit waits until an admin is online or the no-admin route covers them. Do not use SpawnItem there: it drops items in front of the admin.',
                     'fields' => [
                         'newPlayers.messages' => ['lines', 'Welcome messages (one per line)', []],
                         'newPlayers.starterKit' => ['toggle', 'Starter kit on', true],
                         'newPlayers.starterKitPreset' => ['select', 'Ready-made kit (used while the item list below is empty)', 'basic', 'options' => ['basic' => 'Basic: 2 water, tuna, beans, 2 apples, 3 bandages, knife, small backpack', 'none' => 'None']],
-                        'newPlayers.starterKitItems' => ['rows', 'Starter kit items (experimental: needs "Give items" on)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
+                        'newPlayers.starterKitItems' => ['rows', 'Starter kit items (needs "Give items" on)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'newPlayers.starterKitCommands' => ['lines', 'Starter kit admin commands (one per line, need an admin online)', []],
                         'newPlayers.starterKitMessage' => ['text', 'Message when the kit is given', ''],
                     ],
                 ],
-                'Item rewards (experimental)' => [
+                'Item rewards (not yet confirmed)' => [
                     'description' => 'One switch for every item list on this page: starter kit, playtime and daily rewards, manhunt and King of the Hill. Items go straight into the player\'s inventory without an admin. Leave this off until "Give an item" on the Admin Console has worked for you. Cash and other commands are not affected.',
                     'fields' => [
                         'itemRewards.enabled' => ['toggle', 'Give items', false],
-                    ],
-                ],
-                'Without an admin online (experimental)' => [
-                    'description' => 'Cash rewards, the starter kit cash and paid teleports normally run as an online admin and wait until one is on. The working way round that (confirmed on a live server): create an empty no-admin-commands.txt in the PelicanConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole/). Then ChangeCurrencyBalance, ChangeFamePoints, SpawnItem and Teleport run without an admin, as the player they are for; delete the file to turn it off. The toggle below is the older test of SCUM\'s command helper, which SCUM ignores; leave it off.',
-                    'fields' => [
-                        'noAdminFallback' => ['toggle', 'Try without an admin (experimental: reads balances, suspected in a server crash)', false],
                     ],
                 ],
                 'Welcome back' => [
@@ -101,16 +95,16 @@ final class ModSettings
                     ],
                 ],
                 'Playtime rewards' => [
-                    'description' => 'SCUM admin commands (without #) run as an online admin; rewards wait until one is online. Placeholders: {name} {steamId}',
+                    'description' => 'SCUM admin commands (without #) run as an online admin; rewards wait until one is online. With no admin online, money, fame, SpawnItem and Teleport commands still run when no-admin-commands.txt exists in the PelicanConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole/); delete the file to turn that off. Placeholders: {name} {steamId}',
                     'fields' => [
                         'playtimeRewards.enabled' => ['toggle', 'Playtime rewards on', true],
                         'playtimeRewards.everyMinutes' => ['int', 'Reward every (min played)', 60],
                         'playtimeRewards.commands' => ['lines', 'Reward commands (one per line)', ['ChangeCurrencyBalance Normal 100 {steamId}']],
-                        'playtimeRewards.items' => ['rows', 'Reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
+                        'playtimeRewards.items' => ['rows', 'Reward items', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'playtimeRewards.message' => ['text', 'Reward message', '+100 cash for an hour on the server. Thanks for playing!'],
                         'playtimeRewards.dailyEnabled' => ['toggle', 'Daily login bonus on', true],
                         'playtimeRewards.dailyCommands' => ['lines', 'Daily login bonus commands (one per line)', ['ChangeCurrencyBalance Normal 200 {steamId}']],
-                        'playtimeRewards.dailyItems' => ['rows', 'Daily bonus items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
+                        'playtimeRewards.dailyItems' => ['rows', 'Daily bonus items', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'playtimeRewards.dailyMessage' => ['text', 'Daily bonus message', 'Daily login bonus: +200 cash.'],
                     ],
                 ],
@@ -126,13 +120,13 @@ final class ModSettings
                     ],
                 ],
                 'Bounties' => [
-                    'description' => 'The server puts a bounty on players with a kill streak; whoever kills them collects it (paid when an admin is online). Player bounties stay off until the mod can check balances: a broke player could otherwise place a bounty for a friend to collect.',
+                    'description' => 'The server puts a bounty on players with a kill streak; whoever kills them collects it (paid when an admin is online, or straight away with the no-admin route). Keep the balance check on with player bounties: a broke player could otherwise place a bounty for a friend to collect.',
                     'fields' => [
                         'bounties.enabled' => ['toggle', 'Bounties on', true],
                         'bounties.streakBountyAt' => ['int', 'Bounty from this kill streak (0 = never)', 5],
                         'bounties.streakBountyAmount' => ['int', 'Starting bounty', 500],
                         'bounties.streakBountyIncrease' => ['int', 'Added per further kill', 100],
-                        'bounties.checkBalance' => ['toggle', 'Check the player can pay first (experimental; turn on before player bounties)', false],
+                        'bounties.checkBalance' => ['toggle', 'Check the player can pay first', true],
                         'bounties.playerBounties' => ['toggle', 'Players can place bounties (!bounty <name> <amount>)', false],
                         'bounties.minAmount' => ['int', 'Smallest player bounty', 100],
                         'bounties.maxAmount' => ['int', 'Largest player bounty', 5000],
@@ -141,13 +135,13 @@ final class ModSettings
                     ],
                 ],
                 'Teleports' => [
-                    'description' => '!tp <name>: the player stands still, pays and is teleported (needs an admin online). Coordinates are SCUM world units; type !where in game as an admin to get yours.',
+                    'description' => '!tp <name>: the player stands still, pays and is teleported (needs an admin online, or the no-admin route). Coordinates are SCUM world units; type !where in game as an admin to get yours.',
                     'fields' => [
                         'teleports.enabled' => ['toggle', 'Teleports on', true],
                         'teleports.cooldownMinutes' => ['int', 'Cooldown (min)', 30],
                         'teleports.standStillSeconds' => ['int', 'Stand still for (s)', 10],
-                        'teleports.method' => ['select', 'How to teleport', 'admin', 'options' => ['admin' => 'SCUM Teleport command (needs an admin online)', 'direct' => 'Direct (experimental, no admin needed)']],
-                        'teleports.checkBalance' => ['toggle', 'Check the player can pay first (experimental)', false],
+                        'teleports.method' => ['select', 'How to teleport', 'admin', 'options' => ['admin' => 'SCUM Teleport command (needs an admin online)', 'direct' => 'Direct (no admin needed; not yet confirmed on a live server)']],
+                        'teleports.checkBalance' => ['toggle', 'Check the player can pay first', true],
                         'teleports.locations' => ['rows', 'Destinations', [], 'numeric' => [1, 2, 3, 4], 'columns' => ['name' => 'Name (!tp name)', 'x' => 'X', 'y' => 'Y', 'z' => 'Z', 'price' => 'Price']],
                         'teleports.command' => ['text', 'Teleport command ({steamId} {x} {y} {z})', 'Teleport {steamId} {x} {y} {z}'],
                         'teleports.chargeCommand' => ['text', 'Charge command ({price} {steamId})', 'ChangeCurrencyBalance Normal -{price} {steamId}'],
@@ -178,7 +172,7 @@ final class ModSettings
                     ],
                 ],
                 'Manhunt' => [
-                    'description' => 'Players volunteer with !manhunt join. Every so often one of them becomes the target; their sector is announced every few minutes. Whoever kills them gets the hunter reward; if they survive, they get the survivor reward. Commands need an admin online; items are experimental.',
+                    'description' => 'Players volunteer with !manhunt join. Every so often one of them becomes the target; their sector is announced every few minutes. Whoever kills them gets the hunter reward; if they survive, they get the survivor reward. Commands need an admin online or the no-admin route; items need "Give items" on.',
                     'fields' => [
                         'manhunt.enabled' => ['toggle', 'Manhunt on', true],
                         'manhunt.everyMinutes' => ['int', 'A manhunt every (min)', 60],
@@ -186,9 +180,9 @@ final class ModSettings
                         'manhunt.revealEveryMinutes' => ['int', 'Reveal the target every (min)', 3],
                         'manhunt.minPlayers' => ['int', 'Only with at least this many players online', 3],
                         'manhunt.hunterCommands' => ['lines', 'Hunter reward commands ({steamId})', ['ChangeCurrencyBalance Normal 1000 {steamId}']],
-                        'manhunt.hunterItems' => ['rows', 'Hunter reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
+                        'manhunt.hunterItems' => ['rows', 'Hunter reward items', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                         'manhunt.survivorCommands' => ['lines', 'Survivor reward commands ({steamId})', ['ChangeCurrencyBalance Normal 1000 {steamId}']],
-                        'manhunt.survivorItems' => ['rows', 'Survivor reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
+                        'manhunt.survivorItems' => ['rows', 'Survivor reward items', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                     ],
                 ],
                 'King of the Hill' => [
@@ -202,7 +196,7 @@ final class ModSettings
                         'koth.minPlayers' => ['int', 'Only with at least this many players online', 3],
                         'koth.minSeconds' => ['int', 'Winner must hold it at least (s)', 60],
                         'koth.rewardCommands' => ['lines', 'Reward commands ({steamId})', ['ChangeCurrencyBalance Normal 1000 {steamId}']],
-                        'koth.rewardItems' => ['rows', 'Reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
+                        'koth.rewardItems' => ['rows', 'Reward items', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                     ],
                 ],
                 'Shop' => [
@@ -397,7 +391,7 @@ final class ModSettings
     public const GROUPS = [
         'PlayerTools' => [
             'Chat & info' => ['Chat commands', 'Welcome back', 'Info and reports', 'Feature tips'],
-            'Economy' => ['New players', 'Playtime rewards', 'Bounties', 'Item rewards (experimental)', 'Without an admin online (experimental)'],
+            'Economy' => ['New players', 'Playtime rewards', 'Bounties', 'Item rewards (not yet confirmed)'],
             'Shop & money' => ['Shop', 'Sell to the server', 'Pay other players', 'Lottery', 'Daily tasks', 'Squad bonus'],
             'Teleports' => ['Teleports'],
             'Events & PvP' => ['Kill feed', 'Stats', 'Kill streaks', 'Death recap and hotspots', 'Manhunt', 'King of the Hill', 'Kill race', 'Voting'],

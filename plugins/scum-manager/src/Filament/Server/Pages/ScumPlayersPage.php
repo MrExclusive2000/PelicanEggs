@@ -248,43 +248,12 @@ class ScumPlayersPage extends Page implements HasTable
                             ? Notification::make()->title('Save data reloaded')->body(count($data['players']) . ' players in the save.')->success()->send()
                             : Notification::make()->title('Could not read the save')->body($data['error'])->danger()->send();
                     }),
-                Action::make('scan_db')
-                    ->label('Scan save database')
-                    ->icon('tabler-database-search')
-                    ->color('gray')
-                    ->authorize(fn () => user()?->can(SubuserPermission::FileReadContent, $this->getServer()))
-                    ->requiresConfirmation()
-                    ->modalHeading('Scan SCUM\'s save database?')
-                    ->modalDescription('Copies SCUM.db to the panel, lists its tables and columns, and deletes the copy. The report has no player data (no names, IDs or balances), so it is safe to send. It is how money, fame and inventories get onto this page. Large saves take a minute.')
-                    ->modalSubmitActionLabel('Scan and download')
-                    ->action(fn (ScumServerService $service) => $this->scanSaveDatabase($service)),
                 Action::make('lists')
                     ->label('Edit list files')
                     ->icon('tabler-file-text')
                     ->color('gray')
                     ->url(fn () => ScumPlayerListsPage::getUrl()),
             ]);
-    }
-
-    private function scanSaveDatabase(ScumServerService $service): ?\Symfony\Component\HttpFoundation\StreamedResponse
-    {
-        $server = $this->getServer();
-        $copy = null;
-        try {
-            $copy = $service->copySaveDatabase($server);
-            $report = (new SaveDatabase($copy))->schemaReport($server->name, now()->toIso8601String());
-        } catch (Exception $exception) {
-            report($exception);
-            Notification::make()->title('Could not scan the save database')->body($exception->getMessage())->danger()->persistent()->send();
-
-            return null;
-        } finally {
-            if ($copy !== null) {
-                $service->removeSaveDatabaseCopy($copy);
-            }
-        }
-
-        return response()->streamDownload(fn () => print($report), 'scum-db-schema-' . now()->format('Y-m-d') . '.txt', ['Content-Type' => 'text/plain']);
     }
 
     private function saveSummary(): string

@@ -13,7 +13,6 @@
 
 local TAG = "[ExclsvMessages] "
 local CONTROLLER_CLASSES = { "ConZPlayerController", "BP_ConZPlayerController_C", "PlayerController" }
-local PROCESSOR_PATH = "/Script/SCUM.Default__MiscStatics"
 local SCAN_SECONDS = 5
 local WELCOME_DELAY = 10   -- seconds after the character spawns
 
@@ -24,7 +23,6 @@ local DEFAULTS = {
     announcements = {},
     onlyWhenPlayersOnline = true,
     logJoinsAndLeaves = true,
-    commandPrefix = "#",
     restartTimes = {},
     restartWarnings = { 30, 15, 5, 1 },
     restartMessage = "Server restart in {minutes} minute(s).",
@@ -192,22 +190,10 @@ local function fill(template, name, players)
     return (string.gsub(template, "{players}", function() return tostring(players) end))
 end
 
-local function adminCommand(command)
-    local processor = safe(function() return StaticFindObject(PROCESSOR_PATH) end)
-    local world = safe(function() return FindFirstOf("World") end)
-    if not isValid(processor) or not isValid(world) then
-        output("SCUM's admin command processor is not available; cannot send: " .. command)
-        return false
-    end
-    local ok, err = pcall(function() processor:Test_ProcessAdminCommand(world, command) end)
-    if not ok then output("Failed: " .. command .. " (" .. tostring(err) .. ")") end
-    return ok
-end
-
 local GAME_MODE_CLASSES = { "BP_ConZGameMode_C", "ConZGameMode" }
 
--- The on-screen message #Announce shows. SCUM's command processor ignores commands sent
--- without an admin, so call the game mode directly and only fall back to the command.
+-- The on-screen message #Announce shows, sent through the game mode directly (SCUM ignores
+-- admin commands sent without an admin in game, so there is no command fallback).
 local function announce(message)
     for _, className in ipairs(GAME_MODE_CLASSES) do
         local gameMode = safe(function() return FindFirstOf(className) end)
@@ -216,7 +202,8 @@ local function announce(message)
             if ok then return true end
         end
     end
-    return adminCommand(config.commandPrefix .. "Announce " .. message)
+    output("Could not show the announcement (the game world is not ready): " .. message)
+    return false
 end
 
 local function sendPrivate(pawn, message)

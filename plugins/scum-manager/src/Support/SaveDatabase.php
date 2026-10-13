@@ -31,31 +31,6 @@ final class SaveDatabase
         $this->pdo->exec('PRAGMA query_only = ON');
     }
 
-    /**
-     * Tables with their columns and row counts.
-     *
-     * @return array<string, array{rows: int, columns: list<array{name: string, type: string, pk: bool}>}>
-     */
-    public function schema(): array
-    {
-        $tables = [];
-        $names = $this->pdo->query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
-        foreach ($names as $name) {
-            $quoted = '"' . str_replace('"', '""', $name) . '"';
-            $columns = array_map(fn (array $column) => [
-                'name' => (string) $column['name'],
-                'type' => (string) $column['type'],
-                'pk' => (int) $column['pk'] > 0,
-            ], $this->pdo->query("PRAGMA table_info($quoted)")->fetchAll());
-            $tables[$name] = [
-                'rows' => (int) $this->pdo->query("SELECT COUNT(*) FROM $quoted")->fetchColumn(),
-                'columns' => $columns,
-            ];
-        }
-
-        return $tables;
-    }
-
     /** SCUM's ECurrencyType (from the game): 1 Normal (cash), 2 Gold. */
     private const CASH = 1;
 
@@ -138,7 +113,7 @@ final class SaveDatabase
 
     /**
      * What a player's character carries: every entity below their prisoner entity, with stack
-     * sizes where the save has them. Experimental: follows parent_entity_id.
+     * sizes where the save has them (follows parent_entity_id).
      *
      * @return list<array{item: string, class: string, quantity: ?int, depth: int}>
      */
@@ -238,28 +213,5 @@ final class SaveDatabase
         } catch (\PDOException) {
             return [];
         }
-    }
-
-    /**
-     * A plain-text report of the schema: table names, column names and types, row counts.
-     * No row contents, so it holds no player data and can be shared.
-     */
-    public function schemaReport(string $server, string $generatedAt): string
-    {
-        $lines = [
-            'ExclsvSCUM save database scan (schema only, no player data)',
-            "Server: $server",
-            "Generated: $generatedAt",
-            '',
-        ];
-        foreach ($this->schema() as $table => $info) {
-            $lines[] = "== $table ({$info['rows']} rows)";
-            foreach ($info['columns'] as $column) {
-                $lines[] = '   ' . $column['name'] . ($column['type'] !== '' ? ' ' . $column['type'] : '') . ($column['pk'] ? ' PRIMARY KEY' : '');
-            }
-            $lines[] = '';
-        }
-
-        return implode("\n", $lines);
     }
 }

@@ -125,28 +125,26 @@ check("ready message printed to UE4SS log", string.find(table.concat(log), "Read
 
 -- Nothing queued: nothing runs and the loop keeps going.
 check("loop keeps running", loopCallback() == false)
-check("no commands, no calls", #calls == 0 and gameThreadRuns == 1)   -- the item list check only
+check("no commands, nothing run", gameThreadRuns == 1)   -- the item list check only
 
--- No admin online: SCUM's test helper is the only route, and the console says so.
+-- No admin online: SCUM only runs admin commands for an admin in game, so the console says so.
+-- SCUM's own test helper (which it ignores) is never used.
 writeCommands("SetTime 12\n\n   \n##SetWeather 0\r\n")
 loopCallback()
-check("two commands run", #calls == 2)
-check("sent without the #", calls[1] and calls[1].command == "SetTime 12")
-check("repeated # dropped, CR trimmed", calls[2] and calls[2].command == "SetWeather 0")
-check("world passed as context", calls[1] and calls[1].context == world)
-check("run on the game thread", gameThreadRuns == 3)   -- two commands plus the item list check
+check("needs an admin, said once per command", string.find(consoleLog(), "No admin is online, so SCUM cannot run SetTime 12.", 1, true) ~= nil
+    and string.find(consoleLog(), "No admin is online, so SCUM cannot run SetWeather 0.", 1, true) ~= nil)
+check("repeated # dropped, CR trimmed, run on the game thread", gameThreadRuns == 3)   -- two commands plus the item list check
 check("queue file consumed", not exists("commands.txt") and not exists("commands.processing"))
-check("no-admin warning", string.find(consoleLog(), "Sent SetTime 12, but no admin is online", 1, true) ~= nil)
-check("log lines timestamped", string.find(consoleLog(), "%d%d:%d%d:%d%d %[ExclsvConsole%] Sent SetTime 12") ~= nil)
-
+check("log lines timestamped", string.find(consoleLog(), "%d%d:%d%d:%d%d %[ExclsvConsole%] No admin is online") ~= nil)
+check("SCUM's ignored test helper is never used", #calls == 0)
+writeCommands("ChangeCurrencyBalance Normal 1 76561198000000001\n")
 loopCallback()
-check("commands run once", #calls == 2)
+check("money commands point to the no-admin switch", string.find(consoleLog(), "This one can also run without an admin: create no-admin-commands.txt", 1, true) ~= nil)
 
 -- Announce goes straight to every player's screen, admin or not.
 writeCommands("Announce Hello world\n")
 loopCallback()
 check("announce uses the HUD message", hud[1] and hud[1].message == "Hello world" and hud[1].beep == false)
-check("announce not sent through the test helper", #calls == 2)
 check("announce logged", string.find(consoleLog(), "Announced: Hello world", 1, true) ~= nil)
 writeCommands("#announce\n")
 loopCallback()
@@ -175,48 +173,38 @@ writeCommands("SetTime 6\nKick 76561198000000001\n")
 loopCallback()
 check("command runs as the admin", rpc[1] and rpc[1].by == "Bob" and rpc[1].command == "SetTime 6")
 check("unknown kick target goes to SCUM", rpc[2] and rpc[2].command == "Kick 76561198000000001")
-check("not sent through the test helper", #calls == 2)
 check("admin route logged", string.find(consoleLog(), "Ran as Bob: SetTime 6", 1, true) ~= nil)
 check("non-admin channel never used", rpc[3] == nil)
 
--- Admin online but their channel cannot be matched: falls back and says so.
+-- Admin online but their channel cannot be matched: says so, and the command is not run.
 bob.channel.owner = object()
 writeCommands("SetTime 7\n")
 loopCallback()
-check("unmatched channel reported", string.find(consoleLog(), "Found admin Bob online but not their command channel", 1, true) ~= nil)
-check("unmatched channel falls back", calls[3] and calls[3].command == "SetTime 7")
+check("unmatched channel reported", string.find(consoleLog(), "Found admin Bob online but not their command channel", 1, true) ~= nil
+    and string.find(consoleLog(), "SCUM cannot run SetTime 7.", 1, true) ~= nil)
 bob.channel.owner = bob
+
+-- The admin's channel throws: reported, not fatal.
+local workingChannel = bob.channel.Chat_Server_ProcessAdminCommand
+function bob.channel:Chat_Server_ProcessAdminCommand() error("access violation") end
+writeCommands("SetTime 2\n")
+loopCallback()
+check("failure reported", string.find(consoleLog(), "Failed: SetTime 2 (", 1, true) ~= nil)
+bob.channel.Chat_Server_ProcessAdminCommand = workingChannel
 online = {}
 
 -- A leftover processing file (e.g. from a crash mid-read) must not block new commands.
 writeCommands("Leftover\n", "commands.processing")
 writeCommands("SetTime 1\n")
 loopCallback()
-check("new commands still run after leftover processing file", #calls == 4)
+check("new commands still run after leftover processing file", string.find(consoleLog(), "SCUM cannot run SetTime 1.", 1, true) ~= nil)
 
--- Game call throws: reported, not fatal.
-processorFails = true
-writeCommands("SetTime 2\n")
-loopCallback()
-check("failure reported", string.find(consoleLog(), "Failed: SetTime 2 (", 1, true) ~= nil)
-processorFails = false
-
--- World not loaded yet.
+-- World not loaded yet: announce says so.
 worldAvailable = false
-writeCommands("SetTime 3\nAnnounce Hi\n")
+writeCommands("Announce Hi\n")
 loopCallback()
-check("world missing reported", string.find(consoleLog(), "No admin is online, so SCUM cannot run SetTime 3", 1, true) ~= nil)
 check("announce without world reported", string.find(consoleLog(), "game world is not loaded yet", 1, true) ~= nil)
-check("no call without a world", #calls == 4)
 worldAvailable = true
-
--- Processor missing (game update renamed it).
-processorValid = false
-writeCommands("SetTime 4\n")
-loopCallback()
-check("no call without a processor", #calls == 4)
-processorValid = true
-
 
 -- ------------------------------------------------------------------ experimental commands
 local spawned, teleports = {}, {}
@@ -282,11 +270,11 @@ check("find item", string.find(consoleLog(), "1 item(s) match \"water\":", 1, tr
 writeCommands("GiveItem Mr Exclusive Water_05l 2\n")
 loopCallback()
 check("give item spawned at the player", #spawned == 2 and spawned[1].at.Z == 350 and spawned[1].actor.finished)
-check("give item into the inventory", string.find(consoleLog(), "Gave Mr Exclusive 2 x BP_Water_05l_C (experimental): 2 in their inventory, 0 at their feet.", 1, true) ~= nil)
+check("give item into the inventory", string.find(consoleLog(), "Gave Mr Exclusive 2 x BP_Water_05l_C: 2 in their inventory, 0 at their feet.", 1, true) ~= nil)
 fits = false
 writeCommands("GiveItem Bob Water_05l\n")
 loopCallback()
-check("give item falls back to the ground", string.find(consoleLog(), "Gave Bob 1 x BP_Water_05l_C (experimental): 0 in their inventory, 1 at their feet.", 1, true) ~= nil)
+check("give item falls back to the ground", string.find(consoleLog(), "Gave Bob 1 x BP_Water_05l_C: 0 in their inventory, 1 at their feet.", 1, true) ~= nil)
 writeCommands("GiveItem Bob Nothing\n")
 loopCallback()
 check("unknown item", string.find(lastLine(), "Item Nothing has not been loaded on this server yet. Spawn one once with SpawnItem Nothing", 1, true) ~= nil)
@@ -465,7 +453,7 @@ writeCommands("AsPlayer Bob SetGodMode 1\nSetGodMode 1\n")
 loopCallback()
 check("only whitelisted commands", #rpc == 2 and godMode._requiredExecutorLevel == 1
     and string.find(consoleLog(), "AsPlayer only runs ChangeCurrencyBalance", 1, true) ~= nil)
-check("other commands still go to SCUM's helper", calls[1] and calls[1].command == "SetGodMode 1")
+check("other commands need an admin", string.find(consoleLog(), "SCUM cannot run SetGodMode 1.", 1, true) ~= nil and #calls == 0)
 
 -- SCUM's registry holds command classes: the class's default object (found by the safe search
 -- and through the class) is what gets lowered, once, and put back.

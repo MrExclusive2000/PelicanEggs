@@ -50,6 +50,8 @@ local function Player(name, admin)
     function channel:GetOwner() return self.owner end
     function channel:Chat_Server_ProcessAdminCommand(command) adminCommands[#adminCommands + 1] = { by = controller.name, command = command } end
     controller.channel = channel
+    -- A healthy balance unless a test sets one (balance checks are on by default).
+    setmetatable(controller, { __index = { _moneyBalanceRep = 1000000 } })
     return controller
 end
 
@@ -736,87 +738,9 @@ check("item loaded from items.txt path", requested == "/Game/ConZ_Files/Items/Fo
 FindFirstOf = oldFindFirst
 players = {}
 
-
--- ================================================================== no admin online: SCUM's command helper
-private, hud, adminCommands = {}, {}, {}
-local helperSent, helperWorks, helperForm = {}, true, ""
-local balance = 1000
-local miscStatics = object()
-function miscStatics:Test_ProcessAdminCommand(context, text)
-    helperSent[#helperSent + 1] = text
-    if not helperWorks then return end
-    local form, amount, id = string.match(text, "^(#?)ChangeCurrencyBalance Normal (%-?%d+) (%d+)$")
-    if form == helperForm and id == "76561198000000050" then balance = balance + tonumber(amount) end
-end
-local savedStatic, savedFirst = StaticFindObject, FindFirstOf
-function StaticFindObject(path) if path == "/Script/SCUM.Default__MiscStatics" then return miscStatics end return nil end
-local helperWorld = object()
-function FindFirstOf(className) if className == "World" then return helperWorld end return savedFirst(className) end
-local function startHelperRun()
-    write(dir .. "/players.tsv", "")
-    write(dir .. "/config.lua", [[return {
-        noAdminFallback = true,
-        newPlayers = { starterKit = false },
-        playtimeRewards = { enabled = true, everyMinutes = 0, commands = {},
-            dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" }, dailyMessage = "Daily!" },
-        featureTips = { onJoin = false, announceEveryMinutes = 0 },
-    }]])
-    dofile(dir .. "/Scripts/main.lua")
-    local ivy = Player("Ivy")
-    liveMoney(ivy, function() return balance end)
-    login("76561198000000050", "Ivy")
-    players = { ivy }
-end
-
--- Off by default: no balances are read and nothing is sent without an admin.
-local balanceReads = 0
-write(dir .. "/players.tsv", "")
-write(dir .. "/config.lua", [[return {
-    newPlayers = { starterKit = false },
-    playtimeRewards = { enabled = true, everyMinutes = 0, commands = {},
-        dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" }, dailyMessage = "Daily!" },
-    featureTips = { onJoin = false, announceEveryMinutes = 0 },
-}]])
-dofile(dir .. "/Scripts/main.lua")
-local quiet = Player("Ivy")
-liveMoney(quiet, function() balanceReads = balanceReads + 1 return 1000 end)
-login("76561198000000050", "Ivy")
-players = { quiet }
-step(20)
-check("no-admin test off by default: no balance reads, nothing sent", balanceReads == 0 and #helperSent == 0)
-
--- The helper works (here only with the "#"): found by a 1-coin round trip, then used.
-helperForm = "#"
-startHelperRun()
-step(20)
-local helperLog = read(dir .. "/playertools.log")
-check("helper tested with a 1-coin round trip", helperSent[1] == "ChangeCurrencyBalance Normal 1 76561198000000050"
-    and helperSent[2] == "#ChangeCurrencyBalance Normal 1 76561198000000050")
-check("helper found to work", has(helperLog, "SCUM runs commands without an admin online."))
-check("test coin taken back, daily bonus paid without an admin", balance == 1200 and lastPrivate("Ivy") == "Daily!")
-
--- The helper is ignored: rewards keep waiting for an admin.
-helperWorks, balance, helperSent, private = false, 1000, {}, {}
-startHelperRun()
-step(20)
-check("ignored helper reported", has(read(dir .. "/playertools.log"), "SCUM ignores commands sent without an admin online."))
-check("nothing paid when the helper is ignored", balance == 1000 and lastPrivate("Ivy") ~= "Daily!")
-local sentWhenIgnored = #helperSent
-step(10)
-check("helper not tried again once ignored", #helperSent == sentWhenIgnored)
--- No readable balance: said once, and nothing is sent.
-helperWorks, helperSent = true, {}
-local _, unreadableBefore = string.gsub(read(dir .. "/playertools.log"), "no player's balance can be read", "")
-startHelperRun()
-liveMoney(players[1], function() return nil end)
-step(20)
-local _, unreadable = string.gsub(read(dir .. "/playertools.log"), "no player's balance can be read", "")
-check("unreadable balance reported once, nothing sent", unreadable == unreadableBefore + 1 and #helperSent == 0)
-StaticFindObject, FindFirstOf = savedStatic, savedFirst
-players = {}
-
 -- The ready-made starter kit is used while no kit items are set.
-StaticFindObject, FindFirstOf = savedStatic, oldFindFirst
+local savedStatic, savedFirst = StaticFindObject, FindFirstOf
+FindFirstOf = oldFindFirst
 function StaticFindObject(path) if path == "/Script/Engine.Default__GameplayStatics" then return statics end return nil end
 function FindFirstOf(className) if className == "World" then return world end return oldFindFirst(className) end
 write(dir .. "/players.tsv", "")

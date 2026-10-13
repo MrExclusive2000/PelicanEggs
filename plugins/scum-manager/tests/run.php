@@ -316,11 +316,11 @@ check('settings: missing config gets every field', $updated['restartTimes'], ['0
 
 // ---------------------------------------------------------------- AdminCommands
 $options = AdminCommands::options();
-check('commands: grouped', array_keys($options), ['Works any time', 'Works any time (experimental)', 'Needs an admin in game', 'Other']);
-check('commands: experimental group', array_keys($options['Works any time (experimental)']), ['whereis', 'balance', 'teleportplayer', 'giveitem']);
+check('commands: grouped', array_keys($options), ['Works any time', 'Works any time (not yet confirmed)', 'Needs an admin in game', 'Other']);
+check('commands: not yet confirmed group', array_keys($options['Works any time (not yet confirmed)']), ['teleportplayer', 'giveitem']);
 check('commands: give item', AdminCommands::build('giveitem', ['giveitem__name' => 'Mr Exclusive', 'giveitem__item' => 'Water_05l', 'giveitem__amount' => '2']), 'GiveItem Mr Exclusive Water_05l 2');
 check('commands: teleport player', AdminCommands::build('teleportplayer', ['teleportplayer__name' => 'Bob', 'teleportplayer__x' => '-100', 'teleportplayer__y' => '5', 'teleportplayer__z' => '300']), 'TeleportPlayer Bob -100 5 300');
-check('commands: any-time ones are the ones the mod handles itself', array_keys($options['Works any time']), ['announce', 'listplayers', 'kick']);
+check('commands: any-time ones are the ones the mod handles itself', array_keys($options['Works any time']), ['announce', 'listplayers', 'kick', 'whereis', 'balance']);
 check('commands: announce', AdminCommands::build('announce', ['announce__message' => '  Restart in 5 min ']), 'Announce Restart in 5 min');
 check('commands: no fields', AdminCommands::build('listplayers', []), 'ListPlayers');
 check('commands: kick by name with spaces', AdminCommands::build('kick', ['kick__name' => 'Mr Exclusive']), 'Kick Mr Exclusive');
@@ -550,14 +550,8 @@ $pdo->exec('CREATE TABLE user_profile (id INTEGER PRIMARY KEY, user_id TEXT, nam
 $pdo->exec("INSERT INTO user_profile (user_id, name, fame_points) VALUES ('76561198000000001', 'Alice', 12.5), ('76561198000000002', 'Bob', 3)");
 $pdo->exec('CREATE TABLE "bank account" (account_id INTEGER, balance INTEGER)');
 $pdo = null;
-$schema = (new SaveDatabase($dbFile))->schema();
-check('db: tables, columns and row counts', [array_keys($schema), $schema['user_profile']['rows'], array_column($schema['user_profile']['columns'], 'name'), $schema['user_profile']['columns'][0]['pk']],
-    [['bank account', 'user_profile'], 2, ['id', 'user_id', 'name', 'fame_points'], true]);
-$schemaText = (new SaveDatabase($dbFile))->schemaReport('SCUM', '2026-10-13');
-check('db: report lists structure', str_contains($schemaText, "== user_profile (2 rows)\n   id INTEGER PRIMARY KEY\n   user_id TEXT") && str_contains($schemaText, '== bank account (0 rows)'), true);
-check('db: report holds no player data', !str_contains($schemaText, 'Alice') && !str_contains($schemaText, '76561198000000001'), true);
 $before = md5_file($dbFile);
-try { (new SaveDatabase($dbFile))->schema(); } catch (Throwable) {}
+try { (new SaveDatabase($dbFile))->players(); } catch (Throwable) {}
 check('db: opened read-only, file unchanged', md5_file($dbFile), $before);
 file_put_contents($dbFile, 'not a database');
 throws('db: refuses a broken copy', fn () => new SaveDatabase($dbFile), 'not an SQLite database');

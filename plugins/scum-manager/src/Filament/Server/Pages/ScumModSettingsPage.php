@@ -161,10 +161,10 @@ class ScumModSettingsPage extends ServerFormPage
     {
         $switch = ModSettings::sectionSwitch($section);
         $switchId = $switch === null ? null : ModSettings::fieldId($mod, $switch);
-        $experimental = str_contains(strtolower($title), 'experimental');
+        $experimental = str_contains(strtolower($title), 'experimental') || str_contains(strtolower($title), 'not yet confirmed');
 
         return Section::make($title)
-            ->description(($experimental ? 'Experimental: try it on yourself first. ' : '') . $section['description'])
+            ->description(($experimental ? 'Try it on yourself first. ' : '') . $section['description'])
             ->icon($experimental ? 'tabler-flask' : null)
             ->collapsible()
             ->collapsed($switchId !== null && in_array($switchId, $this->switchedOff, true))

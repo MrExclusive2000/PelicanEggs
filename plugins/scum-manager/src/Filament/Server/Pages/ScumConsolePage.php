@@ -167,7 +167,7 @@ class ScumConsolePage extends Page
         foreach (AdminCommands::COMMANDS as $key => $command) {
             $visible = fn (Get $get) => $get('command') === $key;
 
-            $components[] = Text::make(($command['anytime'] === false ? 'Needs an admin in game. ' : '') . (($command['experimental'] ?? false) ? 'Experimental. ' : '') . $command['help'])
+            $components[] = Text::make(($command['anytime'] === false ? 'Needs an admin in game. ' : '') . (($command['experimental'] ?? false) ? 'Not yet confirmed on a live server: try it on yourself first. ' : '') . $command['help'])
                 ->color($command['anytime'] === false ? 'warning' : 'gray')
                 ->visible($visible);
 

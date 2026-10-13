@@ -4,9 +4,10 @@
     The SCUM egg's start command appends each line typed in the Pelican console to
     ue4ss/Mods/PelicanConsole/commands.txt. This mod picks those lines up once a second
     and runs them through an online admin's chat command channel, exactly as if they typed it in chat.
-    Announce, ListPlayers and Kick <name> are handled directly and work with no admin online,
-    as do the experimental WhereIs, Balance, TeleportPlayer, FindOutposts, FindItem, GiveItem
-    and ListItems. A minute after the world loads, the mod writes the item names to items.txt
+    Announce, ListPlayers, Kick <name>, WhereIs, Balance, FindOutposts, FindItem and ListItems
+    are handled directly and work with no admin online, as do TeleportPlayer and GiveItem (not
+    yet confirmed on a live server). With no-admin-commands.txt in this folder, money, fame,
+    SpawnItem and Teleport commands also run without an admin (see the README). A minute after the world loads, the mod writes the item names to items.txt
     for SCUM Manager's item dropdowns.
 
     Results and errors are written to ue4ss/Mods/PelicanConsole/console.log, which the
@@ -18,8 +19,6 @@
 local COMMAND_PREFIX = "#"
 
 local TAG = "[ExclsvConsole] "
-local PROCESSOR_PATH = "/Script/SCUM.Default__MiscStatics"
-local WORLD_CONTEXT_CLASSES = { "World", "BP_ConZGameMode_C", "ConZGameMode", "GameStateBase" }
 
 local function safe(fn, ...)
     local ok, result = pcall(fn, ...)
@@ -121,16 +120,6 @@ local function liveObjects(className, withTemplates)
         print(TAG .. "This UE4SS cannot leave out objects being destroyed; using FindAllOf.\n")
     end
     return safe(function() return FindAllOf(className) end) or {}
-end
-
-local function worldContext()
-    for _, className in ipairs(WORLD_CONTEXT_CLASSES) do
-        local object = safe(function() return FindFirstOf(className) end)
-        if isValid(object) then
-            return object
-        end
-    end
-    return nil
 end
 
 local CONTROLLER_CLASSES = { "BP_ConZPlayerController_C", "ConZPlayerController" }
@@ -261,23 +250,7 @@ local function kick(target)
     return true
 end
 
--- SCUM's test helper: accepts commands but ignores most of them on a dedicated server.
-local function runWithoutAdmin(command)
-    local processor = safe(function() return StaticFindObject(PROCESSOR_PATH) end)
-    local context = worldContext()
-    if not isValid(processor) or context == nil then
-        output("No admin is online, so SCUM cannot run " .. command .. ". Join as an admin (AdminUsers.ini) and try again.")
-        return
-    end
-    local ok, err = pcall(function() processor:Test_ProcessAdminCommand(context, command) end)
-    if ok then
-        output("Sent " .. command .. ", but no admin is online, so SCUM may ignore it. Join as an admin (AdminUsers.ini) for full command support.")
-    else
-        output("Failed: " .. command .. " (" .. tostring(err) .. ")")
-    end
-end
-
--- ------------------------------------------------------------------ experimental, no admin needed
+-- ------------------------------------------------------------------ handled by the mod, no admin needed
 -- These call SCUM and Unreal functions found by the probe directly. They are new and not yet
 -- confirmed on a live server, so try them on yourself first.
 
@@ -364,7 +337,7 @@ local function teleportPlayer(text)
         return pawn:K2_TeleportTo({ X = tonumber(x), Y = tonumber(y), Z = tonumber(z) }, { Pitch = 0, Yaw = 0, Roll = 0 })
     end)
     if ok and result ~= false then
-        output(string.format("Teleported %s to %s %s %s (experimental).", player.name, x, y, z))
+        output(string.format("Teleported %s to %s %s %s.", player.name, x, y, z))
     else
         output("Teleport failed for " .. player.name .. ": " .. tostring(ok and "the game refused" or result))
     end
@@ -540,7 +513,7 @@ local function giveItem(text)
         end)
         if not ok then return output("GiveItem failed for " .. className .. ": " .. tostring(err)) end
     end
-    output(string.format("Gave %s %d x %s (experimental): %d in their inventory, %d at their feet.", player.name, amount, className, placed, dropped))
+    output(string.format("Gave %s %d x %s: %d in their inventory, %d at their feet.", player.name, amount, className, placed, dropped))
 end
 
 -- Outposts are found from the traders, bankers or safe zones the map has loaded.
@@ -686,7 +659,7 @@ local function findOutposts()
     end
 end
 
--- ------------------------------------------------------------------ commands without an admin (experimental, opt-in)
+-- ------------------------------------------------------------------ commands without an admin (opt-in; confirmed on a live server)
 -- Every SCUM admin command is an object in the game instance's command registry and keeps
 -- the lowest executor level allowed to run it (_requiredExecutorLevel, EExecutorStatus:
 -- 0 Regular, 1 Admin, ...). For one command, on the game thread, the level is set to Regular,
@@ -836,8 +809,8 @@ local function runElevated(command, executor, quiet)
     end
 
     if ok then
-        output("Ran without an admin, as " .. executor.name .. ": " .. text .. " (experimental; command level "
-            .. table.concat(found, ", ") .. "; check it worked, e.g. with Balance)")
+        output("Ran without an admin, as " .. executor.name .. ": " .. text .. " (command level "
+            .. table.concat(found, ", ") .. ")")
     else
         output("Failed without an admin: " .. text .. " (" .. tostring(err) .. ")")
     end
@@ -889,9 +862,13 @@ local function run(command)
         output("Found admin " .. admin.name .. " online but not their command channel; trying without.")
     end
     if runElevated(command, nil, true) then return end
-    -- Sent with the "#", SCUM's command helper did nothing for ChangeCurrencyBalance on a live
-    -- server; the admin channel works without it, so send it the same way.
-    runWithoutAdmin((string.gsub(command, "^#+", "")))
+    -- SCUM only runs admin commands for an admin in game (its own test helper ignores them).
+    local text = (string.gsub(command, "^#+", ""))
+    local hint = ""
+    if ELEVATED_COMMANDS[verb(text)] and not elevatedEnabled() then
+        hint = " This one can also run without an admin: create " .. ELEVATED_SWITCH .. " in the ExclsvConsole mod folder."
+    end
+    output("No admin is online, so SCUM cannot run " .. text .. ". Join as an admin (AdminUsers.ini) and try again." .. hint)
 end
 
 -- Take the pending commands. Renaming first means a line appended while we read lands
