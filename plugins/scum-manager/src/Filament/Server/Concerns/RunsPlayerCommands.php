@@ -6,12 +6,14 @@ use Closure;
 use Exception;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\AdminCommands;
+use MrExclusive\ScumManager\Support\BalanceCheck;
 use MrExclusive\ScumManager\Support\ItemSelect;
 use RuntimeException;
 
@@ -33,8 +35,10 @@ trait RunsPlayerCommands
      * @param  Closure|null  $playerOptions  "steamId|name" => label, to pick the player in the form
      * @return list<\Filament\Schemas\Components\Component>
      */
-    protected function playerCommandSchema(?Closure $playerOptions = null, bool $online = true): array
+    protected function playerCommandSchema(?Closure $playerOptions = null, bool $online = true, ?string $steamId = null): array
     {
+        // The player is fixed (a table row) or picked in the form ("steamId|name").
+        $playerId = fn (Get $get) => $steamId ?? explode('|', (string) $get('player'))[0];
         $actions = [];
         foreach (static::playerCommandKeys($online) as $key) {
             $command = AdminCommands::COMMANDS[$key];
@@ -43,7 +47,10 @@ trait RunsPlayerCommands
         $is = fn (string ...$keys) => fn (Get $get) => in_array($get('action'), $keys, true);
 
         return array_values(array_filter([
-            $playerOptions !== null ? Select::make('player')->label('Player')->options($playerOptions)->searchable()->required() : null,
+            $playerOptions !== null ? Select::make('player')->label('Player')->options($playerOptions)->searchable()->required()->live() : null,
+            Text::make(fn (Get $get) => $this->savedBalance($playerId($get)) ?? '')
+                ->color('info')
+                ->visible(fn (Get $get) => $this->savedBalance($playerId($get)) !== null),
             Select::make('action')->label('Do')->options($actions)->required()->live(),
             Text::make(fn (Get $get) => AdminCommands::COMMANDS[$get('action')]['help'] ?? '')->color('gray'),
             ItemSelect::make('item', 'Item', fn () => app(ScumServerService::class)->itemCatalog($this->getServer()))
@@ -51,7 +58,17 @@ trait RunsPlayerCommands
             TextInput::make('amount')->label('Amount')->integer()->minValue(1)->maxValue(10)->default(1)
                 ->visible($is('giveitem'))->required($is('giveitem')),
             TextInput::make('money')->label('Amount (negative takes money)')->integer()->minValue(-1000000)->maxValue(1000000)
-                ->visible($is('money'))->required($is('money')),
+                ->visible($is('money'))->required($is('money'))
+                ->live(onBlur: true)
+                ->rules([fn (Get $get) => function (string $attribute, mixed $value, Closure $fail) use ($get, $playerId) {
+                    $problem = $get('force') ? null : BalanceCheck::shortfall($this->savedPlayer($playerId($get)), (int) $value);
+                    if ($problem !== null) {
+                        $fail($problem);
+                    }
+                }]),
+            Toggle::make('force')->label('Take it anyway')
+                ->visible(fn (Get $get) => $get('action') === 'money'
+                    && BalanceCheck::shortfall($this->savedPlayer($playerId($get)), (int) $get('money')) !== null),
             TextInput::make('fame')->label('Fame points')->integer()->minValue(0)->maxValue(100000)
                 ->visible($is('fame'))->required($is('fame')),
             Grid::make(3)->visible($is('teleportplayer'))->schema([
@@ -60,6 +77,23 @@ trait RunsPlayerCommands
                 TextInput::make('z')->label('Z')->integer()->required($is('teleportplayer')),
             ]),
         ]));
+    }
+
+    /** The player's entry in the last save snapshot, or null. */
+    protected function savedPlayer(?string $steamId): ?array
+    {
+        if ($steamId === null || $steamId === '') {
+            return null;
+        }
+
+        return app(ScumServerService::class)->saveData($this->getServer())['players'][$steamId] ?? null;
+    }
+
+    protected function savedBalance(?string $steamId): ?string
+    {
+        $data = app(ScumServerService::class)->saveData($this->getServer());
+
+        return BalanceCheck::summary($this->savedPlayer($steamId), $data['readAt'], time());
     }
 
     /** Runs the picked command for the player and shows what the console mod answered. */

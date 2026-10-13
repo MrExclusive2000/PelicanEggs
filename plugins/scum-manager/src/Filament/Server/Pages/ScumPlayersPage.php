@@ -196,7 +196,7 @@ class ScumPlayersPage extends Page implements HasTable
                     ->modalHeading(fn (array $record) => 'Run a command for ' . ($record['name'] ?: $record['steamId']))
                     ->modalDescription(fn (array $record) => $record['online'] ? null : 'Offline: only commands that work by SteamID are offered.')
                     ->modalSubmitActionLabel('Run')
-                    ->schema(fn (array $record) => $this->playerCommandSchema(null, $record['online']))
+                    ->schema(fn (array $record) => $this->playerCommandSchema(null, $record['online'], (string) $record['steamId']))
                     ->action(fn (array $record, array $data, ScumServerService $service) => $this->runPlayerCommand($record['steamId'], $record['name'], $data, $service)),
                 ActionGroup::make([
                     Action::make('ban')

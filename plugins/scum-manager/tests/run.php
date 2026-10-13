@@ -615,5 +615,16 @@ check('directory: save data merged, save-only players added', [$merged['76561198
 check('directory: no save data, save is null', PlayerDirectory::build("76561198000000001\tAlice\n", [], [], null)['76561198000000001']['save'], null);
 @unlink($saveFile);
 
+// ---------------------------------------------------------------- balance check for money commands
+use MrExclusive\ScumManager\Support\BalanceCheck;
+$rich = ['cash' => 15000, 'gold' => 3, 'fame' => 120.6];
+check('balance: summary', BalanceCheck::summary($rich, 1000, 1240), 'Bank: 15,000 cash, 3 gold. Fame: 120.6 (from the save 4 min ago).');
+check('balance: no save entry, no summary', BalanceCheck::summary(null, 1000, 1240), null);
+check('balance: giving money is always fine', BalanceCheck::shortfall($rich, 50000), null);
+check('balance: taking what they have is fine', BalanceCheck::shortfall($rich, -15000), null);
+check('balance: taking more is refused with the numbers', BalanceCheck::shortfall($rich, -20000),
+    'They only have 15,000 cash in the last save, so taking 20,000 would leave them at -5,000. Reload save data if they earned money since, or switch on "Take it anyway".');
+check('balance: unknown cash is not blocked', [BalanceCheck::shortfall(null, -100), BalanceCheck::shortfall(['cash' => null], -100)], [null, null]);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);
