@@ -19,7 +19,7 @@ use RuntimeException;
 
 /**
  * The common commands for one player (where is, money, items, teleports, kick, ban), run
- * through the PelicanConsole mod. Used by the Overview and Players pages.
+ * through the ExclsvConsole mod. Used by the Overview and Players pages.
  */
 trait RunsPlayerCommands
 {

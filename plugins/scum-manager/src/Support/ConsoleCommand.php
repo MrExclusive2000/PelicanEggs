@@ -4,7 +4,7 @@ namespace MrExclusive\ScumManager\Support;
 
 use InvalidArgumentException;
 
-/** Commands for the PelicanConsole mod, which reads them one per line from commands.txt. */
+/** Commands for the ExclsvConsole mod, which reads them one per line from commands.txt. */
 final class ConsoleCommand
 {
     public const MAX_LENGTH = 500;

@@ -9,7 +9,7 @@ use InvalidArgumentException;
  * after downloading) and a build id that changes only when the mod's files change.
  *
  *   { "format": "exclsv-mods", "manager": "1.14.0",
- *     "mods": { "PlayerTools": { "file": "PlayerTools.zip", "build": "e383f4863a33", "sha256": "...", "bytes": 32171 } } }
+ *     "mods": { "ExclsvPlayerTools": { "file": "ExclsvPlayerTools.zip", "build": "e383f4863a33", "sha256": "...", "bytes": 32171 } } }
  *
  * Only our own mods (Brand::MODS) are accepted, and only plain zip names next to the manifest.
  */

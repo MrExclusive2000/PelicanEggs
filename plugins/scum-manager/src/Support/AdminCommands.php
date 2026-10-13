@@ -7,7 +7,7 @@ use InvalidArgumentException;
 /**
  * The commands offered on the Admin Console page, so admins can pick one instead of typing it.
  *
- * "anytime" commands are handled by the PelicanConsole mod itself and work with nobody in game.
+ * "anytime" commands are handled by the ExclsvConsole mod itself and work with nobody in game.
  * The rest are SCUM admin commands, which SCUM only runs for an admin who is in game: the mod
  * runs them as the first online admin from AdminUsers.ini.
  *
@@ -198,7 +198,7 @@ final class AdminCommands
     }
 
     /**
-     * Items the game has loaded, from PelicanConsole's items.txt (class names such as
+     * Items the game has loaded, from ExclsvConsole's items.txt (class names such as
      * BP_Water_05l_C), labelled for a dropdown ("Water 05l (BP_Water_05l_C)").
      *
      * @return array<string, string> class name => label, sorted by label
@@ -221,7 +221,7 @@ final class AdminCommands
     }
 
     /**
-     * Players the server has seen, from the PlayerTools mod's players.tsv.
+     * Players the server has seen, from the ExclsvPlayerTools mod's players.tsv.
      *
      * @return array<string, string> SteamID => "Name (SteamID)", sorted by name
      */

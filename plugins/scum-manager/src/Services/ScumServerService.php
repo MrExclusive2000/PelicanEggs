@@ -3,6 +3,7 @@
 namespace MrExclusive\ScumManager\Services;
 
 use App\Enums\ContainerStatus;
+use App\Enums\SubuserPermission;
 use App\Facades\Activity;
 use App\Models\Server;
 use App\Repositories\Daemon\DaemonFileRepository;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\ConsoleCommand;
+use MrExclusive\ScumManager\Support\FolderRename;
 use MrExclusive\ScumManager\Support\LuaTable;
 use MrExclusive\ScumManager\Support\TeleportDestinations;
 use MrExclusive\ScumManager\Support\ModArchive;
@@ -762,6 +764,8 @@ class ScumServerService
      */
     public function installLatestMods(Server $server): array
     {
+        $moved = $this->moveLegacyFolders($server);
+
         $wanted = array_keys(self::bundledMods());
         $present = $this->installedModsOf($server, array_keys(Brand::MODS));
         foreach ($present as $mod) {
@@ -821,9 +825,83 @@ class ScumServerService
         return [
             'installed' => array_values(array_unique($installed)),
             'fromSource' => $fromSource,
-            'notes' => $notes,
+            'notes' => array_merge($moved, $notes),
             'manager' => ModManifest::isNewer($latest['manager'] ?? null, self::managerVersion()) ? $latest['manager'] : null,
         ];
+    }
+
+    /**
+     * Our mods' folders from before 1.33.0 that are still on the server.
+     *
+     * @return array{rename: array<string, string>, conflicts: array<string, string>}
+     */
+    public function legacyFolders(Server $server): array
+    {
+        $ue4ss = $this->ue4ss($server);
+
+        return FolderRename::plan($ue4ss['installed']
+            ? collect($this->listDirectory($server, $ue4ss['mods']))->where('directory', true)->pluck('name')->all()
+            : []);
+    }
+
+    /**
+     * Rename our mods' old folders (PelicanConsole, PlayerTools...) to the Exclsv names, with
+     * everything in them, and point the Pelican console at the new ExclsvConsole folder. Needs
+     * the server stopped: the running mods would otherwise keep writing to the old folders.
+     *
+     * @return list<string> notes for the person
+     */
+    private function moveLegacyFolders(Server $server): array
+    {
+        $plan = $this->legacyFolders($server);
+        if ($plan['rename'] === [] && $plan['conflicts'] === []) {
+            return [];
+        }
+        if (!$this->isStopped($server)) {
+            throw new RuntimeException('Stop the server first: this update moves our mods to their new folder names ('
+                . implode(', ', array_map(fn ($old, $new) => "$old → $new", array_keys($plan['rename'] + $plan['conflicts']), $plan['rename'] + $plan['conflicts']))
+                . '), and settings and player data move with them.');
+        }
+
+        $mods = $this->ue4ss($server)['mods'];
+        $list = $this->modList($server, $mods);
+        $notes = [];
+
+        foreach ($plan['rename'] as $old => $new) {
+            $enabled = $list->isEnabled($old);
+            $this->files($server)->renameFiles($mods, [['from' => $old, 'to' => $new]]);
+            $list->remove($old);
+            $list->setEnabled($new, $enabled !== false);
+        }
+        foreach ($plan['conflicts'] as $old => $new) {
+            $list->setEnabled($old, false);
+            $notes[] = "$old and $new both exist: $old was switched off and left as it is. Copy anything you need from it into $new, then delete it on this page.";
+            $marker = collect($this->listDirectory($server, "$mods/$old"))->first(fn (array $entry) => strtolower($entry['name']) === 'enabled.txt');
+            if ($marker !== null) {
+                $this->files($server)->deleteFiles("$mods/$old", [$marker['name']]);
+            }
+        }
+        $this->saveModList($server, $mods, $list);
+
+        if ($plan['rename'] !== []) {
+            $notes[] = 'Moved to the new folder names, with their settings and data: ' . implode(', ', array_map(fn ($old, $new) => "$old → $new", array_keys($plan['rename']), $plan['rename'])) . '.';
+            Activity::event('server:file.rename')
+                ->property('directory', $mods)
+                ->property('files', array_map(fn ($old, $new) => ['from' => $old, 'to' => $new], array_keys($plan['rename']), $plan['rename']))
+                ->log();
+        }
+
+        $startup = FolderRename::startup((string) $server->startup);
+        if ($startup !== null) {
+            if (user()?->can(SubuserPermission::StartupUpdate, $server)) {
+                $server->forceFill(['startup' => $startup])->saveOrFail();
+                $notes[] = 'The startup command now sends Pelican console commands to ExclsvConsole.';
+            } else {
+                $notes[] = 'Pelican console commands and the Discord feed need the startup command updated: ask the panel admin to re-import the SCUM egg and pick its startup command on the Startup page.';
+            }
+        }
+
+        return $notes;
     }
 
     /** @param array{file: string, build: string, sha256: string, bytes: int} $entry */
@@ -917,7 +995,7 @@ class ScumServerService
 
     // ------------------------------------------------------------------ admin console
 
-    /** Folder of the PelicanConsole mod, or null when it is not installed. */
+    /** Folder of the ExclsvConsole mod, or null when it is not installed. */
     public function consoleModDir(Server $server): ?string
     {
         $ue4ss = $this->ue4ss($server);
@@ -926,20 +1004,20 @@ class ScumServerService
         }
 
         $exists = collect($this->listDirectory($server, $ue4ss['mods']))
-            ->contains(fn (array $entry) => $entry['directory'] && $entry['name'] === 'PelicanConsole');
+            ->contains(fn (array $entry) => $entry['directory'] && $entry['name'] === 'ExclsvConsole');
 
-        return $exists ? $ue4ss['mods'] . '/PelicanConsole' : null;
+        return $exists ? $ue4ss['mods'] . '/ExclsvConsole' : null;
     }
 
     /**
-     * Queue a command for the PelicanConsole mod. Returns true when the mod picked it up
+     * Queue a command for the ExclsvConsole mod. Returns true when the mod picked it up
      * within $waitSeconds (it checks once a second while the server runs).
      */
     public function sendConsoleCommand(Server $server, string $command, int $waitSeconds = 4): bool
     {
         $dir = $this->consoleModDir($server);
         if ($dir === null) {
-            throw new RuntimeException('The ' . Brand::mod('PelicanConsole') . ' mod is not installed. Install it on the ' . Brand::PAGE_MODS . ' page ("Install our mods") and restart the server.');
+            throw new RuntimeException('The ' . Brand::mod('ExclsvConsole') . ' mod is not installed. Install it on the ' . Brand::PAGE_MODS . ' page ("Install our mods") and restart the server.');
         }
 
         $command = ConsoleCommand::normalize($command);
@@ -957,16 +1035,16 @@ class ScumServerService
     }
 
     /**
-     * Run a PelicanConsole command and return what it wrote to console.log, waiting up to
+     * Run a ExclsvConsole command and return what it wrote to console.log, waiting up to
      * $waitSeconds for a line matching $until.
      */
     public function runConsoleCommandAndRead(Server $server, string $command, string $until, int $waitSeconds = 8): string
     {
-        $dir = $this->consoleModDir($server) ?? throw new RuntimeException('The ' . Brand::mod('PelicanConsole') . ' mod is not installed.');
+        $dir = $this->consoleModDir($server) ?? throw new RuntimeException('The ' . Brand::mod('ExclsvConsole') . ' mod is not installed.');
         $before = strlen($this->read($server, "$dir/console.log") ?? '');
 
         if (!$this->sendConsoleCommand($server, $command)) {
-            throw new RuntimeException('SCUM did not pick up the command. Is the server running with ' . Brand::mod('PelicanConsole') . ' enabled?');
+            throw new RuntimeException('SCUM did not pick up the command. Is the server running with ' . Brand::mod('ExclsvConsole') . ' enabled?');
         }
 
         $new = '';
@@ -983,7 +1061,7 @@ class ScumServerService
     }
 
     /**
-     * Add teleport destinations to PlayerTools' config.lua.
+     * Add teleport destinations to ExclsvPlayerTools' config.lua.
      *
      * @param  list<array{name: string, x: int, y: int, z: int}>  $destinations
      */
@@ -1001,29 +1079,29 @@ class ScumServerService
     /** @param \Closure(array<mixed>): array<mixed> $change */
     private function updatePlayerTools(Server $server, \Closure $change): void
     {
-        if ($this->installedModsOf($server, ['PlayerTools']) === []) {
-            throw new RuntimeException('The ' . Brand::mod('PlayerTools') . ' mod is not installed.');
+        if ($this->installedModsOf($server, ['ExclsvPlayerTools']) === []) {
+            throw new RuntimeException('The ' . Brand::mod('ExclsvPlayerTools') . ' mod is not installed.');
         }
 
-        $raw = $this->modConfig($server, 'PlayerTools');
+        $raw = $this->modConfig($server, 'ExclsvPlayerTools');
         $config = $raw === null ? [] : LuaTable::parse($raw);
-        $this->writeModConfig($server, 'PlayerTools', LuaTable::render(
+        $this->writeModConfig($server, 'ExclsvPlayerTools', LuaTable::render(
             $change($config),
-            Brand::mod('PlayerTools') . " settings, written by " . Brand::MANAGER . " (" . Brand::PAGE_MOD_SETTINGS . " page).\nYou can edit this file by hand; comments are not kept when the page saves it.",
+            Brand::mod('ExclsvPlayerTools') . " settings, written by " . Brand::MANAGER . " (" . Brand::PAGE_MOD_SETTINGS . " page).\nYou can edit this file by hand; comments are not kept when the page saves it.",
         ));
     }
 
-    /** @return array<string, string> SteamID => "Name (SteamID)" for players PlayerTools has seen */
+    /** @return array<string, string> SteamID => "Name (SteamID)" for players ExclsvPlayerTools has seen */
     public function knownPlayers(Server $server): array
     {
         $ue4ss = $this->ue4ss($server);
 
-        return $ue4ss['installed'] ? AdminCommands::knownPlayers($this->read($server, $ue4ss['mods'] . '/PlayerTools/players.tsv')) : [];
+        return $ue4ss['installed'] ? AdminCommands::knownPlayers($this->read($server, $ue4ss['mods'] . '/ExclsvPlayerTools/players.tsv')) : [];
     }
 
     /**
      * Items for the dropdowns: the full list bundled with the plugin, or (if that file is
-     * missing) the item types PelicanConsole has seen on this server.
+     * missing) the item types ExclsvConsole has seen on this server.
      *
      * @return array<string, string> item => label
      */
@@ -1040,16 +1118,16 @@ class ScumServerService
         }
 
         return cache()->remember("scum-manager.items.$server->uuid", 120, fn () => AdminCommands::itemCatalog(
-            $this->read($server, $ue4ss['mods'] . '/PelicanConsole/items.txt'),
+            $this->read($server, $ue4ss['mods'] . '/ExclsvConsole/items.txt'),
         ));
     }
 
-    /** Who is online and where, from PlayerTools' online.tsv (empty when it is not current). */
+    /** Who is online and where, from ExclsvPlayerTools' online.tsv (empty when it is not current). */
     public function onlinePlayers(Server $server): array
     {
         $ue4ss = $this->ue4ss($server);
 
-        return OnlinePlayers::parse($ue4ss['installed'] ? $this->read($server, $ue4ss['mods'] . '/PlayerTools/online.tsv') : null, time());
+        return OnlinePlayers::parse($ue4ss['installed'] ? $this->read($server, $ue4ss['mods'] . '/ExclsvPlayerTools/online.tsv') : null, time());
     }
 
     /** Where SCUM keeps its save database (relative to the server root). */
@@ -1285,7 +1363,7 @@ class ScumServerService
     }
 
     /**
-     * The outposts on this server, from PlayerTools' teleport destinations named after their
+     * The outposts on this server, from ExclsvPlayerTools' teleport destinations named after their
      * sectors (A0, B4, C2, Z3, as "Add outposts as teleports" creates them); all destinations
      * when none are named that way.
      *
@@ -1294,7 +1372,7 @@ class ScumServerService
     public function outposts(Server $server): array
     {
         try {
-            $config = LuaTable::parse($this->modConfig($server, 'PlayerTools') ?? 'return {}');
+            $config = LuaTable::parse($this->modConfig($server, 'ExclsvPlayerTools') ?? 'return {}');
         } catch (Throwable) {
             return [];
         }
@@ -1399,10 +1477,10 @@ class ScumServerService
         }
 
         return PlayerDirectory::build(
-            $mods === null ? null : $this->read($server, "$mods/PlayerTools/players.tsv"),
+            $mods === null ? null : $this->read($server, "$mods/ExclsvPlayerTools/players.tsv"),
             $this->onlinePlayers($server)['players'],
             $lists,
-            $mods === null ? null : $this->read($server, "$mods/ScumAntiCheat/offenses.txt"),
+            $mods === null ? null : $this->read($server, "$mods/ExclsvAntiCheat/offenses.txt"),
             $this->saveSnapshot($server)['players'],
         );
     }
@@ -1417,7 +1495,7 @@ class ScumServerService
         $this->write($server, $path, PlayerDirectory::setMembership($this->read($server, $path), $steamId, $member));
     }
 
-    /** The newest player reports from PlayerTools' reports.log, newest first. */
+    /** The newest player reports from ExclsvPlayerTools' reports.log, newest first. */
     public function playerReports(Server $server, int $lines = 30): string
     {
         $path = $this->reportsLogPath($server);
@@ -1425,12 +1503,12 @@ class ScumServerService
         return $path === null ? '' : $this->newestFirst($this->tailOf($server, $path, $lines));
     }
 
-    /** Where PlayerTools writes player reports, or null without UE4SS. */
+    /** Where ExclsvPlayerTools writes player reports, or null without UE4SS. */
     public function reportsLogPath(Server $server): ?string
     {
         $ue4ss = $this->ue4ss($server);
 
-        return $ue4ss['installed'] ? $ue4ss['mods'] . '/PlayerTools/reports.log' : null;
+        return $ue4ss['installed'] ? $ue4ss['mods'] . '/ExclsvPlayerTools/reports.log' : null;
     }
 
     /** The last lines of a file on the server ('' when it does not exist). */
@@ -1444,7 +1522,7 @@ class ScumServerService
         return $log === '' ? '' : implode("\n", array_reverse(explode("\n", $log)));
     }
 
-    /** The end of PelicanConsole's console.log (command results and mod messages). */
+    /** The end of ExclsvConsole's console.log (command results and mod messages). */
     public function consoleOutput(Server $server, int $lines = 60): string
     {
         $dir = $this->consoleModDir($server);

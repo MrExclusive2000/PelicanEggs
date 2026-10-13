@@ -4,7 +4,7 @@ Adds these pages to SCUM servers in the Pelican client area:
 
 | Page | What it does |
 |------|--------------|
-| **SCUM Admin Console** | Pick a command (announce, kick, set time, give money or items, teleport, ban...) and run it through the PelicanConsole mod; adds the outposts (or any spot) as `!tp` destinations or King of the Hill zones; shows the results and player reports |
+| **SCUM Admin Console** | Pick a command (announce, kick, set time, give money or items, teleport, ban...) and run it through the ExclsvConsole mod; adds the outposts (or any spot) as `!tp` destinations or King of the Hill zones; shows the results and player reports |
 | **SCUM Settings** | Form editor for `ServerSettings.ini`, with a tab per section and search |
 | **SCUM Player Lists** | Admins, settings admins, whitelist, exclusive, banned and silenced players |
 | **SCUM Mods** | Installs or updates UE4SS and our mods, uploads mods, and turns them on/off or deletes them |
@@ -27,7 +27,7 @@ The first page in the **ExclsvSCUM** menu shows what needs attention on one scre
 
 - **Server:** status, UE4SS, how many players have joined, and the panel version (with a notice when a newer one is published).
 - **Our mods:** each mod's state compared with the latest build on GitHub (up to date, update available, disabled, not installed).
-- **Online players:** who is on, where (map sector and coordinates), whether they are driving or an admin, and how long they have been on, refreshed every 15 seconds from PlayerTools' `online.tsv`. **Manage a player** runs the common commands on one of them (where is, money and fame check, give item, give/take money, set fame, teleport, bring/go to, kick, ban) and shows the answer.
+- **Online players:** who is on, where (map sector and coordinates), whether they are driving or an admin, and how long they have been on, refreshed every 15 seconds from ExclsvPlayerTools' `online.tsv`. **Manage a player** runs the common commands on one of them (where is, money and fame check, give item, give/take money, set fame, teleport, bring/go to, kick, ban) and shows the answer.
 - **Anti-cheat flags:** strikes, kicks, bans and spectate flags, newest first, refreshed every 15 seconds. Start-up and reload messages are left out.
 - **Player reports:** the newest `!report` messages.
 - **Last session:** the end of `UE4SS.previous.log` (the egg keeps the log from before each restart), with crash lines picked out, and SCUM's newest crash report folder.
@@ -37,10 +37,10 @@ The first page in the **ExclsvSCUM** menu shows what needs attention on one scre
 
 One table with every player, combining what every file knows about them:
 
-- **Stats:** kills, deaths, K/D, playtime, bounty and last seen, from PlayerTools' `players.tsv`.
-- **Online now and where**, from PlayerTools' `online.tsv` (refreshes every 30 seconds).
+- **Stats:** kills, deaths, K/D, playtime, bounty and last seen, from ExclsvPlayerTools' `players.tsv`.
+- **Online now and where**, from ExclsvPlayerTools' `online.tsv` (refreshes every 30 seconds).
 - **Lists:** admin, settings admin, whitelisted, exclusive, banned and silenced, from SCUM's `.ini` player lists. Banned players who never played here are listed too.
-- **Anti-cheat kicks**, from ScumAntiCheat's `offenses.txt`.
+- **Anti-cheat kicks**, from ExclsvAntiCheat's `offenses.txt`.
 
 Search by name or SteamID and sort by kills, deaths, playtime or kicks. When a player is picked in **Run a command** or **Manage a player**, the form shows their bank cash, gold and fame from the last save, and refuses to take more money than they have (with a **Take it anyway** switch, as the save can be a few minutes old). Each player has **Run a command** (the same commands as Manage a player; offline players get the SteamID ones) and a **Lists** menu: **Ban** works while the server runs (added to `BannedUsers.ini` and kicked, as the anti-cheat does); unban, admin, whitelist and silence need the server stopped, because SCUM rewrites those files while it runs. The raw files stay editable on **Player lists**.
 
@@ -78,7 +78,8 @@ SCUM has no official mod support yet. Server-side mods run through [UE4SS](https
 
 - **Install UE4SS:** downloads the latest UE4SS build from GitHub into `SCUM/Binaries/Win64` and extracts it. The default is the *experimental* build, which SCUM mod authors use. **Update** keeps your `mods.txt`, `mods.json` and `UE4SS-settings.ini`. The server must be stopped.
 - **SCUM-safe settings:** UE4SS turns on about sixteen engine hooks by default, and on SCUM 1.3 these crash the server as soon as a player joins. A fresh install therefore turns off every hook except `HookCallFunctionByNameWithArguments` and `HookEngineTick`, and disables the UE4SS console window. The **SCUM-safe UE4SS settings** button re-applies this to an existing install. If a mod's instructions say it needs another hook, turn that hook back on in `ue4ss/UE4SS-settings.ini`.
-- **Our mods:** PelicanConsole, PlayerTools, ServerMessages and ScumAntiCheat ship inside the plugin (`resources/mods`) and are installed and enabled together with a fresh UE4SS install. **Install / update our mods** installs or updates them on an existing install from the latest builds on GitHub (`mods/dist/manifest.json` and the zips next to it, each checked against its sha256), using the bundled copies only for mods that are missing when GitHub cannot be reached (never downgrading an installed mod); each mod's `config.lua` is kept and the probe is updated only where it is installed. Set `SCUM_MANAGER_MODS_SOURCE` to another https folder to publish the mods elsewhere, or to an empty value to use only the bundled copies. Set `SCUM_MANAGER_INSTALL_BUNDLED_MODS=false` in the panel's `.env` to skip them on fresh installs.
+- **Our mods:** ExclsvConsole, ExclsvPlayerTools, ExclsvMessages and ExclsvAntiCheat ship inside the plugin (`resources/mods`) and are installed and enabled together with a fresh UE4SS install. **Install / update our mods** installs or updates them on an existing install from the latest builds on GitHub (`mods/dist/manifest.json` and the zips next to it, each checked against its sha256), using the bundled copies only for mods that are missing when GitHub cannot be reached (never downgrading an installed mod); each mod's `config.lua` is kept and the probe is updated only where it is installed. Set `SCUM_MANAGER_MODS_SOURCE` to another https folder to publish the mods elsewhere, or to an empty value to use only the bundled copies. Set `SCUM_MANAGER_INSTALL_BUNDLED_MODS=false` in the panel's `.env` to skip them on fresh installs.
+- **Folder names (1.33.0):** our mods now live in `ExclsvConsole`, `ExclsvPlayerTools`, `ExclsvAntiCheat`, `ExclsvMessages` and `ExclsvProbe`. On a server that still has the old folders (`PelicanConsole`, `PlayerTools`, `ScumAntiCheat`, `ServerMessages`, `ScumCommandProbe`), **Install / update our mods** first renames them (server stopped), so `config.lua`, `players.tsv`, the lottery, logs and everything else come along, and points the server's startup command at `ExclsvConsole`. A folder whose new name already exists is switched off and left for you to delete. Settings exports with the old names still import.
 - **Upload mod:** takes the mod's `.zip` as downloaded. Any folder inside that contains `Scripts/main.lua` (Lua) or `dlls/main.dll` (C++) is installed into `ue4ss/Mods/<name>` and enabled. Paths are checked, so nothing can be written outside the mod folder.
 - **Enable/Disable:** updates `mods.txt` and `mods.json` together, and keeps `Keybinds` last, as UE4SS requires.
 - **Delete:** removes the mod's folder. UE4SS's own built-in mods can be disabled but not deleted.
@@ -88,7 +89,7 @@ Changes apply on the next server start.
 
 ### Console commands
 
-To run admin commands, upload the [PelicanConsole](../../mods/PelicanConsole) mod (`mods/dist/PelicanConsole.zip`) on this page and restart. Then use the **SCUM Admin Console** page: pick a command from the list (grouped into "works any time" and "needs an admin in game"), fill in the player or value, and run it. The page writes the command straight into the mod's `commands.txt`, tells you whether SCUM picked it up, and shows the mod's `console.log`. The SCUM egg also forwards commands typed in the Pelican console to the same mod. See the [egg README](../../scum/README.md#console-commands).
+To run admin commands, upload the [ExclsvConsole](../../mods/ExclsvConsole) mod (`mods/dist/ExclsvConsole.zip`) on this page and restart. Then use the **SCUM Admin Console** page: pick a command from the list (grouped into "works any time" and "needs an admin in game"), fill in the player or value, and run it. The page writes the command straight into the mod's `commands.txt`, tells you whether SCUM picked it up, and shows the mod's `console.log`. The SCUM egg also forwards commands typed in the Pelican console to the same mod. See the [egg README](../../scum/README.md#console-commands).
 
 ## ExclsvSCUM Mod Settings
 

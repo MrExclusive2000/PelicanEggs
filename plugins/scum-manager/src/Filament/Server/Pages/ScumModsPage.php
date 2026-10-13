@@ -223,7 +223,13 @@ class ScumModsPage extends Page implements HasTable
                 ? 'GitHub cannot be reached right now: only missing mods are installed (from the copies bundled with the panel); installed ones are kept.'
                 : 'The copies bundled with the panel are used.');
 
-        return $from . ' Settings (config.lua) are kept. ' . implode('. ', $lines) . '. Restart the server afterwards.';
+        $legacy = $service->legacyFolders($server);
+        $moves = $legacy['rename'] + $legacy['conflicts'];
+        $move = $moves === [] ? '' : ' First, our mods move to their new folder names ('
+            . implode(', ', array_map(fn ($old, $new) => "$old → $new", array_keys($moves), $moves))
+            . '), with their settings and player data. The server must be stopped for that.';
+
+        return $from . $move . ' Settings (config.lua) are kept. ' . implode('. ', $lines) . '. Restart the server afterwards.';
     }
 
     protected function getHeaderActions(): array

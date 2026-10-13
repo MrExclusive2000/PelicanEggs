@@ -5,18 +5,18 @@ what our mods can do is listed.
 
 ## Used now
 
-- **`Prisoner:GetSquad()`** (native, read-only): PlayerTools uses it to tell squadmates apart, so
+- **`Prisoner:GetSquad()`** (native, read-only): ExclsvPlayerTools uses it to tell squadmates apart, so
   squad kills do not count for streaks and bounties.
 - **`ConZPlayerController:SendHUDMessageToClient(Message, AudioEvent)`** (client RPC on the
-  player's controller): on-screen notice to one player. PlayerTools uses it when the player has
+  player's controller): on-screen notice to one player. ExclsvPlayerTools uses it when the player has
   no character (driving or dead), where `Prisoner:SendMessageToClient` cannot reach them.
 - **`ERaidProtectionType`**: 0 None, 1 OfflineRaidProtection, 2 FlagSpecificRaidProtection,
   3 GlobalRaidProtection. The Server settings page shows `scum.RaidProtectionType` as a dropdown.
 
 ## Fixed because of it
 
-- **`ECurrencyType`** is 0 None, 1 Normal (cash), 2 Gold. PlayerTools read balances with 0 and
-  PelicanConsole's Balance command showed 0 as money and 1 as gold. Both now read 1 for cash and
+- **`ECurrencyType`** is 0 None, 1 Normal (cash), 2 Gold. ExclsvPlayerTools read balances with 0 and
+  ExclsvConsole's Balance command showed 0 as money and 1 as gold. Both now read 1 for cash and
   2 for gold. This affected the balance check before paid teleports and bounties, and the
   automatic "does SCUM run commands without an admin" test, which compares balances.
 - Every SCUM function the mods call (KickPlayer, SendMessageToClient, SendHUDMessageToAll,

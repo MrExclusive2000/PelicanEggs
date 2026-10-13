@@ -4,10 +4,10 @@ namespace MrExclusive\ScumManager\Support;
 
 /**
  * Everything known about each player, from every file that mentions them:
- *   - PlayerTools' players.tsv (name, kills, deaths, playtime, first and last seen, bounty)
- *   - PlayerTools' online.tsv (who is on now, and where)
+ *   - ExclsvPlayerTools' players.tsv (name, kills, deaths, playtime, first and last seen, bounty)
+ *   - ExclsvPlayerTools' online.tsv (who is on now, and where)
  *   - SCUM's player lists (AdminUsers.ini, BannedUsers.ini, WhitelistedUsers.ini, ...)
- *   - ScumAntiCheat's offenses.txt (how often the anti-cheat kicked them)
+ *   - ExclsvAntiCheat's offenses.txt (how often the anti-cheat kicked them)
  *   - SCUM's save database (bank balances, fame, squad, alive; see SaveDatabase::players())
  */
 final class PlayerDirectory

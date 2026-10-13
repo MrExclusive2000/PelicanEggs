@@ -93,7 +93,7 @@ class ScumOverviewPage extends Page
     #[Locked]
     public array $online = [];
 
-    /** When PlayerTools last wrote the online list (null: never). */
+    /** When ExclsvPlayerTools last wrote the online list (null: never). */
     #[Locked]
     public ?int $onlineUpdated = null;
 
@@ -166,13 +166,18 @@ class ScumOverviewPage extends Page
                 ? (ScumServerService::bundledBuilds()[$mod]['build'] ?? null)
                 : ($latest['mods'][$mod]['build'] ?? null);
             [$label, $color] = Overview::modStatus($installed, (bool) ($present[$mod]['enabled'] ?? false), $build, $newest);
-            if ($mod === 'ScumCommandProbe' && !$installed) {
+            $old = array_search($mod, Brand::LEGACY_FOLDERS, true);
+            if (!$installed && $old !== false && $present->has($old)) {
+                // Still in its pre-1.33.0 folder: the update moves it across.
+                [$label, $color, $installed] = ['Update available', 'info', true];
+            }
+            if ($mod === 'ExclsvProbe' && !$installed) {
                 continue; // the probe is a tool, not something every server needs
             }
             $this->mods[] = ['name' => $mod, 'label' => $label, 'color' => $color, 'build' => $build];
         }
 
-        $this->consoleInstalled = $present->has('PelicanConsole');
+        $this->consoleInstalled = $present->has('ExclsvConsole');
         $this->logDir = $ue4ss['installed'] ? $ue4ss['root'] : null;
         $this->previousLog = $this->logDir === null ? '' : $service->tailOf($server, $this->logDir . '/UE4SS.previous.log', 40);
         $this->crashLines = Overview::crashLines($this->previousLog);
@@ -190,7 +195,7 @@ class ScumOverviewPage extends Page
         try {
             $ue4ss = $service->ue4ss($server);
             $this->flags = $ue4ss['installed']
-                ? Overview::antiCheatEvents($service->tailOf($server, $ue4ss['mods'] . '/ScumAntiCheat/anticheat.log', 400))
+                ? Overview::antiCheatEvents($service->tailOf($server, $ue4ss['mods'] . '/ExclsvAntiCheat/anticheat.log', 400))
                 : [];
             $this->reports = $service->playerReports($server, 10);
             $online = $service->onlinePlayers($server);
@@ -217,7 +222,7 @@ class ScumOverviewPage extends Page
                             ->state(fn () => $this->ue4ss['installed'] ? 'Installed (' . $this->ue4ss['layout'] . ')' : 'Not installed: needed for our mods')
                             ->color(fn () => $this->ue4ss['installed'] ? null : 'warning'),
                         TextEntry::make('players')->label('Players seen')
-                            ->state(fn () => $this->knownPlayers > 0 ? (string) $this->knownPlayers : 'None yet (' . Brand::mod('PlayerTools') . ' records everyone who joins)'),
+                            ->state(fn () => $this->knownPlayers > 0 ? (string) $this->knownPlayers : 'None yet (' . Brand::mod('ExclsvPlayerTools') . ' records everyone who joins)'),
                         TextEntry::make('discord')->label('Discord feed')
                             ->state(fn () => match ($this->discord) {
                                 true => 'On (' . $this->discordFeed . ')',
@@ -257,7 +262,7 @@ class ScumOverviewPage extends Page
             Grid::make(['default' => 1, 'lg' => 2])->schema([
                 Section::make('Anti-cheat flags')
                     ->icon('tabler-shield-exclamation')
-                    ->description('Strikes, kicks, bans and spectate flags from ' . Brand::mod('ScumAntiCheat') . ', newest first. Updates every 15 seconds.')
+                    ->description('Strikes, kicks, bans and spectate flags from ' . Brand::mod('ExclsvAntiCheat') . ', newest first. Updates every 15 seconds.')
                     ->schema([$this->logEntry('flags', fn () => implode("\n", $this->flags), 'Nothing flagged.')]),
                 Section::make('Player reports')
                     ->icon('tabler-message-report')
@@ -285,7 +290,7 @@ class ScumOverviewPage extends Page
     private function onlineSummary(): string
     {
         if ($this->onlineUpdated === null) {
-            return Brand::mod('PlayerTools') . ' has not written the online list yet (it does every 15 seconds while the server runs). Update our mods if this stays empty.';
+            return Brand::mod('ExclsvPlayerTools') . ' has not written the online list yet (it does every 15 seconds while the server runs). Update our mods if this stays empty.';
         }
         if ($this->online === [] && time() - $this->onlineUpdated > OnlinePlayers::FRESH_SECONDS) {
             return 'Not current: last updated ' . OnlinePlayers::duration(time() - $this->onlineUpdated) . ' ago (server stopped or restarting).';
@@ -412,7 +417,7 @@ class ScumOverviewPage extends Page
                 ->authorize(fn () => user()?->can(SubuserPermission::ControlConsole, $server)
                     && user()?->can(SubuserPermission::FileUpdate, $server))
                 ->modalHeading('Manage a player')
-                ->modalDescription('Runs through the ' . Brand::mod('PelicanConsole') . ' mod; the answer is shown when it arrives.')
+                ->modalDescription('Runs through the ' . Brand::mod('ExclsvConsole') . ' mod; the answer is shown when it arrives.')
                 ->modalSubmitActionLabel('Run')
                 ->schema(fn () => $this->playerCommandSchema(fn () => $this->playerOptions()))
                 ->action(function (array $data, ScumServerService $service) {

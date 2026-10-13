@@ -79,7 +79,7 @@ final class SettingsBundle
         }
 
         $mods = [];
-        foreach (($data['mods'] ?? []) as $name => $config) {
+        foreach (FolderRename::renameKeys(is_array($data['mods'] ?? null) ? $data['mods'] : []) as $name => $config) {
             $folder = $folders[strtolower((string) $name)] ?? null;
             if ($folder === null) {
                 throw new InvalidArgumentException("Unknown mod \"$name\" in the settings file.");

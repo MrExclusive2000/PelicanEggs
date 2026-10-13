@@ -30,7 +30,7 @@ use MrExclusive\ScumManager\Support\PlayerDirectory;
 use MrExclusive\ScumManager\Support\SaveDatabase;
 
 /**
- * Every player in one table, combining PlayerTools' stats and online list, SCUM's player lists
+ * Every player in one table, combining ExclsvPlayerTools' stats and online list, SCUM's player lists
  * and the anti-cheat's kick count, with actions for each player.
  */
 class ScumPlayersPage extends Page implements HasTable
@@ -128,7 +128,7 @@ class ScumPlayersPage extends Page implements HasTable
             ->heading('Everyone who has played, or is on one of your lists')
             ->description(fn () => $this->saveSummary())
             ->emptyStateHeading('No players yet')
-            ->emptyStateDescription(Brand::mod('PlayerTools') . ' records everyone who joins.')
+            ->emptyStateDescription(Brand::mod('ExclsvPlayerTools') . ' records everyone who joins.')
             ->columns([
                 TextColumn::make('name')
                     ->label('Player')
@@ -148,7 +148,7 @@ class ScumPlayersPage extends Page implements HasTable
                     ->label('Where / last seen')
                     ->state(fn (array $record) => $record['online']
                         ? $record['where']
-                        : ($record['lastSeen'] > 0 ? OnlinePlayers::duration(max(0, time() - $record['lastSeen'])) . ' ago' : 'never seen by ' . Brand::mod('PlayerTools')))
+                        : ($record['lastSeen'] > 0 ? OnlinePlayers::duration(max(0, time() - $record['lastSeen'])) . ' ago' : 'never seen by ' . Brand::mod('ExclsvPlayerTools')))
                     ->wrap(),
                 TextColumn::make('cash')->label('Cash')->sortable()
                     ->state(fn (array $record) => $record['save']['cash'] ?? null)
@@ -182,7 +182,7 @@ class ScumPlayersPage extends Page implements HasTable
                     ->formatStateUsing(fn ($state) => (int) $state > 0 ? OnlinePlayers::duration((int) $state) : '-'),
                 TextColumn::make('kicks')->label('AC kicks')->sortable()
                     ->color(fn ($state) => (int) $state > 0 ? 'danger' : 'gray')
-                    ->tooltip('Times ' . Brand::mod('ScumAntiCheat') . ' kicked this player'),
+                    ->tooltip('Times ' . Brand::mod('ExclsvAntiCheat') . ' kicked this player'),
                 TextColumn::make('bounty')->label('Bounty')->sortable()
                     ->formatStateUsing(fn ($state) => (int) $state > 0 ? (string) $state : '-')
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -259,7 +259,7 @@ class ScumPlayersPage extends Page implements HasTable
     private function saveSummary(): string
     {
         $data = app(ScumServerService::class)->saveSnapshot($this->getServer());
-        $parts = ['Stats from ' . Brand::mod('PlayerTools') . ', bans and admins from SCUM\'s player lists, kicks from ' . Brand::mod('ScumAntiCheat') . '.'];
+        $parts = ['Stats from ' . Brand::mod('ExclsvPlayerTools') . ', bans and admins from SCUM\'s player lists, kicks from ' . Brand::mod('ExclsvAntiCheat') . '.'];
         $parts[] = $data['error'] !== null
             ? 'Money, fame and inventories could not be read from the save: ' . $data['error']
             : 'Money, fame and inventories from SCUM\'s save, read ' . OnlinePlayers::duration(max(0, time() - (int) $data['readAt'])) . ' ago (SCUM saves every few minutes).';

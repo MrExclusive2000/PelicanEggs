@@ -4,11 +4,11 @@ namespace MrExclusive\ScumManager\Support;
 
 use InvalidArgumentException;
 
-/** Teleport destinations of the PlayerTools mod, filled from PelicanConsole's output. */
+/** Teleport destinations of the ExclsvPlayerTools mod, filled from ExclsvConsole's output. */
 final class TeleportDestinations
 {
     /**
-     * Outposts from the output of PelicanConsole's FindOutposts.
+     * Outposts from the output of ExclsvConsole's FindOutposts.
      *
      * @return list<array{name: string, x: int, y: int, z: int}>
      */
@@ -25,7 +25,7 @@ final class TeleportDestinations
     }
 
     /**
-     * A player's position from the output of PelicanConsole's WhereIs.
+     * A player's position from the output of ExclsvConsole's WhereIs.
      *
      * @return array{x: int, y: int, z: int}|null
      */
@@ -50,7 +50,7 @@ final class TeleportDestinations
     }
 
     /**
-     * PlayerTools' config with a King of the Hill zone added (same name replaced).
+     * ExclsvPlayerTools' config with a King of the Hill zone added (same name replaced).
      *
      * @param  array<mixed>  $config
      * @param  array{name: string, x: int, y: int, z: int}  $zone
@@ -70,7 +70,7 @@ final class TeleportDestinations
     }
 
     /**
-     * PlayerTools' config with these destinations added. A destination with the same name is replaced.
+     * ExclsvPlayerTools' config with these destinations added. A destination with the same name is replaced.
      *
      * @param  array<mixed>  $config
      * @param  list<array{name: string, x: int, y: int, z: int}>  $destinations

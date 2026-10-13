@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 bash ../mods/build.sh >/dev/null
 mkdir -p dist scum-manager/resources/mods
 rm -f scum-manager/resources/mods/*.zip scum-manager/resources/mods/manifest.json
-for mod in PelicanConsole PlayerTools ScumAntiCheat ServerMessages; do
+for mod in ExclsvConsole ExclsvPlayerTools ExclsvAntiCheat ExclsvMessages; do
     cp "../mods/dist/$mod.zip" scum-manager/resources/mods/
 done
 cp ../mods/dist/manifest.json scum-manager/resources/mods/manifest.json

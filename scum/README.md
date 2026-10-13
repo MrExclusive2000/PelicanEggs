@@ -33,7 +33,7 @@ Every port above needs an allocation on the server, and the **Query Port** varia
 - **Install:** steamcmd downloads app `3792580` with the Windows platform forced, then checks that `SCUM/Binaries/Win64/SCUMServer.exe` exists.
 - **Auto update:** with **Auto Update** on, the Wine image runs steamcmd before every start.
 - **Startup:** `wine SCUMServer.exe -log -port=… -QueryPort=… -MaxPlayers=…`. The console follows `SCUM/Saved/Logs/SCUM.log` because Wine doesn't print the server's output.
-- **Console commands:** lines you type in the Pelican console are appended to `SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole/commands.txt`, and the console also shows that mod's `console.log`. This needs UE4SS and the [PelicanConsole mod](../mods/PelicanConsole); see [Console commands](#console-commands).
+- **Console commands:** lines you type in the Pelican console are appended to `SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole/commands.txt`, and the console also shows that mod's `console.log`. This needs UE4SS and the [ExclsvConsole mod](../mods/ExclsvConsole); see [Console commands](#console-commands).
 - **Stopping:** the panel sends `^C` (SIGINT). The startup command traps it and passes it to the server process, so the server can shut down cleanly instead of being killed when the stop timeout runs out.
 - **Config:** on every start the panel writes the name, description, password and playstyle into `SCUM/Saved/Config/WindowsServer/ServerSettings.ini` (section `[General]`, keys `scum.ServerName` and so on). SCUM creates this file on its first start, so these values take effect from the **second** start.
 
@@ -65,15 +65,15 @@ SCUM has no official mod support yet, so server-side mods run through UE4SS. The
 
 ## Console commands
 
-SCUM has no RCON and doesn't read admin commands from its console. The [PelicanConsole](../mods/PelicanConsole) UE4SS mod bridges the gap:
-1. Install UE4SS from the **SCUM Mods** page, then upload `mods/dist/PelicanConsole.zip` there.
+SCUM has no RCON and doesn't read admin commands from its console. The [ExclsvConsole](../mods/ExclsvConsole) UE4SS mod bridges the gap:
+1. Install UE4SS from the **SCUM Mods** page, then upload `mods/dist/ExclsvConsole.zip` there.
 2. Restart the server and wait until it is online.
 3. Send a command from the **SCUM Admin Console** page of the SCUM Manager plugin, or type it in the Pelican console, with or without the leading `#`. For example: `ListPlayers` or `Announce Server restart in 10 minutes`.
 
 How commands run:
 - **`Announce <message>`** shows the message on every player's screen, and **`ListPlayers`** lists who is online in the console. **`Kick <name>`** kicks an online player by name. These work with no admin in game.
 - **Every other command** (SetTime, SetWeather, Ban, Teleport...) runs through an online admin's chat command channel, exactly as if that admin typed it in chat, and SCUM's reply appears in their chat. So an admin from `AdminUsers.ini` must be online.
-- With no admin online, SCUM does not run admin commands and the console says so. Money, fame, `SpawnItem` and `Teleport` commands can still run when `no-admin-commands.txt` exists in the PelicanConsole mod folder (see that mod's README).
+- With no admin online, SCUM does not run admin commands and the console says so. Money, fame, `SpawnItem` and `Teleport` commands can still run when `no-admin-commands.txt` exists in the ExclsvConsole mod folder (see that mod's README).
 
 Commands typed while the server is starting or stopped are dropped.
 
@@ -83,10 +83,10 @@ Our own UE4SS mods ship with the SCUM Manager plugin and are installed together 
 
 | Mod | What it does |
 |-----|--------------|
-| `PelicanConsole` | Runs admin commands from the SCUM Admin Console page or the Pelican console (above) |
-| `PlayerTools` | Chat commands (`!help`, `!rules`, `!discord`, `!online`, `!stats`, `!top`, `!vote`, `!info`, `!bounty`, `!tp`, `!tpto`, `!report`, `!seen`, `!manhunt`), kill feed, stats and leaderboard, kill streaks, streak bounties, AFK kicker, votes for time and weather, new-player welcome and starter kit, welcome back, playtime rewards and a daily bonus, paid teleports, player reports, death recap, combat hotspots, `!seen`, Manhunt and King of the Hill events, and feature tips |
-| `ServerMessages` | Welcome message, rotating announcements, join/leave log, restart countdown warnings |
-| `ScumAntiCheat` | Server-side anti-cheat: speed, teleport, fly and hover hacks, out-of-map/under-map, admin rights not in AdminUsers.ini, staff impersonation names, aimbot signs from the kill log and aim snaps (reported as suspects), a watchlist, and SCUM's own violation and admin logs in the console. It can kick or ban (via BannedUsers.ini), but only logs until you change its action |
+| `ExclsvConsole` | Runs admin commands from the SCUM Admin Console page or the Pelican console (above) |
+| `ExclsvPlayerTools` | Chat commands (`!help`, `!rules`, `!discord`, `!online`, `!stats`, `!top`, `!vote`, `!info`, `!bounty`, `!tp`, `!tpto`, `!report`, `!seen`, `!manhunt`), kill feed, stats and leaderboard, kill streaks, streak bounties, AFK kicker, votes for time and weather, new-player welcome and starter kit, welcome back, playtime rewards and a daily bonus, paid teleports, player reports, death recap, combat hotspots, `!seen`, Manhunt and King of the Hill events, and feature tips |
+| `ExclsvMessages` | Welcome message, rotating announcements, join/leave log, restart countdown warnings |
+| `ExclsvAntiCheat` | Server-side anti-cheat: speed, teleport, fly and hover hacks, out-of-map/under-map, admin rights not in AdminUsers.ini, staff impersonation names, aimbot signs from the kill log and aim snaps (reported as suspects), a watchlist, and SCUM's own violation and admin logs in the console. It can kick or ban (via BannedUsers.ini), but only logs until you change its action |
 
 Change their settings on the **SCUM Mod Settings** page, or in `config.lua` in `SCUM/Binaries/Win64/ue4ss/Mods/<Mod>/`. The mods pick up changes within 30 seconds. They report in the Pelican console and on the Admin Console page.
 
@@ -100,7 +100,7 @@ Paste a channel webhook into **[Exclsv] Discord webhook URL** on the Startup pag
 - **flags:** anti-cheat strikes, kicks, bans and spectate flags
 - **reports:** `!report` messages from players
 
-**[Exclsv] Discord feed** picks which, e.g. `flags,reports`. Messages are batched every few seconds to stay within Discord's limits, and `@everyone` or other mentions in player text never ping anyone. The relay (`discord-relay.sh` in the PelicanConsole mod) runs next to the game, only reads the mods' log files and stops with the server. Treat the webhook URL like a password: anyone who has it can post to the channel.
+**[Exclsv] Discord feed** picks which, e.g. `flags,reports`. Messages are batched every few seconds to stay within Discord's limits, and `@everyone` or other mentions in player text never ping anyone. The relay (`discord-relay.sh` in the ExclsvConsole mod) runs next to the game, only reads the mods' log files and stops with the server. Treat the webhook URL like a password: anyone who has it can post to the channel.
 
 ## Troubleshooting
 
@@ -117,5 +117,5 @@ Paste a channel webhook into **[Exclsv] Discord webhook URL** on the Startup pag
 - **Version mismatch when joining:** the server is behind the client. Make sure Auto Update is on and restart.
 - **Typed console commands do nothing:**
   - Updating the egg doesn't change servers that already exist: each server keeps its own copy of the start command. Go to **Admin → Servers → (your server) → Startup**, set **Startup Command** to **Default**, save and restart. The first line of the console after a start (`:/home/container$ wine …`) must contain `CMD_DIR=`.
-  - Check that the console shows `[PelicanConsole] Ready.` after a start. If it doesn't, check that UE4SS is installed and the mod is enabled on the Mods page.
-  - If you see `Ran: #…` but nothing happens in game, change `COMMAND_PREFIX` near the top of `ue4ss/Mods/PelicanConsole/Scripts/main.lua` from `"#"` to `""` and restart.
+  - Check that the console shows `[ExclsvConsole] Ready.` after a start. If it doesn't, check that UE4SS is installed and the mod is enabled on the Mods page.
+  - If you see `Ran: #…` but nothing happens in game, change `COMMAND_PREFIX` near the top of `ue4ss/Mods/ExclsvConsole/Scripts/main.lua` from `"#"` to `""` and restart.

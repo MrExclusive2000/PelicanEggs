@@ -3,7 +3,7 @@
 namespace MrExclusive\ScumManager\Support;
 
 /**
- * PlayerTools' online.tsv: who is online and where, rewritten every 15 seconds while the
+ * ExclsvPlayerTools' online.tsv: who is online and where, rewritten every 15 seconds while the
  * server runs.
  *
  *   # updated <unix time>

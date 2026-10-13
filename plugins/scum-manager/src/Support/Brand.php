@@ -3,9 +3,8 @@
 namespace MrExclusive\ScumManager\Support;
 
 /**
- * Names shown to people. The plugin id, namespaces and the mods' folder names stay as they are
- * (renaming those would make Pelican and UE4SS treat them as new installs); only what is
- * displayed carries the Exclsv brand.
+ * Names shown to people, and our mods' folder names. The plugin id and namespaces stay as they
+ * are (renaming those would make Pelican treat the plugin as a new install).
  */
 final class Brand
 {
@@ -32,18 +31,30 @@ final class Brand
 
     public const PAGE_HELP = 'ExclsvSCUM Help & guide';
 
-    /** Mod folder => display name. */
+    /** Mod folder => display name (the same since 1.33.0, when the folders were renamed). */
     public const MODS = [
+        'ExclsvPlayerTools' => 'ExclsvPlayerTools',
+        'ExclsvAntiCheat' => 'ExclsvAntiCheat',
+        'ExclsvMessages' => 'ExclsvMessages',
+        'ExclsvConsole' => 'ExclsvConsole',
+        'ExclsvProbe' => 'ExclsvProbe',
+    ];
+
+    /**
+     * Folder names our mods had before 1.33.0 => their folder now. "Install / update our mods"
+     * moves old folders (settings and data included) to the new names.
+     */
+    public const LEGACY_FOLDERS = [
+        'PelicanConsole' => 'ExclsvConsole',
         'PlayerTools' => 'ExclsvPlayerTools',
         'ScumAntiCheat' => 'ExclsvAntiCheat',
         'ServerMessages' => 'ExclsvMessages',
-        'PelicanConsole' => 'ExclsvConsole',
         'ScumCommandProbe' => 'ExclsvProbe',
     ];
 
     /** Display name for a mod folder; mods that are not ours keep their own name. */
     public static function mod(string $folder): string
     {
-        return self::MODS[$folder] ?? $folder;
+        return self::MODS[$folder] ?? self::LEGACY_FOLDERS[$folder] ?? $folder;
     }
 }

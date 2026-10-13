@@ -6,7 +6,7 @@ namespace MrExclusive\ScumManager\Support;
  * The settings of our own mods, as shown on the ExclsvSCUM Mod Settings page.
  *
  * Each field maps a path in the mod's config.lua (e.g. "afk.minutes") to a form field.
- * Form state is flat, keyed by field id ("PlayerTools__afk__minutes"), because Filament
+ * Form state is flat, keyed by field id ("ExclsvPlayerTools__afk__minutes"), because Filament
  * treats dots in state keys as nesting.
  *
  * Field types:
@@ -19,8 +19,8 @@ namespace MrExclusive\ScumManager\Support;
 final class ModSettings
 {
     public const MODS = [
-        'PlayerTools' => [
-            'label' => Brand::MODS['PlayerTools'],
+        'ExclsvPlayerTools' => [
+            'label' => Brand::MODS['ExclsvPlayerTools'],
             'description' => 'Chat commands, kill feed, stats, AFK kicker, voting, new players, rewards, kill streaks, bounties, teleports, info and reports.',
             'sections' => [
                 'Chat commands' => [
@@ -95,7 +95,7 @@ final class ModSettings
                     ],
                 ],
                 'Playtime rewards' => [
-                    'description' => 'SCUM admin commands (without #) run as an online admin; rewards wait until one is online. With no admin online, money, fame, SpawnItem and Teleport commands still run when no-admin-commands.txt exists in the PelicanConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole/); delete the file to turn that off. Placeholders: {name} {steamId}',
+                    'description' => 'SCUM admin commands (without #) run as an online admin; rewards wait until one is online. With no admin online, money, fame, SpawnItem and Teleport commands still run when no-admin-commands.txt exists in the ExclsvConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole/); delete the file to turn that off. Placeholders: {name} {steamId}',
                     'fields' => [
                         'playtimeRewards.enabled' => ['toggle', 'Playtime rewards on', true],
                         'playtimeRewards.everyMinutes' => ['int', 'Reward every (min played)', 60],
@@ -275,8 +275,8 @@ final class ModSettings
                 ],
             ],
         ],
-        'ServerMessages' => [
-            'label' => Brand::MODS['ServerMessages'],
+        'ExclsvMessages' => [
+            'label' => Brand::MODS['ExclsvMessages'],
             'description' => 'Welcome message, rotating announcements, join/leave log and restart warnings.',
             'sections' => [
                 'Welcome and joins' => [
@@ -305,8 +305,8 @@ final class ModSettings
                 ],
             ],
         ],
-        'ScumAntiCheat' => [
-            'label' => Brand::MODS['ScumAntiCheat'],
+        'ExclsvAntiCheat' => [
+            'label' => Brand::MODS['ExclsvAntiCheat'],
             'description' => 'Server-side checks for speed, teleport, fly and hover hacks, map bounds, fake admins and aimbots.',
             'sections' => [
                 'Action' => [
@@ -389,7 +389,7 @@ final class ModSettings
      * sections on one tab; a section not listed here lands on "Other".
      */
     public const GROUPS = [
-        'PlayerTools' => [
+        'ExclsvPlayerTools' => [
             'Chat & info' => ['Chat commands', 'Welcome back', 'Info and reports', 'Feature tips'],
             'Economy' => ['New players', 'Playtime rewards', 'Bounties', 'Item rewards (not yet confirmed)'],
             'Shop & money' => ['Shop', 'Sell to the server', 'Pay other players', 'Lottery', 'Daily tasks', 'Squad bonus'],
@@ -397,7 +397,7 @@ final class ModSettings
             'Events & PvP' => ['Kill feed', 'Stats', 'Kill streaks', 'Death recap and hotspots', 'Manhunt', 'King of the Hill', 'Kill race', 'Voting'],
             'Moderation' => ['AFK kicker'],
         ],
-        'ScumAntiCheat' => [
+        'ExclsvAntiCheat' => [
             'Action & players' => ['Action', 'Players'],
             'Checks' => ['Checks'],
             'Limits' => ['Movement limits', 'Aimbot'],

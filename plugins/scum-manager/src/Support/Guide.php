@@ -13,11 +13,11 @@ final class Guide
      */
     public static function topics(): array
     {
-        $console = Brand::mod('PelicanConsole');
-        $tools = Brand::mod('PlayerTools');
-        $antiCheat = Brand::mod('ScumAntiCheat');
-        $messages = Brand::mod('ServerMessages');
-        $probe = Brand::mod('ScumCommandProbe');
+        $console = Brand::mod('ExclsvConsole');
+        $tools = Brand::mod('ExclsvPlayerTools');
+        $antiCheat = Brand::mod('ExclsvAntiCheat');
+        $messages = Brand::mod('ExclsvMessages');
+        $probe = Brand::mod('ExclsvProbe');
 
         return [
             [
@@ -31,7 +31,7 @@ final class Guide
                         'Start the server once and wait until it is online, so SCUM creates its config files. Then stop it.',
                         'Mods page: press "Install UE4SS". This also installs and switches on our mods (' . implode(', ', [$console, $tools, $messages, $antiCheat]) . ').',
                         'Player lists page (server stopped): add your SteamID64 to Admins.',
-                        'Start the server. The Overview page should show UE4SS installed and every mod "Up to date". The console shows "[PelicanConsole] Ready." once the mods have loaded.',
+                        'Start the server. The Overview page should show UE4SS installed and every mod "Up to date". The console shows "[ExclsvConsole] Ready." once the mods have loaded.',
                         'Mod settings page: switch on the features you want. Most are off until you turn them on; changes apply within 30 seconds, no restart needed.',
                         'Optional: paste a Discord channel webhook into "[Exclsv] Discord webhook URL" on the Startup page for start/stop, anti-cheat and report posts.',
                     ]],
@@ -88,6 +88,7 @@ final class Guide
                         'Our mods' => 'Mods → "Install / update our mods", then restart. Your settings are kept. The Overview page says when an update is waiting. Most fixes only need this.',
                         Brand::MANAGER => 'Only when the Overview says a newer version is available: Admin → Plugins → Import from file with the new scum-manager.zip.',
                         'UE4SS' => 'Mods → Update (server stopped). Your UE4SS settings and mod list are kept.',
+                        'Mod folders renamed (1.33.0)' => 'Our mods\' folders are now ExclsvConsole, ExclsvPlayerTools, ExclsvAntiCheat, ExclsvMessages and ExclsvProbe. The first "Install / update our mods" after updating the panel moves the old folders (PelicanConsole, PlayerTools...) across with their settings and player data; stop the server first. Re-import the SCUM egg too.',
                         'After a SCUM update' => 'Update the server as usual, start it and check the Overview. If something stops working, update our mods first. Re-capture the setting defaults after big updates, as new settings appear.',
                     ]],
                 ],
@@ -126,7 +127,7 @@ final class Guide
                 'blocks' => [
                     ['type' => 'text', 'text' => 'Rewards, kits, shop purchases, bounty payouts, votes and paid teleports use SCUM\'s own admin commands. SCUM only runs those for an admin who is in game, so by default the mods run them through an online admin, and rewards wait in players.tsv until one is on.'],
                     ['type' => 'rows', 'items' => [
-                        'Run them without an admin' => 'Create an empty file no-admin-commands.txt in the PelicanConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole/). Money, fame, SpawnItem and Teleport then run as the player they are for. No restart needed.',
+                        'Run them without an admin' => 'Create an empty file no-admin-commands.txt in the ExclsvConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole/). Money, fame, SpawnItem and Teleport then run as the player they are for. No restart needed.',
                         'Turn it off again' => 'Delete that file. A restart also always puts SCUM\'s own admin settings back.',
                         'Check a balance' => 'Console → Balance <player>, or the Players page (from the last save).',
                         'Prices and payouts' => 'Mod settings → ' . $tools . ' → Shop & money and Economy. Everything there is off until switched on, and every purchase checks the player\'s balance first.',
@@ -156,7 +157,7 @@ final class Guide
                 'blocks' => [
                     ['type' => 'rows', 'items' => [
                         '"No admin is online, so SCUM cannot run..."' => 'An admin from AdminUsers.ini must be in game, or turn on the no-admin route (Money, rewards and admin commands above).',
-                        'Mods do not load' => 'Check the Mods page: UE4SS installed, WINEDLLOVERRIDES includes dwmapi=n,b (re-import the egg if not), mods switched on. Then restart and look for "[PelicanConsole] Ready." in the console.',
+                        'Mods do not load' => 'Check the Mods page: UE4SS installed, WINEDLLOVERRIDES includes dwmapi=n,b (re-import the egg if not), mods switched on. Then restart and look for "[ExclsvConsole] Ready." in the console.',
                         'Server crashed' => 'Overview → Last session shows the crash lines from before the restart and SCUM\'s newest crash report. Update our mods, and send those lines when asking for help.',
                         'Server lags' => 'Update our mods (older versions searched for players too often). The mod logs should say "Finding players through the game\'s player list." If it still lags, look at the Global Stats lines in SCUM.log around the time.',
                         'Settings or lists will not save' => 'Stop the server first: SCUM rewrites these files while it runs. If the save is refused because the file changed, reload the page (someone used the in-game menu).',
@@ -177,10 +178,10 @@ final class Guide
                         'SCUM/Saved/Config/WindowsServer/' => 'ServerSettings.ini and the player lists (AdminUsers.ini, BannedUsers.ini...).',
                         'SCUM/Saved/SaveFiles/' => 'The save (SCUM.db) and SCUM\'s logs (Logs/). Backups are in ExclsvBackups/.',
                         'SCUM/Binaries/Win64/ue4ss/' => 'UE4SS, UE4SS.log (and UE4SS.previous.log from before the last restart).',
-                        'ue4ss/Mods/PlayerTools/' => 'config.lua, players.tsv (stats and unpaid rewards, backed up daily), online.tsv, reports.log.',
-                        'ue4ss/Mods/ScumAntiCheat/' => 'config.lua, anticheat.log, offenses.txt.',
-                        'ue4ss/Mods/PelicanConsole/' => 'console.log (command results), items.txt, no-admin-commands.txt when switched on.',
-                        'ue4ss/Mods/ServerMessages/' => 'config.lua, players.log (who joined and left).',
+                        'ue4ss/Mods/ExclsvPlayerTools/' => 'config.lua, players.tsv (stats and unpaid rewards, backed up daily), online.tsv, reports.log.',
+                        'ue4ss/Mods/ExclsvAntiCheat/' => 'config.lua, anticheat.log, offenses.txt.',
+                        'ue4ss/Mods/ExclsvConsole/' => 'console.log (command results), items.txt, no-admin-commands.txt when switched on.',
+                        'ue4ss/Mods/ExclsvMessages/' => 'config.lua, players.log (who joined and left).',
                     ]],
                     ['type' => 'text', 'text' => 'ServerSettings exports and the Discord webhook can contain passwords: keep them private.'],
                 ],

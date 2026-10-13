@@ -7,7 +7,7 @@ namespace MrExclusive\ScumManager\Support;
  *
  * The island is a 5 x 5 grid of 3,048 m sectors starting at -904,800 cm on both axes. Columns
  * 0-4 run along X; rows Z, A, B, C, D run along Y (worked out from the outposts A0, B4, C2 and
- * Z3, the same way PlayerTools does). Positions are in centimetres, as SCUM stores them.
+ * Z3, the same way ExclsvPlayerTools does). Positions are in centimetres, as SCUM stores them.
  *
  * SCUM's own map shows the island turned half way round: row D at the top, Z at the bottom,
  * columns 4 to 0 from left to right. Drawing follows the game's map, so a map picture lines up.

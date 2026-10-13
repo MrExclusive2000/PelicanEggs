@@ -279,17 +279,17 @@ foreach (array_keys(ModSettings::MODS) as $mod) {
     check("settings: $mod unchanged form changes nothing", ModSettings::apply($mod, $config, $state), $config);
 }
 
-$config = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/PlayerTools/config.lua'));
-$state = ModSettings::toState('PlayerTools', $config);
-check('settings: lines become text', $state['PlayerTools__chatCommands__rules'], "No cheating or exploiting.\nRespect other players.");
-check('settings: vote options become rows', $state['PlayerTools__voting__options'][0], ['name' => 'day', 'label' => 'make it daytime', 'command' => 'SetTime 10']);
-$state['PlayerTools__afk__enabled'] = true;
-$state['PlayerTools__afk__minutes'] = '25';
-$state['PlayerTools__chatCommands__rules'] = "  Rule one \r\n\r\nRule two\n";
-$state['PlayerTools__voting__options'] = [['name' => 'rain', 'label' => 'make it rain', 'command' => 'SetWeather 1'], ['name' => '', 'label' => '', 'command' => '']];
-$state['PlayerTools__newPlayers__starterKitCommands'] = 'SpawnItem Water_05l 1 Location "{location}"';
-$state['PlayerTools__unknown'] = 'ignored';
-$updated = ModSettings::apply('PlayerTools', $config + ['custom' => 'kept'], $state);
+$config = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/ExclsvPlayerTools/config.lua'));
+$state = ModSettings::toState('ExclsvPlayerTools', $config);
+check('settings: lines become text', $state['ExclsvPlayerTools__chatCommands__rules'], "No cheating or exploiting.\nRespect other players.");
+check('settings: vote options become rows', $state['ExclsvPlayerTools__voting__options'][0], ['name' => 'day', 'label' => 'make it daytime', 'command' => 'SetTime 10']);
+$state['ExclsvPlayerTools__afk__enabled'] = true;
+$state['ExclsvPlayerTools__afk__minutes'] = '25';
+$state['ExclsvPlayerTools__chatCommands__rules'] = "  Rule one \r\n\r\nRule two\n";
+$state['ExclsvPlayerTools__voting__options'] = [['name' => 'rain', 'label' => 'make it rain', 'command' => 'SetWeather 1'], ['name' => '', 'label' => '', 'command' => '']];
+$state['ExclsvPlayerTools__newPlayers__starterKitCommands'] = 'SpawnItem Water_05l 1 Location "{location}"';
+$state['ExclsvPlayerTools__unknown'] = 'ignored';
+$updated = ModSettings::apply('ExclsvPlayerTools', $config + ['custom' => 'kept'], $state);
 check('settings: toggle', $updated['afk']['enabled'], true);
 check('settings: number', $updated['afk']['minutes'], 25);
 check('settings: lines trimmed, blanks dropped', $updated['chatCommands']['rules'], ['Rule one', 'Rule two']);
@@ -297,20 +297,20 @@ check('settings: empty rows dropped', $updated['voting']['options'], [['name' =>
 check('settings: quotes survive', LuaTable::parse(LuaTable::render($updated))['newPlayers']['starterKitCommands'], ['SpawnItem Water_05l 1 Location "{location}"']);
 check('settings: unknown config keys kept', $updated['custom'], 'kept');
 
-$config = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/ScumAntiCheat/config.lua'));
-$state = ModSettings::toState('ScumAntiCheat', $config);
-check('settings: tuples become rows', $state['ScumAntiCheat__weaponMaxDistance'][0], ['c0' => 'bow', 'c1' => '150']);
-$state['ScumAntiCheat__weaponMaxDistance'] = [['c0' => 'mosin', 'c1' => '600'], ['c0' => '1911', 'c1' => '150']];
-$state['ScumAntiCheat__checks__aimSnap'] = false;
-$updated = ModSettings::apply('ScumAntiCheat', $config, $state);
+$config = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/ExclsvAntiCheat/config.lua'));
+$state = ModSettings::toState('ExclsvAntiCheat', $config);
+check('settings: tuples become rows', $state['ExclsvAntiCheat__weaponMaxDistance'][0], ['c0' => 'bow', 'c1' => '150']);
+$state['ExclsvAntiCheat__weaponMaxDistance'] = [['c0' => 'mosin', 'c1' => '600'], ['c0' => '1911', 'c1' => '150']];
+$state['ExclsvAntiCheat__checks__aimSnap'] = false;
+$updated = ModSettings::apply('ExclsvAntiCheat', $config, $state);
 check('settings: rows become tuples, numbers only where numeric', $updated['weaponMaxDistance'], [['mosin', 600], ['1911', 150]]);
 check('settings: nested toggle', [$updated['checks']['aimSnap'], $updated['checks']['speed']], [false, true]);
 
-$state = ModSettings::toState('ServerMessages', LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/ServerMessages/config.lua')));
-check('settings: number list as text', $state['ServerMessages__restartWarnings'], '30, 15, 5, 1');
-$state['ServerMessages__restartWarnings'] = '10, 2';
-$state['ServerMessages__restartTimes'] = "06:00\n18:00";
-$updated = ModSettings::apply('ServerMessages', [], $state);
+$state = ModSettings::toState('ExclsvMessages', LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/ExclsvMessages/config.lua')));
+check('settings: number list as text', $state['ExclsvMessages__restartWarnings'], '30, 15, 5, 1');
+$state['ExclsvMessages__restartWarnings'] = '10, 2';
+$state['ExclsvMessages__restartTimes'] = "06:00\n18:00";
+$updated = ModSettings::apply('ExclsvMessages', [], $state);
 check('settings: number list', $updated['restartWarnings'], [10, 2]);
 check('settings: missing config gets every field', $updated['restartTimes'], ['06:00', '18:00']);
 
@@ -351,26 +351,26 @@ $catalog = AdminCommands::itemCatalog("BP_Water_05l_C\nBP_Water_1l_C\nBP_Apple_C
 check('items: search every word', MrExclusive\ScumManager\Support\ItemSelect::search($catalog, 'water 05'), ['BP_Water_05l_C' => 'Water 05l (BP_Water_05l_C)']);
 check('items: search is case-insensitive', array_keys(MrExclusive\ScumManager\Support\ItemSelect::search($catalog, 'WATER')), ['BP_Canned_Water_C', 'BP_Water_05l_C', 'BP_Water_1l_C']);
 
-$state = ModSettings::toState('PlayerTools', ['teleports' => ['locations' => [['name' => 'trader', 'x' => 1, 'y' => -2, 'z' => 3, 'price' => 50]]]]);
-check('settings: teleport rows', $state['PlayerTools__teleports__locations'], [['name' => 'trader', 'x' => '1', 'y' => '-2', 'z' => '3', 'price' => '50']]);
-check('settings: teleport numbers saved as numbers', ModSettings::apply('PlayerTools', [], $state)['teleports']['locations'], [['name' => 'trader', 'x' => 1, 'y' => -2, 'z' => 3, 'price' => 50]]);
+$state = ModSettings::toState('ExclsvPlayerTools', ['teleports' => ['locations' => [['name' => 'trader', 'x' => 1, 'y' => -2, 'z' => 3, 'price' => 50]]]]);
+check('settings: teleport rows', $state['ExclsvPlayerTools__teleports__locations'], [['name' => 'trader', 'x' => '1', 'y' => '-2', 'z' => '3', 'price' => '50']]);
+check('settings: teleport numbers saved as numbers', ModSettings::apply('ExclsvPlayerTools', [], $state)['teleports']['locations'], [['name' => 'trader', 'x' => 1, 'y' => -2, 'z' => 3, 'price' => 50]]);
 
 // The page's defaults for a missing setting must match what the mod does without it.
-$shipped = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/PlayerTools/config.lua'));
-$fromDefaults = ModSettings::apply('PlayerTools', [], ModSettings::toState('PlayerTools', []));
+$shipped = LuaTable::parse(file_get_contents(__DIR__ . '/../../../mods/ExclsvPlayerTools/config.lua'));
+$fromDefaults = ModSettings::apply('ExclsvPlayerTools', [], ModSettings::toState('ExclsvPlayerTools', []));
 foreach (['welcomeBack', 'playtimeRewards', 'killStreaks', 'bounties', 'teleports', 'info', 'reports', 'featureTips', 'deathRecap', 'hotspots', 'manhunt', 'koth', 'itemRewards'] as $section) {
     // Same keys and values; the order of keys does not matter to Lua.
-    check("settings: page defaults match shipped PlayerTools $section", $fromDefaults[$section] == $shipped[$section], true);
+    check("settings: page defaults match shipped ExclsvPlayerTools $section", $fromDefaults[$section] == $shipped[$section], true);
 }
 
-$state = ModSettings::toState('PlayerTools', []);
-$state['PlayerTools__newPlayers__starterKitItems'] = [['item' => ' Water_05l ', 'amount' => '2'], ['item' => '', 'amount' => '']];
-check('settings: starter kit items', ModSettings::apply('PlayerTools', [], $state)['newPlayers']['starterKitItems'], [['item' => 'Water_05l', 'amount' => 2]]);
+$state = ModSettings::toState('ExclsvPlayerTools', []);
+$state['ExclsvPlayerTools__newPlayers__starterKitItems'] = [['item' => ' Water_05l ', 'amount' => '2'], ['item' => '', 'amount' => '']];
+check('settings: starter kit items', ModSettings::apply('ExclsvPlayerTools', [], $state)['newPlayers']['starterKitItems'], [['item' => 'Water_05l', 'amount' => 2]]);
 
 // ---------------------------------------------------------------- TeleportDestinations
-$output = "14:00:00 [PelicanConsole] 4 outpost(s) found, named by sector:\n14:00:00 [PelicanConsole] Outpost a0 at 250 900000 1020\n14:00:00 [PelicanConsole] Outpost b4 at -400250 600000 1020\n";
+$output = "14:00:00 [ExclsvConsole] 4 outpost(s) found, named by sector:\n14:00:00 [ExclsvConsole] Outpost a0 at 250 900000 1020\n14:00:00 [ExclsvConsole] Outpost b4 at -400250 600000 1020\n";
 check('teleports: outposts parsed', TeleportDestinations::parseOutposts($output), [['name' => 'a0', 'x' => 250, 'y' => 900000, 'z' => 1020], ['name' => 'b4', 'x' => -400250, 'y' => 600000, 'z' => 1020]]);
-check('teleports: where is', TeleportDestinations::parseWhereIs("x [PelicanConsole] Mr Exclusive is at -1 2 3\n", 'mr exclusive'), ['x' => -1, 'y' => 2, 'z' => 3]);
+check('teleports: where is', TeleportDestinations::parseWhereIs("x [ExclsvConsole] Mr Exclusive is at -1 2 3\n", 'mr exclusive'), ['x' => -1, 'y' => 2, 'z' => 3]);
 check('teleports: where is, unknown', TeleportDestinations::parseWhereIs('No online player matches', 'Bob'), null);
 $config = ['teleports' => ['enabled' => true, 'locations' => [['name' => 'b4', 'x' => 0, 'y' => 0, 'z' => 0, 'price' => 1], ['name' => 'home', 'x' => 5, 'y' => 5, 'z' => 5, 'price' => 0]]]];
 $updated = TeleportDestinations::add($config, TeleportDestinations::parseOutposts($output), 500);
@@ -386,7 +386,7 @@ check('teleports: written config loads back', LuaTable::parse(LuaTable::render($
 
 // ---------------------------------------------------------------- bundled mods
 $bundled = MrExclusive\ScumManager\Services\ScumServerService::bundledMods();
-check('bundled: our four mods ship with the plugin', array_keys($bundled), ['PelicanConsole', 'PlayerTools', 'ScumAntiCheat', 'ServerMessages']);
+check('bundled: our four mods ship with the plugin', array_keys($bundled), ['ExclsvAntiCheat', 'ExclsvConsole', 'ExclsvMessages', 'ExclsvPlayerTools']);
 foreach ($bundled as $name => $zip) {
     $archive = ModArchive::open($zip, "$name.zip", 50 * 1024 * 1024, 100);
     $mods = $archive->mods();
@@ -399,7 +399,7 @@ foreach ($bundled as $name => $zip) {
 // ---------------------------------------------------------------- settings export / import
 use MrExclusive\ScumManager\Support\SettingsBundle;
 $shipped = [];
-foreach (['PlayerTools', 'ScumAntiCheat', 'ServerMessages'] as $mod) {
+foreach (['ExclsvPlayerTools', 'ExclsvAntiCheat', 'ExclsvMessages'] as $mod) {
     $shipped[$mod] = LuaTable::parse(file_get_contents(__DIR__ . "/../../../mods/$mod/config.lua"));
 }
 $ini = "[General]\nScumServer.ServerName=Test\n[World]\nScumServer.MaxAllowedBirds=10\n";
@@ -408,14 +408,14 @@ $decoded = json_decode($exported, true);
 check('bundle: format marked', $decoded['format'], 'exclsv-settings');
 check('bundle: mods under their display names', array_keys($decoded['mods']), ['ExclsvPlayerTools', 'ExclsvAntiCheat', 'ExclsvMessages']);
 $imported = SettingsBundle::parse($exported);
-check('bundle: mods come back under their folder names', array_keys($imported['mods']), ['PlayerTools', 'ScumAntiCheat', 'ServerMessages']);
+check('bundle: mods come back under their folder names', array_keys($imported['mods']), ['ExclsvPlayerTools', 'ExclsvAntiCheat', 'ExclsvMessages']);
 foreach ($shipped as $mod => $config) {
     check("bundle: $mod round trip unchanged", LuaTable::parse(LuaTable::render($imported['mods'][$mod])), $config);
 }
 check('bundle: server settings kept as text', $imported['serverSettings'], $ini);
 // Hand-edited: one mod by folder name, no server settings.
-$edited = SettingsBundle::parse('{"format":"exclsv-settings","version":1,"mods":{"PlayerTools":{"teleports":{"toPlayerPrice":250}}}}');
-check('bundle: folder names accepted, missing parts left alone', [array_keys($edited['mods']), $edited['serverSettings']], [['PlayerTools'], null]);
+$edited = SettingsBundle::parse('{"format":"exclsv-settings","version":1,"mods":{"ExclsvPlayerTools":{"teleports":{"toPlayerPrice":250}}}}');
+check('bundle: folder names accepted, missing parts left alone', [array_keys($edited['mods']), $edited['serverSettings']], [['ExclsvPlayerTools'], null]);
 throws('bundle: other JSON refused', fn () => SettingsBundle::parse('{"hello":1}'), 'not an Exclsv settings export');
 throws('bundle: broken JSON refused', fn () => SettingsBundle::parse('{"format":'), 'not valid JSON');
 throws('bundle: unknown mod refused', fn () => SettingsBundle::parse('{"format":"exclsv-settings","version":1,"mods":{"SomeoneElsesMod":{}}}'), 'Unknown mod');
@@ -432,29 +432,29 @@ foreach (array_keys(ModSettings::MODS) as $mod) {
     sort($titles);
     check("layout: $mod sub-tabs hold every section once", $placed, $titles);
 }
-check('layout: no PlayerTools section left in "Other"', array_key_exists('Other', ModSettings::groups('PlayerTools')), false);
-check('layout: no anti-cheat section left in "Other"', array_key_exists('Other', ModSettings::groups('ScumAntiCheat')), false);
+check('layout: no ExclsvPlayerTools section left in "Other"', array_key_exists('Other', ModSettings::groups('ExclsvPlayerTools')), false);
+check('layout: no anti-cheat section left in "Other"', array_key_exists('Other', ModSettings::groups('ExclsvAntiCheat')), false);
 check('layout: section switch found', ModSettings::sectionSwitch(['fields' => ['a.price' => ['number', 'x', 1], 'a.enabled' => ['toggle', 'x', true]]]), 'a.enabled');
 check('layout: no switch, no collapse', ModSettings::sectionSwitch(['fields' => ['a.price' => ['number', 'x', 1]]]), null);
 
 // ---------------------------------------------------------------- mod updates from GitHub
 use MrExclusive\ScumManager\Support\ModManifest;
 $published = ModManifest::parse(file_get_contents(__DIR__ . '/../../../mods/dist/manifest.json'));
-check('manifest: every shipped mod published', array_keys($published['mods']), ['PelicanConsole', 'PlayerTools', 'ScumAntiCheat', 'ScumCommandProbe', 'ServerMessages']);
+check('manifest: every shipped mod published', array_keys($published['mods']), ['ExclsvAntiCheat', 'ExclsvConsole', 'ExclsvMessages', 'ExclsvPlayerTools', 'ExclsvProbe']);
 foreach ($published['mods'] as $name => $entry) {
     $zip = file_get_contents(__DIR__ . "/../../../mods/dist/$name.zip");
     check("manifest: $name zip matches its sha256", (function () use ($zip, $entry, $name) { ModManifest::verify($zip, $entry, $name); return true; })(), true);
 }
 check('manifest: lists the manager version', $published['manager'], json_decode(file_get_contents(__DIR__ . '/../plugin.json'), true)['version']);
-$entry = $published['mods']['PlayerTools'];
-throws('manifest: truncated download refused', fn () => ModManifest::verify(substr(file_get_contents(__DIR__ . '/../../../mods/dist/PlayerTools.zip'), 0, -1), $entry, 'PlayerTools'), 'does not match');
-throws('manifest: changed download refused', fn () => ModManifest::verify(str_repeat('x', $entry['bytes']), $entry, 'PlayerTools'), 'does not match');
+$entry = $published['mods']['ExclsvPlayerTools'];
+throws('manifest: truncated download refused', fn () => ModManifest::verify(substr(file_get_contents(__DIR__ . '/../../../mods/dist/ExclsvPlayerTools.zip'), 0, -1), $entry, 'ExclsvPlayerTools'), 'does not match');
+throws('manifest: changed download refused', fn () => ModManifest::verify(str_repeat('x', $entry['bytes']), $entry, 'ExclsvPlayerTools'), 'does not match');
 $foreign = ModManifest::parse('{"format":"exclsv-mods","mods":{"SomeoneElsesMod":{"file":"SomeoneElsesMod.zip","build":"abcdef","sha256":"' . str_repeat('a', 64) . '","bytes":1}}}');
 check('manifest: mods that are not ours are ignored', $foreign['mods'], []);
-throws('manifest: path tricks refused', fn () => ModManifest::parse('{"format":"exclsv-mods","mods":{"PlayerTools":{"file":"../../evil.zip","build":"abcdef","sha256":"' . str_repeat('a', 64) . '","bytes":1}}}'), 'malformed');
+throws('manifest: path tricks refused', fn () => ModManifest::parse('{"format":"exclsv-mods","mods":{"ExclsvPlayerTools":{"file":"../../evil.zip","build":"abcdef","sha256":"' . str_repeat('a', 64) . '","bytes":1}}}'), 'malformed');
 throws('manifest: other JSON refused', fn () => ModManifest::parse('{"mods":{}}'), 'not an Exclsv mod manifest');
-check('manifest: url built next to the manifest', ModManifest::url('https://raw.githubusercontent.com/MrExclusive2000/PelicanEggs/HEAD/mods/dist/', 'PlayerTools.zip'), 'https://raw.githubusercontent.com/MrExclusive2000/PelicanEggs/HEAD/mods/dist/PlayerTools.zip');
-throws('manifest: plain http refused', fn () => ModManifest::url('http://example.com/mods', 'PlayerTools.zip'), 'https://');
+check('manifest: url built next to the manifest', ModManifest::url('https://raw.githubusercontent.com/MrExclusive2000/PelicanEggs/HEAD/mods/dist/', 'ExclsvPlayerTools.zip'), 'https://raw.githubusercontent.com/MrExclusive2000/PelicanEggs/HEAD/mods/dist/ExclsvPlayerTools.zip');
+throws('manifest: plain http refused', fn () => ModManifest::url('http://example.com/mods', 'ExclsvPlayerTools.zip'), 'https://');
 check('manifest: newer manager detected', [ModManifest::isNewer('1.14.0', '1.13.9'), ModManifest::isNewer('1.13.0', '1.13.0'), ModManifest::isNewer(null, '1.0')], [true, false, false]);
 
 // ---------------------------------------------------------------- overview page
@@ -699,12 +699,12 @@ check('guide: every topic renders something', array_filter($topics, fn ($t) => t
 check('guide: contents links every topic', substr_count(Guide::contents(), 'href="#guide-'), count($topics));
 check('guide: text is escaped', Guide::html(['blocks' => [['type' => 'text', 'text' => '<b>x</b> & "y"']]]), '<p style="margin: .5rem 0; line-height: 1.5;">&lt;b&gt;x&lt;/b&gt; &amp; &quot;y&quot;</p>');
 check('guide: rows render as terms', substr_count(Guide::html(['blocks' => [['type' => 'rows', 'items' => ['a' => 'b', 'c' => 'd']]]]), '<dt'), 2);
-// Every chat command the guide lists must be one PlayerTools answers to.
-$playerTools = file_get_contents(__DIR__ . '/../../../mods/PlayerTools/Scripts/main.lua');
+// Every chat command the guide lists must be one ExclsvPlayerTools answers to.
+$playerTools = file_get_contents(__DIR__ . '/../../../mods/ExclsvPlayerTools/Scripts/main.lua');
 $chat = current(array_filter($topics, fn ($t) => $t['id'] === 'chat'));
 preg_match_all('/!([a-z]+)/', implode(' ', array_keys($chat['blocks'][0]['items'])), $commands);
 check('guide: lists the chat commands', count($commands[1]) >= 20, true);
-check('guide: every chat command exists in PlayerTools', array_values(array_filter(array_unique($commands[1]), fn ($c) => !str_contains($playerTools, '"' . $c . '"'))), []);
+check('guide: every chat command exists in ExclsvPlayerTools', array_values(array_filter(array_unique($commands[1]), fn ($c) => !str_contains($playerTools, '"' . $c . '"'))), []);
 // Page names in the guide match the sidebar labels.
 $labels = [];
 foreach (glob(__DIR__ . '/../src/Filament/Server/Pages/*.php') as $page) {
@@ -717,6 +717,28 @@ $listed = array_keys($pages['blocks'][0]['items']);
 sort($labels);
 sort($listed);
 check('guide: describes every page by its sidebar name', $listed, $labels);
+
+
+// ---------------------------------------------------------------- FolderRename (pre-1.33.0 folders)
+use MrExclusive\ScumManager\Support\FolderRename;
+use MrExclusive\ScumManager\Support\Brand;
+check('rename: old folders move, others are left', FolderRename::plan(['PelicanConsole', 'PlayerTools', 'Keybinds', 'SomeoneElsesMod']),
+    ['rename' => ['PelicanConsole' => 'ExclsvConsole', 'PlayerTools' => 'ExclsvPlayerTools'], 'conflicts' => []]);
+check('rename: an existing new folder is never overwritten', FolderRename::plan(['ScumAntiCheat', 'ExclsvAntiCheat', 'ServerMessages']),
+    ['rename' => ['ServerMessages' => 'ExclsvMessages'], 'conflicts' => ['ScumAntiCheat' => 'ExclsvAntiCheat']]);
+check('rename: nothing to do on a current server', FolderRename::plan(['ExclsvConsole', 'ExclsvPlayerTools']), ['rename' => [], 'conflicts' => []]);
+check('rename: every legacy folder maps to one of ours', array_diff(array_values(Brand::LEGACY_FOLDERS), array_keys(Brand::MODS)), []);
+check('rename: display names still known by the old folder', Brand::mod('PlayerTools'), 'ExclsvPlayerTools');
+$oldStartup = "wine x & SCUM_PID=\$!; CMD_DIR=./SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole; RELAY_PID=; tail \$CMD_DIR/console.log";
+check('rename: the old startup command is pointed at ExclsvConsole', FolderRename::startup($oldStartup),
+    "wine x & SCUM_PID=\$!; CMD_DIR=./SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole; RELAY_PID=; tail \$CMD_DIR/console.log");
+$egg = file_get_contents(__DIR__ . '/../../../scum/egg-scum.yaml');
+check('rename: the current egg command is left alone', preg_match("/^  Default: '(.*)'$/m", $egg, $m) === 1 ? FolderRename::startup(str_replace("''", "'", $m[1])) : 'no command', null);
+check('rename: the egg uses ExclsvConsole', str_contains($egg, FolderRename::NEW_CONSOLE_DIR), true);
+check('rename: a custom command without the old path is left alone', FolderRename::startup('wine SCUMServer.exe'), null);
+check('rename: old export keys import under the new folders', array_keys(SettingsBundle::parse(json_encode(['format' => 'exclsv-settings', 'version' => 1, 'mods' => ['PlayerTools' => ['enabled' => true], 'ScumAntiCheat' => []]]))['mods']),
+    ['ExclsvPlayerTools', 'ExclsvAntiCheat']);
+check('rename: the new key wins when an export has both', FolderRename::renameKeys(['PlayerTools' => ['a' => 1], 'ExclsvPlayerTools' => ['a' => 2]]), ['ExclsvPlayerTools' => ['a' => 2]]);
 
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);
