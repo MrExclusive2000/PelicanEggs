@@ -44,6 +44,8 @@ Economy (all off until switched on; they need an admin online or the no-admin ro
 purchase checks the player's balance first; winnings wait in players.tsv until paid):
   !shop, !buy    Items you list with prices. The money is taken, then the item goes into the
                  inventory; if it cannot be handed over, the money is refunded.
+  !sell          Hold an item and type !sell: it is dropped (SCUM's own drop), removed, then
+                 you are paid. !sell prices lists what the server buys. Never list containers.
   !pay           !pay <name> <amount> to another online player, with an optional fee.
   !lottery       Tickets for a pot drawn every hour; the house keeps a share. Too few tickets:
                  everyone is refunded. Tickets survive restarts (lottery.tsv).

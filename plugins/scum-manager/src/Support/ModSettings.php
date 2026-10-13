@@ -213,6 +213,13 @@ final class ModSettings
                         'shop.maxPerPurchase' => ['int', 'Most of one item per purchase', 5],
                     ],
                 ],
+                'Sell to the server' => [
+                    'description' => 'Players hold an item and type !sell; !sell prices lists what the server buys. SCUM drops the item from their hands, it is removed, and only then is the player paid. Do not list containers such as backpacks or boxes: whatever is inside them goes with them. Needs an admin online or the no-admin route.',
+                    'fields' => [
+                        'sell.enabled' => ['toggle', '!sell on', false],
+                        'sell.items' => ['rows', 'Items the server buys', [], 'numeric' => [2], 'itemColumn' => 'item', 'columns' => ['name' => 'Name', 'item' => 'Item', 'price' => 'Price paid']],
+                    ],
+                ],
                 'Pay other players' => [
                     'description' => '!pay <name> <amount> moves money between two online players. The payer\'s balance is checked first; the fee is taken on top and removed from the economy.',
                     'fields' => [
@@ -391,7 +398,7 @@ final class ModSettings
         'PlayerTools' => [
             'Chat & info' => ['Chat commands', 'Welcome back', 'Info and reports', 'Feature tips'],
             'Economy' => ['New players', 'Playtime rewards', 'Bounties', 'Item rewards (experimental)', 'Without an admin online (experimental)'],
-            'Shop & money' => ['Shop', 'Pay other players', 'Lottery', 'Daily tasks', 'Squad bonus'],
+            'Shop & money' => ['Shop', 'Sell to the server', 'Pay other players', 'Lottery', 'Daily tasks', 'Squad bonus'],
             'Teleports' => ['Teleports'],
             'Events & PvP' => ['Kill feed', 'Stats', 'Kill streaks', 'Death recap and hotspots', 'Manhunt', 'King of the Hill', 'Kill race', 'Voting'],
             'Moderation' => ['AFK kicker'],

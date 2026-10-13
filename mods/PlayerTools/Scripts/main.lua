@@ -106,6 +106,7 @@ local DEFAULTS = {
     -- Economy. Money moves with ChangeCurrencyBalance, so these need an admin online or the
     -- no-admin route (PelicanConsole/no-admin-commands.txt). Spending always checks the balance.
     shop = { enabled = false, maxPerPurchase = 5, items = {} },   -- items: { name, item, amount, price }
+    sell = { enabled = false, items = {} },                       -- items: { name, item, price }
     pay = { enabled = false, minAmount = 10, maxAmount = 100000, feePercent = 0 },
     lottery = { enabled = false, ticketPrice = 100, maxTicketsPerPlayer = 10, drawEveryMinutes = 60, housePercent = 10, minTickets = 2 },
     dailyTasks = {
@@ -2312,8 +2313,63 @@ local function economyTick(time, elapsed, online)
     end
 end
 
+-- !sell: sells the item in the player's hands. SCUM's own DropItemFromHands puts it down (so
+-- the game handles the inventory side), the dropped item is removed like any item left on the
+-- ground, and only then is the player paid. Anything unexpected stops it before money moves.
+local function plainItemName(name)
+    name = string.lower(tostring(name or ""))
+    name = string.gsub(name, "^bp_", "")
+    name = string.gsub(name, "_c$", "")
+    return name
+end
+
+local function sellEntry(item)
+    local class = safe(function() return item:GetClass():GetFName():ToString() end)
+    if class == nil then return nil end
+    local wanted = plainItemName(class)
+    for _, entry in ipairs(config.sell.items or {}) do
+        if plainItemName(entry.item) == wanted then return entry end
+    end
+    return nil
+end
+
+local function sellCommand(session, rest)
+    local prefix = config.chatCommands.prefix
+    if rest == "prices" or rest == "list" then
+        local lines = { "The server buys (hold it and type " .. prefix .. "sell):" }
+        for _, entry in ipairs(config.sell.items or {}) do
+            lines[#lines + 1] = string.format("%s: %d", tostring(entry.name or entry.item), tonumber(entry.price) or 0)
+        end
+        if #lines == 1 then lines[2] = "Nothing yet." end
+        return tell(session, lines)
+    end
+    if session.steamId == nil then return tell(session, "Your SteamID is not known yet; type any ! command and try again.") end
+    local pawn = characterOf(session.controller)
+    if pawn == nil then return tell(session, "You need to be alive to sell.") end
+    local item = safe(function() return pawn:GetItemInHands() end)
+    if not isValid(item) then return tell(session, "Hold the item you want to sell in your hands, then type " .. prefix .. "sell.") end
+    local entry = sellEntry(item)
+    if entry == nil then return tell(session, "The server does not buy that. " .. prefix .. "sell prices shows what it buys.") end
+    local price = tonumber(entry.price) or 0
+
+    local dropped = pcall(function() pawn:DropItemFromHands() end)
+    local stillHeld = safe(function() return pawn:GetItemInHands() end)
+    if not dropped or (isValid(stillHeld) and address(stillHeld) == address(item)) then
+        return tell(session, "Could not take the item from your hands; nothing was sold.")
+    end
+    local removed = pcall(function() item:K2_DestroyActor() end)
+    if not removed then
+        output("Selling: " .. session.name .. "'s " .. tostring(entry.item) .. " was dropped but could not be removed; not paid.")
+        return tell(session, "The sale failed; the item is on the ground at your feet.")
+    end
+    output(string.format("%s sold %s for %d.", session.name, tostring(entry.name or entry.item), price))
+    credit(session.steamId, session.name, price, "sold " .. tostring(entry.name or entry.item))
+    payCredit(session)
+    tell(session, string.format("Sold %s for %d.", tostring(entry.name or entry.item), price))
+end
+
     return {
-        shopCommand = shopCommand, payCommand = payCommand, lotteryCommand = lotteryCommand,
+        shopCommand = shopCommand, payCommand = payCommand, lotteryCommand = lotteryCommand, sellCommand = sellCommand,
         tasksCommand = tasksCommand, economyTick = economyTick, economyKill = economyKill, race = race,
     }
 end)()
@@ -2357,6 +2413,7 @@ local function handleChat(chat, time)
         more[#more + 1] = prefix .. "seen <name>"
         if config.manhunt.enabled then more[#more + 1] = prefix .. "manhunt" end
         if config.shop.enabled then more[#more + 1] = prefix .. "shop, " .. prefix .. "buy" end
+        if config.sell.enabled then more[#more + 1] = prefix .. "sell" end
         if config.pay.enabled then more[#more + 1] = prefix .. "pay <name> <amount>" end
         if config.lottery.enabled then more[#more + 1] = prefix .. "lottery" end
         if config.dailyTasks.enabled then more[#more + 1] = prefix .. "tasks" end
@@ -2422,6 +2479,8 @@ local function handleChat(chat, time)
         manhuntCommand(session, rest)
     elseif (word == "shop" or word == "buy") and config.shop.enabled then
         economy.shopCommand(session, word, rest)
+    elseif word == "sell" and config.sell.enabled then
+        economy.sellCommand(session, string.lower(rest or ""))
     elseif word == "pay" and config.pay.enabled then
         economy.payCommand(session, rest)
     elseif word == "lottery" and config.lottery.enabled then
@@ -2805,7 +2864,7 @@ if config.bounties.enabled then features[#features + 1] = "bounties" end
 if config.teleports.enabled then features[#features + 1] = "teleports" end
 if config.manhunt.enabled then features[#features + 1] = "manhunt" end
 if config.koth.enabled then features[#features + 1] = "King of the Hill" end
-for _, name in ipairs({ "shop", "pay", "lottery", "dailyTasks", "killRace", "squadBonus" }) do
+for _, name in ipairs({ "shop", "sell", "pay", "lottery", "dailyTasks", "killRace", "squadBonus" }) do
     if config[name].enabled then features[#features + 1] = name end
 end
 output("Active: " .. (#features > 0 and table.concat(features, ", ") or "nothing enabled") .. ".")

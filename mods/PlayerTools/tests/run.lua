@@ -1060,6 +1060,41 @@ check("kill task done", has(table.concat((function() local t = {} for _, m in ip
 step(61)
 check("kill race won and paid", anyHud("Kill race over: Kim wins 2000 with 2 kill(s)!") and ran("ChangeCurrencyBalance Normal 2000 76561198000000071"))
 
+-- !sell: the item in hands is dropped by SCUM, removed, and only then paid for.
+adminCommands, private = {}, {}
+write(dir .. "/config.lua", [[return {
+    newPlayers = { starterKit = false }, playtimeRewards = { enabled = false },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 }, welcomeBack = { enabled = false },
+    sell = { enabled = true, items = { { name = "AK-47", item = "Weapon_AK47", price = 2000 } } },
+}]])
+step(31)
+local function heldItem(className)
+    local item = object()
+    function item:GetClass() return { GetFName = function() return { ToString = function() return className end } end } end
+    function item:K2_DestroyActor() self.destroyed = true end
+    return item
+end
+local rifle = heldItem("BP_Weapon_AK47_C")
+kim.pawn.inHands = rifle
+function kim.pawn:GetItemInHands() return self.inHands end
+function kim.pawn:DropItemFromHands() self.inHands = nil end
+chat("76561198000000071", "Kim", "!sell")
+step()
+check("sell: dropped, removed, then paid", rifle.destroyed == true and ran("ChangeCurrencyBalance Normal 2000 76561198000000071")
+    and has(lastPrivate("Kim"), "Sold AK-47 for 2000."))
+local bread = heldItem("BP_Bread_C")
+kim.pawn.inHands = bread
+chat("76561198000000071", "Kim", "!sell")
+step()
+check("sell: items not on the list are refused", not bread.destroyed and kim.pawn.inHands == bread and has(lastPrivate("Kim"), "does not buy that"))
+local stuck = heldItem("BP_Weapon_AK47_C")
+kim.pawn.inHands = stuck
+function kim.pawn:DropItemFromHands() end   -- the game would not let go of it
+adminCommands = {}
+chat("76561198000000071", "Kim", "!sell")
+step()
+check("sell: nothing removed or paid when the drop fails", not stuck.destroyed and #adminCommands == 0 and has(lastPrivate("Kim"), "nothing was sold"))
+
 -- Squad bonus: Kim and Lee in one squad, both online.
 adminCommands = {}
 write(dir .. "/config.lua", [[return {

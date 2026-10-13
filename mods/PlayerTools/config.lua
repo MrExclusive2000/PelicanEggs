@@ -237,6 +237,15 @@ return {
         items = {},
     },
 
+    -- !sell sells the item in the player's hands; !sell prices lists what the server buys.
+    -- The item is dropped (SCUM's own drop), removed, then the player is paid. Do not list
+    -- containers such as backpacks: whatever is inside them goes with them.
+    -- Items: { name = "AK-47", item = "Weapon_AK47", price = 2000 }
+    sell = {
+        enabled = false,
+        items = {},
+    },
+
     -- !pay <name> <amount> between online players; the fee is taken on top.
     pay = {
         enabled = false,
