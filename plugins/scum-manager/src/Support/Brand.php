@@ -16,6 +16,8 @@ final class Brand
 
     public const PAGE_OVERVIEW = 'ExclsvSCUM Overview';
 
+    public const PAGE_WORLD = 'ExclsvSCUM World';
+
     public const PAGE_CONSOLE = 'ExclsvSCUM Console';
 
     public const PAGE_SETTINGS = 'ExclsvSCUM Settings';

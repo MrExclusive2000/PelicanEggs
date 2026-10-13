@@ -25,6 +25,7 @@ use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Filament\Server\Concerns\RunsPlayerCommands;
 use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\AdminCommands;
+use MrExclusive\ScumManager\Support\Accuracy;
 use MrExclusive\ScumManager\Support\Brand;
 use MrExclusive\ScumManager\Support\ItemSelect;
 use MrExclusive\ScumManager\Support\OnlinePlayers;
@@ -43,7 +44,7 @@ class ScumOverviewPage extends Page
 
     protected static ?string $slug = 'scum-overview';
 
-    protected static ?int $navigationSort = 28;
+    protected static ?int $navigationSort = 27;
 
     protected static ?string $navigationLabel = 'Overview';
 
@@ -260,6 +261,12 @@ class ScumOverviewPage extends Page
                     ->description('Sent with !report, newest first.')
                     ->schema([$this->logEntry('reports', fn () => $this->reports, 'No reports.')]),
             ]),
+            Section::make('Accuracy watch')
+                ->icon('tabler-target')
+                ->description('Players who hit ' . Accuracy::WATCH_PERCENT . '% or more of at least ' . Accuracy::MIN_SHOTS . ' shots in SCUM\'s lifetime stats (from the save). Most players stay well under that; spectate anyone listed.')
+                ->collapsible()
+                ->collapsed(fn () => $this->accuracyWatch() === [])
+                ->schema([$this->logEntry('accuracy', fn () => implode("\n", $this->accuracyWatch()), 'Nobody stands out.')]),
             Section::make('Last session')
                 ->icon(fn () => $this->crashLines !== [] ? 'tabler-alert-triangle' : 'tabler-history')
                 ->description(fn () => $this->crashSummary())
@@ -316,6 +323,21 @@ class ScumOverviewPage extends Page
         }
 
         return $options;
+    }
+
+    /** @return list<string> "Name (SteamID): 71% of 830 shots, 25 kills" for suspicious players */
+    private function accuracyWatch(): array
+    {
+        $lines = [];
+        foreach (app(ScumServerService::class)->saveData($this->getServer())['players'] as $player) {
+            if (Accuracy::suspicious($player['stats'])) {
+                $lines[] = sprintf('%s (%s): %d%% of %s shots, %d kills, %d headshots', $player['name'], $player['steamId'],
+                    Accuracy::percent($player['stats']), number_format((int) $player['stats']['shots_fired']),
+                    (int) ($player['stats']['kills'] ?? 0), (int) ($player['stats']['headshots'] ?? 0));
+            }
+        }
+
+        return $lines;
     }
 
     private function crashSummary(): string

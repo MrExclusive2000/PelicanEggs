@@ -593,6 +593,12 @@ INSERT INTO entity VALUES (1000, 'BP_Prisoner_C', NULL, NULL), (1001, 'BP_Backpa
     (1003, 'Water_05l_C', NULL, 1001), (1004, 'BP_Cal_762x39_Ammobox_C', NULL, 1001), (2000, 'BP_Weapon_M9_C', NULL, NULL);
 INSERT INTO entity_component VALUES (1, 1004, 'stack');
 INSERT INTO discrete_amount_entity_component VALUES (1, 30);
+CREATE TABLE base (id INTEGER PRIMARY KEY, location_x REAL, location_y REAL, name TEXT, owner_user_profile_id INTEGER);
+CREATE TABLE base_element (element_id INTEGER PRIMARY KEY, base_id INTEGER);
+CREATE TABLE base_element_flag (element_id INTEGER, overtake_end_time INTEGER, overtaker_user_profile_id INTEGER);
+INSERT INTO base VALUES (1, -620000, -560000, 'Camp', 2), (2, 100000, 100000, '', 3);
+INSERT INTO base_element VALUES (10, 1), (11, 1), (12, 1), (20, 2);
+INSERT INTO base_element_flag VALUES (10, 0, 0), (20, 99, 2);
 SQL);
 $pdo = null;
 $save = new SaveDatabase($saveFile);
@@ -613,6 +619,9 @@ check('save: item names', [SaveDatabase::itemName('BP_Weapon_AK47_C'), SaveDatab
 $merged = PlayerDirectory::build("76561198000000001\tAlice\t1\t0\t60\t0\t\t1\t0\t\t0\t0\t0\t5\n", [], [], null, $savePlayers);
 check('directory: save data merged, save-only players added', [$merged['76561198000000001']['save']['cash'], $merged['76561198000000002']['name'], $merged['76561198000000002']['save']['alive']], [15000, 'Bob', false]);
 check('directory: no save data, save is null', PlayerDirectory::build("76561198000000001\tAlice\n", [], [], null)['76561198000000001']['save'], null);
+$bases = $save->bases();
+check('save: bases biggest first with owner', [array_column($bases, 'owner'), array_column($bases, 'elements'), $bases[0]['ownerId']], [['Alice', 'Bob'], [3, 1], '76561198000000001']);
+check('save: flags and takeovers', [$bases[0]['flags'], $bases[0]['overtaker'], $bases[1]['overtaker']], [1, '', 'Alice']);
 @unlink($saveFile);
 
 // ---------------------------------------------------------------- balance check for money commands
@@ -625,6 +634,25 @@ check('balance: taking what they have is fine', BalanceCheck::shortfall($rich, -
 check('balance: taking more is refused with the numbers', BalanceCheck::shortfall($rich, -20000),
     'They only have 15,000 cash in the last save, so taking 20,000 would leave them at -5,000. Reload save data if they earned money since, or switch on "Take it anyway".');
 check('balance: unknown cash is not blocked', [BalanceCheck::shortfall(null, -100), BalanceCheck::shortfall(['cash' => null], -100)], [null, null]);
+
+// ---------------------------------------------------------------- world map
+use MrExclusive\ScumManager\Support\WorldMap;
+$outposts = [['name' => 'a0', 'x' => -628501, 'y' => -564653], ['name' => 'b4', 'x' => 571094, 'y' => -229415],
+    ['name' => 'c2', 'x' => -157342, 'y' => 289458], ['name' => 'z3', 'x' => 17828, 'y' => -675066]];
+check('map: the outposts land in their own sectors', array_map(fn ($o) => WorldMap::sector($o['x'], $o['y']), $outposts), ['A0', 'B4', 'C2', 'Z3']);
+check('map: off the island', WorldMap::sector(2000000, 0), null);
+check('map: nearest outpost in metres', WorldMap::nearest(-620000, -560000, $outposts), ['name' => 'a0', 'metres' => 97]);
+check('map: nothing to compare with', WorldMap::nearest(0, 0, []), null);
+$svg = WorldMap::svg([['x' => -628501, 'y' => -564653, 'label' => 'a0', 'kind' => 'outpost'], ['x' => 0, 'y' => 0, 'label' => '<Eve>', 'kind' => 'player'], ['x' => 9999999, 'y' => 0, 'label' => 'far', 'kind' => 'base']]);
+check('map: svg with grid labels and markers, names escaped, off-map left out', [str_starts_with($svg, '<svg'), str_contains($svg, '>Z0<'), str_contains($svg, '&lt;Eve&gt;'), str_contains($svg, '<Eve>'), str_contains($svg, 'far')], [true, true, true, false, false]);
+
+// ---------------------------------------------------------------- accuracy watch
+use MrExclusive\ScumManager\Support\Accuracy;
+check('accuracy: hit rate', Accuracy::percent(['shots_fired' => 400, 'shots_hit' => 120]), 30);
+check('accuracy: too few shots to judge', [Accuracy::percent(['shots_fired' => 50, 'shots_hit' => 50]), Accuracy::percent([])], [null, null]);
+check('accuracy: a normal player is not flagged', Accuracy::suspicious(['shots_fired' => 1000, 'shots_hit' => 320]), false);
+check('accuracy: an aimbot-like rate is flagged', Accuracy::suspicious(['shots_fired' => 830, 'shots_hit' => 590]), true);
+check('accuracy: hits above shots are capped', Accuracy::percent(['shots_fired' => 200, 'shots_hit' => 999]), 100);
 
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

@@ -50,7 +50,7 @@ All in `SCUM/Saved/Config/WindowsServer/`:
 | `WhitelistedUsers.ini`         | Whitelisted SteamID64s                          |
 | `ExclusiveUsers.ini`           | Only these players may join, when enabled       |
 
-Save data is in `SCUM/Saved/SaveFiles/`. Back up the whole `SCUM/Saved` folder before you update or change settings.
+Save data is in `SCUM/Saved/SaveFiles/`. Every start copies `SCUM.db` to `SaveFiles/ExclsvBackups/` (newest 14 kept), and the ExclsvSCUM World page restores them. Back up the whole `SCUM/Saved` folder before big updates as well.
 
 ## Settings editor and mods (SCUM Manager plugin)
 

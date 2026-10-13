@@ -995,11 +995,11 @@ class ScumServerService
                     $inventories[(string) $steamId] = $save->inventory($player['prisonerId']);
                 }
             }
-            $data = ['players' => $players, 'inventories' => $inventories, 'readAt' => time(), 'error' => null];
+            $data = ['players' => $players, 'inventories' => $inventories, 'bases' => $save->bases(), 'readAt' => time(), 'error' => null];
             Cache::put($key, $data, 300);
         } catch (Throwable $exception) {
             report($exception);
-            $data = ['players' => [], 'inventories' => [], 'readAt' => null, 'error' => $exception->getMessage()];
+            $data = ['players' => [], 'inventories' => [], 'bases' => [], 'readAt' => null, 'error' => $exception->getMessage()];
             Cache::put($key, $data, 120);
         } finally {
             if ($copy !== null) {
@@ -1008,6 +1008,151 @@ class ScumServerService
         }
 
         return $data;
+    }
+
+    public const SAVE_BACKUP_DIR = 'ExclsvBackups';
+
+    /**
+     * Save backups (SaveFiles/ExclsvBackups), newest first. The egg makes one on every start;
+     * "Back up now" adds one while running.
+     *
+     * @return list<array{name: string, size: int, modified: string, wal: bool}>
+     */
+    public function saveBackups(Server $server): array
+    {
+        $entries = $this->listDirectory($server, self::SAVE_DIR . '/' . self::SAVE_BACKUP_DIR);
+        $names = array_column($entries, 'name');
+        $backups = [];
+        foreach ($entries as $entry) {
+            if (!$entry['directory'] && preg_match('/^SCUM-[\w-]+\.db$/', $entry['name'])) {
+                $backups[] = ['name' => $entry['name'], 'size' => $entry['size'], 'modified' => $entry['modified'], 'wal' => in_array($entry['name'] . '-wal', $names, true)];
+            }
+        }
+        usort($backups, fn (array $a, array $b) => strtotime($b['modified'] ?: '0') <=> strtotime($a['modified'] ?: '0'));
+
+        return $backups;
+    }
+
+    /** Copy the live save into the backups folder now. Returns the backup's name. */
+    public function backupSaveNow(Server $server): string
+    {
+        $dir = self::SAVE_DIR;
+        $names = array_column($this->listDirectory($server, $dir), 'name');
+        if (!in_array('SCUM.db', $names, true)) {
+            throw new RuntimeException('There is no SCUM.db yet: start the server once first.');
+        }
+        if (!in_array(self::SAVE_BACKUP_DIR, $names, true)) {
+            $this->files($server)->createDirectory(self::SAVE_BACKUP_DIR, $dir);
+        }
+
+        $name = 'SCUM-' . gmdate('Y-m-d-Hi') . '-manual.db';
+        $this->files($server)->renameFiles($dir, [['from' => $this->copyInPlace($server, $dir, 'SCUM.db'), 'to' => self::SAVE_BACKUP_DIR . "/$name"]]);
+        if (in_array('SCUM.db-wal', $names, true)) {
+            $this->files($server)->renameFiles($dir, [['from' => $this->copyInPlace($server, $dir, 'SCUM.db-wal'), 'to' => self::SAVE_BACKUP_DIR . "/$name-wal"]]);
+        }
+        Activity::event('server:file.copy')->property('file', "$dir/SCUM.db")->property('to', self::SAVE_BACKUP_DIR . "/$name")->log();
+
+        return $name;
+    }
+
+    /**
+     * Put a backup back as the live save. The server must be stopped. The current save is kept
+     * as SCUM-before-restore-<time>.db in the backups folder.
+     */
+    public function restoreSave(Server $server, string $backup): void
+    {
+        if (!$this->isStopped($server)) {
+            throw new RuntimeException('Stop the server first: SCUM keeps the save open while it runs.');
+        }
+        $dir = self::SAVE_DIR;
+        $backups = self::SAVE_BACKUP_DIR;
+        $available = array_column($this->saveBackups($server), null, 'name');
+        if (!preg_match('/^SCUM-[\w-]+\.db$/', $backup) || !isset($available[$backup])) {
+            throw new RuntimeException('That backup does not exist.');
+        }
+
+        // 1. Copies of the backup, made first so a failure leaves the live save untouched.
+        $copy = $this->copyInPlace($server, "$dir/$backups", $backup);
+        $walCopy = $available[$backup]['wal'] ? $this->copyInPlace($server, "$dir/$backups", "$backup-wal") : null;
+
+        // 2. The current save (and its journal) moves aside.
+        $live = array_column($this->listDirectory($server, $dir), 'name');
+        $aside = 'SCUM-before-restore-' . gmdate('Y-m-d-His') . '.db';
+        $moved = [];
+        foreach (['SCUM.db' => $aside, 'SCUM.db-wal' => "$aside-wal", 'SCUM.db-shm' => null] as $file => $target) {
+            if (!in_array($file, $live, true)) {
+                continue;
+            }
+            if ($target === null) {
+                $this->files($server)->deleteFiles($dir, [$file]); // shared-memory index, rebuilt by SQLite
+                continue;
+            }
+            $this->files($server)->renameFiles($dir, [['from' => $file, 'to' => "$backups/$target"]]);
+            $moved[$file] = "$backups/$target";
+        }
+
+        // 3. The copy becomes the live save; on failure the original goes back.
+        try {
+            $this->files($server)->renameFiles($dir, [['from' => "$backups/$copy", 'to' => 'SCUM.db']]);
+            if ($walCopy !== null) {
+                $this->files($server)->renameFiles($dir, [['from' => "$backups/$walCopy", 'to' => 'SCUM.db-wal']]);
+            }
+        } catch (Throwable $exception) {
+            foreach ($moved as $file => $target) {
+                try {
+                    $this->files($server)->renameFiles($dir, [['from' => $target, 'to' => $file]]);
+                } catch (Throwable) {
+                    // reported below
+                }
+            }
+
+            throw new RuntimeException("Restoring failed ({$exception->getMessage()}). The previous save was put back; if SCUM.db is missing, rename $backups/$aside back to SCUM.db.", 0, $exception);
+        }
+
+        Cache::forget("scum-manager:save-data:$server->uuid");
+        Activity::event('server:file.restore')->property('file', "$dir/SCUM.db")->property('from', "$backups/$backup")->log();
+    }
+
+    /** Copy a file next to itself (Wings picks the name) and return the copy's name. */
+    private function copyInPlace(Server $server, string $dir, string $file): string
+    {
+        $before = array_column($this->listDirectory($server, $dir), 'name');
+        $this->files($server)->copyFile("$dir/$file");
+        // Wings names copies "<name> copy..."; SQLite may add journal files meanwhile, so only those count.
+        $new = array_values(array_filter(
+            array_diff(array_column($this->listDirectory($server, $dir), 'name'), $before),
+            fn (string $name) => str_contains(strtolower($name), 'copy'),
+        ));
+        if (count($new) !== 1) {
+            throw new RuntimeException("Copying $file did not produce exactly one new file.");
+        }
+
+        return $new[0];
+    }
+
+    /**
+     * The outposts on this server, from PlayerTools' teleport destinations named after their
+     * sectors (A0, B4, C2, Z3, as "Add outposts as teleports" creates them); all destinations
+     * when none are named that way.
+     *
+     * @return list<array{name: string, x: float, y: float}>
+     */
+    public function outposts(Server $server): array
+    {
+        try {
+            $config = LuaTable::parse($this->modConfig($server, 'PlayerTools') ?? 'return {}');
+        } catch (Throwable) {
+            return [];
+        }
+        $places = [];
+        foreach ((array) ($config['teleports']['locations'] ?? []) as $place) {
+            if (is_array($place) && is_numeric($place['x'] ?? null) && is_numeric($place['y'] ?? null)) {
+                $places[] = ['name' => strtoupper((string) ($place['name'] ?? '?')), 'x' => (float) $place['x'], 'y' => (float) $place['y']];
+            }
+        }
+        $outposts = array_values(array_filter($places, fn (array $p) => in_array($p['name'], ['A0', 'B4', 'C2', 'Z3'], true)));
+
+        return $outposts !== [] ? $outposts : $places;
     }
 
     public function removeSaveDatabaseCopy(string $path): void

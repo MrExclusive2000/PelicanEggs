@@ -164,6 +164,36 @@ final class SaveDatabase
         ], $rows);
     }
 
+    /**
+     * Every base in the save, biggest first: where it is, who owns it, how many building parts
+     * and flags it has, and who is taking it over (if anyone).
+     *
+     * @return list<array{id: int, name: string, x: float, y: float, owner: string, ownerId: string, elements: int, flags: int, overtaker: string}>
+     */
+    public function bases(): array
+    {
+        $rows = $this->rows('SELECT b.id, b.name, b.location_x, b.location_y, up.name AS owner, up.user_id AS owner_id,
+                (SELECT COUNT(*) FROM base_element e WHERE e.base_id = b.id) AS elements,
+                (SELECT COUNT(*) FROM base_element_flag f JOIN base_element e ON e.element_id = f.element_id WHERE e.base_id = b.id) AS flags,
+                (SELECT o.name FROM base_element_flag f JOIN base_element e ON e.element_id = f.element_id
+                    LEFT JOIN user_profile o ON o.id = f.overtaker_user_profile_id
+                    WHERE e.base_id = b.id AND f.overtaker_user_profile_id > 0 LIMIT 1) AS overtaker
+            FROM base b LEFT JOIN user_profile up ON up.id = b.owner_user_profile_id
+            ORDER BY elements DESC, b.id');
+
+        return array_map(fn (array $row) => [
+            'id' => (int) $row['id'],
+            'name' => (string) ($row['name'] ?? ''),
+            'x' => (float) $row['location_x'],
+            'y' => (float) $row['location_y'],
+            'owner' => (string) ($row['owner'] ?? ''),
+            'ownerId' => preg_match('/^7656\d{13}$/', (string) $row['owner_id']) ? (string) $row['owner_id'] : '',
+            'elements' => (int) $row['elements'],
+            'flags' => (int) $row['flags'],
+            'overtaker' => (string) ($row['overtaker'] ?? ''),
+        ], $rows);
+    }
+
     /** "BP_Weapon_AK47_C" -> "Weapon AK47" */
     public static function itemName(string $class): string
     {

@@ -22,6 +22,7 @@ use Illuminate\Support\HtmlString;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Filament\Server\Concerns\RunsPlayerCommands;
 use MrExclusive\ScumManager\Services\ScumServerService;
+use MrExclusive\ScumManager\Support\Accuracy;
 use MrExclusive\ScumManager\Support\Brand;
 use MrExclusive\ScumManager\Support\OnlinePlayers;
 use MrExclusive\ScumManager\Support\PlayerDirectory;
@@ -41,7 +42,7 @@ class ScumPlayersPage extends Page implements HasTable
 
     protected static ?string $slug = 'scum-players';
 
-    protected static ?int $navigationSort = 29;
+    protected static ?int $navigationSort = 28;
 
     protected static ?string $navigationLabel = 'Players';
 
@@ -161,6 +162,14 @@ class ScumPlayersPage extends Page implements HasTable
                     ->state(fn (array $record) => ($record['save']['squad'] ?? '') !== '' ? $record['save']['squad'] . ' (' . $record['save']['squadRank'] . ')' : null)
                     ->placeholder('-')
                     ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('accuracy')->label('Hit %')
+                    ->state(fn (array $record) => ($p = Accuracy::percent($record['save']['stats'] ?? [], 50)) !== null ? $p . '%' : null)
+                    ->placeholder('-')
+                    ->color(fn (array $record) => Accuracy::suspicious($record['save']['stats'] ?? []) ? 'danger' : null)
+                    ->weight(fn (array $record) => Accuracy::suspicious($record['save']['stats'] ?? []) ? 'bold' : null)
+                    ->tooltip(fn (array $record) => Accuracy::suspicious($record['save']['stats'] ?? [])
+                        ? 'Hits ' . Accuracy::percent($record['save']['stats']) . '% of ' . number_format((int) $record['save']['stats']['shots_fired']) . ' shots (SCUM lifetime stats). Worth spectating.'
+                        : 'Share of shots that hit, from SCUM\'s lifetime stats (50+ shots)'),
                 TextColumn::make('kills')->label('Kills')->sortable()->numeric(),
                 TextColumn::make('deaths')->label('Deaths')->sortable()->numeric(),
                 TextColumn::make('kd')->label('K/D')

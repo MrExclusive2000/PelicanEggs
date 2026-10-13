@@ -47,6 +47,14 @@ Search by name or SteamID and sort by kills, deaths, playtime or kicks. When a p
 
 **Scan save database** copies SCUM's save database (`SCUM/Saved/SaveFiles/SCUM.db`, SQLite, plus `SCUM.db-wal`) to a private temporary folder on the panel, lists its tables, columns and row counts, deletes the copy and downloads the list. The list has no player data. It is the first step towards showing money, fame and inventories here. `SCUM_MANAGER_SAVE_DB_MAX_MB` (default 2048) limits the size copied.
 
+## World
+
+- **Live map:** the island's sector grid (Z0 to D4) with online players (live, every 15 seconds), bases and outposts. Hover a marker for details.
+- **Bases:** every base in the save with its owner, sector, number of building parts and flags, who is taking it over, and the distance to the nearest outpost. Bases within 750 m of an outpost are shown in red.
+- **Save backups:** the egg copies `SCUM.db` into `SaveFiles/ExclsvBackups` on every start, so a daily restart makes a daily backup; the newest 14 are kept (`SAVE_BACKUPS_KEEP` in the startup environment changes it). **Back up now** copies the live save; **Restore a backup** (server stopped) puts one back and keeps the current save as `SCUM-before-restore-<time>.db`.
+
+The Players page also shows each player's **Hit %** from SCUM's lifetime stats, and the Overview lists anyone hitting 55% or more of at least 200 shots under **Accuracy watch**.
+
 ## SCUM Settings
 
 - **Built from your own file:** the form is built from whatever keys are in your server's `ServerSettings.ini`, so settings added by monthly SCUM updates appear without updating the plugin.

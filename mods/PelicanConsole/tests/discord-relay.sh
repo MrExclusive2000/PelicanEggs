@@ -77,8 +77,19 @@ check "egg: game exit code passed on" '[ "$code" -eq 3 ]'
 check "egg: starting, online, flag and stopped all posted" '[[ $posts == *"is starting."* && $posts == *"is online."* && $posts == *"Banned Eve"* && $posts == *"has stopped."* ]]'
 unset DISCORD_WEBHOOK_URL
 : > "$POSTS"
-(cd "$ROOT" && timeout 30 bash startup.sh < /dev/null > /dev/null 2>&1); code=$?
+# Save backups on start: SCUM.db (and its -wal) copied, only the newest 14 kept.
+SAVES="$ROOT/SCUM/Saved/SaveFiles"
+mkdir -p "$SAVES/ExclsvBackups"
+printf 'db' > "$SAVES/SCUM.db"; printf 'wal' > "$SAVES/SCUM.db-wal"
+for day in $(seq -w 1 15); do
+    printf 'old' > "$SAVES/ExclsvBackups/SCUM-2026-01-$day-0000.db"; printf 'old' > "$SAVES/ExclsvBackups/SCUM-2026-01-$day-0000.db-wal"
+    touch -d "2026-01-$day" "$SAVES/ExclsvBackups/SCUM-2026-01-$day-0000.db"
+done
+(cd "$ROOT" && timeout 30 bash startup.sh < /dev/null > "$ROOT/start.out" 2>&1); code=$?
 check "egg: no webhook, no relay, same exit code" '[ "$code" -eq 3 ] && [ ! -s "$POSTS" ]'
+newest=$(ls -1t "$SAVES/ExclsvBackups"/SCUM-*.db | head -1)
+check "egg: save backed up on start, with its -wal" '[ "$(cat "$newest")" = db ] && [ "$(cat "$newest-wal")" = wal ] && grep -q "Save backed up to SaveFiles/ExclsvBackups/" "$ROOT/start.out"'
+check "egg: only the newest 14 backups kept, -wal files with them" '[ "$(ls -1 "$SAVES/ExclsvBackups"/SCUM-*.db | wc -l)" -eq 14 ] && [ ! -e "$SAVES/ExclsvBackups/SCUM-2026-01-01-0000.db" ] && [ ! -e "$SAVES/ExclsvBackups/SCUM-2026-01-02-0000.db-wal" ] && [ -e "$SAVES/ExclsvBackups/SCUM-2026-01-15-0000.db" ]'
 
 echo
 echo "$count checks, $failures failed"
