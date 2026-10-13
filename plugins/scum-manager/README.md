@@ -49,7 +49,7 @@ Search by name or SteamID and sort by kills, deaths, playtime or kicks. When a p
 
 ## World
 
-- **Live map:** the island's sector grid (Z0 to D4) with online players (live, every 15 seconds), bases and outposts. Hover a marker for details.
+- **Live map:** the island's sector grid, turned like SCUM's own map (D4 top left, Z0 bottom right), with online players (live, every 15 seconds), bases and outposts. Hover a marker for details. **Add map picture** puts a picture of the full map under the grid (square, edge to edge, D at the top); it is stored in `ExclsvSCUM/` on the server and not shipped with the plugin.
 - **Bases:** every base in the save with its owner, sector, number of building parts and flags, who is taking it over, and the distance to the nearest outpost. Bases within 750 m of an outpost are shown in red.
 - **Save backups:** the egg copies `SCUM.db` into `SaveFiles/ExclsvBackups` on every start, so a daily restart makes a daily backup; the newest 14 are kept (`SAVE_BACKUPS_KEEP` in the startup environment changes it). **Back up now** copies the live save; **Restore a backup** (server stopped) puts one back and keeps the current save as `SCUM-before-restore-<time>.db`.
 

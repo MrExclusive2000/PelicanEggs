@@ -9,6 +9,7 @@ use App\Traits\Filament\BlockAccessInConflict;
 use Exception;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
@@ -17,6 +18,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Illuminate\Support\HtmlString;
 use Livewire\Attributes\Locked;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\Brand;
 use MrExclusive\ScumManager\Support\OnlinePlayers;
@@ -71,6 +73,10 @@ class ScumWorldPage extends Page
     #[Locked]
     public string $serverState = '';
 
+    /** data: URI of the uploaded map picture, or null. */
+    #[Locked]
+    public ?string $mapPicture = null;
+
     public static function canAccess(): bool
     {
         /** @var Server $server */
@@ -100,6 +106,11 @@ class ScumWorldPage extends Page
         $this->outposts = $service->outposts($server);
         $this->backups = $service->saveBackups($server);
         $this->serverState = $service->powerState($server)->value;
+        try {
+            $this->mapPicture = $service->mapPicture($server);
+        } catch (Exception) {
+            $this->mapPicture = null; // the grid works without it
+        }
         $this->loadLive();
     }
 
@@ -120,7 +131,7 @@ class ScumWorldPage extends Page
                 ->icon('tabler-map-pin')
                 ->description('Players (green, live), bases (orange; red when close to an outpost) and outposts (blue). Hover a marker for details. Bases are as of SCUM\'s last save.')
                 ->extraAttributes(['wire:poll.15s' => 'loadLive'])
-                ->schema([TextEntry::make('map')->hiddenLabel()->state(fn () => new HtmlString(WorldMap::svg($this->markers())))]),
+                ->schema([TextEntry::make('map')->hiddenLabel()->state(fn () => new HtmlString(WorldMap::svg($this->markers(), 640, $this->mapPicture)))]),
             Section::make('Bases')
                 ->icon('tabler-building-castle')
                 ->description(fn () => $this->saveError !== null
@@ -246,6 +257,44 @@ class ScumWorldPage extends Page
                         Notification::make()->title('Could not restore')->body($exception->getMessage())->danger()->persistent()->send();
                     }
                     $this->load();
+                }),
+            Action::make('map_picture')
+                ->label(fn () => $this->mapPicture !== null ? 'Change map picture' : 'Add map picture')
+                ->icon('tabler-photo')
+                ->color('gray')
+                ->authorize(fn () => user()?->can(SubuserPermission::FileCreate, $server) && user()?->can(SubuserPermission::FileUpdate, $server))
+                ->modalHeading('Map picture')
+                ->modalDescription('A picture of SCUM\'s full map, square, edge to edge (the island\'s full 5 x 5 sector grid), with sector D at the top and column 4 on the left as in game. It is stored in ' . ScumServerService::EXTRAS_DIR . '/ on this server and only shown here.')
+                ->schema([
+                    FileUpload::make('picture')
+                        ->label('Picture (.webp, .png or .jpg, up to 8 MB)')
+                        ->required()
+                        ->acceptedFileTypes(['image/webp', 'image/png', 'image/jpeg'])
+                        ->maxSize(8192)
+                        ->storeFiles(false),
+                ])
+                ->extraModalFooterActions(fn () => $this->mapPicture === null ? [] : [
+                    Action::make('remove_map_picture')
+                        ->label('Remove picture')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->action(function (ScumServerService $service) {
+                            $service->removeMapPicture($this->getServer());
+                            $this->mapPicture = null;
+                            Notification::make()->title('Map picture removed')->success()->send();
+                        }),
+                ])
+                ->action(function (array $data, ScumServerService $service) {
+                    /** @var TemporaryUploadedFile $file */
+                    $file = $data['picture'];
+                    try {
+                        $service->saveMapPicture($this->getServer(), (string) file_get_contents($file->getRealPath()), pathinfo($file->getClientOriginalName(), PATHINFO_EXTENSION));
+                        $this->mapPicture = $service->mapPicture($this->getServer());
+                        Notification::make()->title('Map picture saved')->success()->send();
+                    } catch (Exception $exception) {
+                        report($exception);
+                        Notification::make()->title('Could not save the picture')->body($exception->getMessage())->danger()->send();
+                    }
                 }),
             Action::make('reload')
                 ->label('Reload save data')

@@ -1155,6 +1155,56 @@ class ScumServerService
         return $outposts !== [] ? $outposts : $places;
     }
 
+    /** Folder in the server's files for panel-side extras such as the map picture. */
+    public const EXTRAS_DIR = 'ExclsvSCUM';
+
+    private const MAP_TYPES = ['webp' => 'image/webp', 'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg'];
+
+    /** Store a picture of SCUM's map (shown under the World page grid). */
+    public function saveMapPicture(Server $server, string $contents, string $extension): void
+    {
+        $extension = strtolower($extension);
+        if (!isset(self::MAP_TYPES[$extension])) {
+            throw new RuntimeException('Use a .webp, .png or .jpg picture.');
+        }
+        $info = @getimagesizefromstring($contents);
+        if ($info === false) {
+            throw new RuntimeException('That file is not a picture.');
+        }
+        if (!in_array(self::EXTRAS_DIR, array_column($this->listDirectory($server, '/'), 'name'), true)) {
+            $this->files($server)->createDirectory(self::EXTRAS_DIR, '/');
+        }
+        $this->removeMapPicture($server);
+        $this->files($server)->putContent(self::EXTRAS_DIR . "/map.$extension", $contents);
+        Cache::forget("scum-manager:map-picture:$server->uuid");
+    }
+
+    public function removeMapPicture(Server $server): void
+    {
+        $existing = array_column($this->listDirectory($server, self::EXTRAS_DIR), 'name');
+        $old = array_values(array_filter($existing, fn (string $name) => preg_match('/^map\.(webp|png|jpe?g)$/', $name)));
+        if ($old !== []) {
+            $this->files($server)->deleteFiles(self::EXTRAS_DIR, $old);
+        }
+        Cache::forget("scum-manager:map-picture:$server->uuid");
+    }
+
+    /** The map picture as a data: URI for the World page, or null when none is stored (cached for an hour). */
+    public function mapPicture(Server $server): ?string
+    {
+        return Cache::remember("scum-manager:map-picture:$server->uuid", 3600, function () use ($server) {
+            foreach (array_column($this->listDirectory($server, self::EXTRAS_DIR), 'name') as $name) {
+                if (preg_match('/^map\.(webp|png|jpe?g)$/', $name, $match)) {
+                    $contents = $this->read($server, self::EXTRAS_DIR . "/$name");
+
+                    return $contents === null ? null : 'data:' . self::MAP_TYPES[$match[1]] . ';base64,' . base64_encode($contents);
+                }
+            }
+
+            return null;
+        });
+    }
+
     public function removeSaveDatabaseCopy(string $path): void
     {
         $dir = dirname($path);

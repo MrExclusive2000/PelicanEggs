@@ -644,6 +644,11 @@ check('map: off the island', WorldMap::sector(2000000, 0), null);
 check('map: nearest outpost in metres', WorldMap::nearest(-620000, -560000, $outposts), ['name' => 'a0', 'metres' => 97]);
 check('map: nothing to compare with', WorldMap::nearest(0, 0, []), null);
 $svg = WorldMap::svg([['x' => -628501, 'y' => -564653, 'label' => 'a0', 'kind' => 'outpost'], ['x' => 0, 'y' => 0, 'label' => '<Eve>', 'kind' => 'player'], ['x' => 9999999, 'y' => 0, 'label' => 'far', 'kind' => 'base']]);
+// Drawn like SCUM's own map (turned half way): on a 1080 px map the outposts sit where the game shows them.
+$onMap = function (array $o) { preg_match('/<rect x="([\d.]+)" y="([\d.]+)" width="12"/', WorldMap::svg([['x' => $o['x'], 'y' => $o['y'], 'label' => $o['name'], 'kind' => 'outpost']], 1080), $m); return [(int) round($m[1] + 6), (int) round($m[2] + 6)]; };
+check('map: game orientation, outposts where the game map has them', array_map($onMap, $outposts), [[884, 839], [34, 601], [550, 234], [426, 917]]);
+check('map: sector labels turned with the map (D4 top left, Z0 bottom right)', [str_contains(WorldMap::svg([], 640), '<text x="5" y="14" font-size="11" fill="rgba(127,127,127,0.8)">D4</text>'), str_contains(WorldMap::svg([], 640), '<text x="517" y="526" font-size="11" fill="rgba(127,127,127,0.8)">Z0</text>')], [true, true]);
+check('map: picture drawn under the grid', str_contains(WorldMap::svg([], 640, 'data:image/png;base64,AAAA'), '<image href="data:image/png;base64,AAAA" x="0" y="0" width="640" height="640"'), true);
 check('map: svg with grid labels and markers, names escaped, off-map left out', [str_starts_with($svg, '<svg'), str_contains($svg, '>Z0<'), str_contains($svg, '&lt;Eve&gt;'), str_contains($svg, '<Eve>'), str_contains($svg, 'far')], [true, true, true, false, false]);
 
 // ---------------------------------------------------------------- accuracy watch
