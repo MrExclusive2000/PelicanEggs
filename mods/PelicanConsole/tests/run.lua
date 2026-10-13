@@ -225,8 +225,8 @@ local function ExpPlayer(name)
     function pawn:HasItem(item) return self.items[item] == true end
     controller.pawn = pawn
     function controller:K2_GetPawn() return self.pawn end
-    function controller:GetCurrencyBalanceText(kind) return { ToString = function() return ({ [0] = "0", [1] = "1,250", [2] = "3" })[kind] end } end
-    function controller:GetFamePointsRounded() return 42 end
+    function controller:GetCurrencyBalanceText() error("GetCurrencyBalanceText crashed a live server and must not be called") end
+    controller._moneyBalanceRep, controller._goldBalanceRep, controller._repFamePoints = 1250, 3, 42
     return controller
 end
 local waterClass = object({ name = "BP_Water_05l_C" })
@@ -265,7 +265,7 @@ loopCallback()
 check("whereis", string.find(consoleLog(), "Mr Exclusive is at 100 200 300", 1, true) ~= nil)
 writeCommands("Balance Bob\n")
 loopCallback()
-check("balance", string.find(consoleLog(), "Bob: money 1,250, gold 3, fame 42", 1, true) ~= nil)
+check("balance", string.find(consoleLog(), "Bob: money 1250, gold 3, fame 42", 1, true) ~= nil)
 writeCommands("TeleportPlayer Mr Exclusive 1 -2 3.5\n")
 loopCallback()
 check("teleport", teleports[1] and teleports[1].who == "Mr Exclusive" and teleports[1].at.Y == -2 and teleports[1].at.Z == 3.5)

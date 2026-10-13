@@ -299,12 +299,14 @@ end
 local function balance(text)
     local player = playerAndRest(text, "Usage: Balance <player>")
     if player == nil then return end
-    local function currency(kind)
-        return safe(function() return player.controller:GetCurrencyBalanceText(kind):ToString() end) or "?"
+    -- Plain values the controller keeps for the player's screen. Calling SCUM's
+    -- GetCurrencyBalanceText (it builds a formatted text) crashed a live server, so it is not used.
+    local function value(field)
+        local number = safe(function() return player.controller[field] end)
+        return type(number) == "number" and string.format("%d", number) or "?"
     end
-    local fame = safe(function() return player.controller:GetFamePointsRounded() end)
-    -- SCUM's ECurrencyType (from the game, via ExclsvProbe): 0 None, 1 Normal (cash), 2 Gold.
-    output(string.format("%s: money %s, gold %s, fame %s", player.name, currency(1), currency(2), tostring(fame or "?")))
+    output(string.format("%s: money %s, gold %s, fame %s", player.name,
+        value("_moneyBalanceRep"), value("_goldBalanceRep"), value("_repFamePoints")))
 end
 
 -- Tell ScumAntiCheat (if installed) that this teleport is ours, so it is not flagged.

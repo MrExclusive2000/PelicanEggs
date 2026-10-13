@@ -954,14 +954,12 @@ end
 -- player's inventory, reading their balance, and teleporting without an admin. They are only
 -- used where the settings switch them on (item lists, method = "direct", checkBalance).
 
--- SCUM's ECurrencyType (from the game, via ExclsvProbe): 0 None, 1 Normal (cash), 2 Gold.
-local CASH = 1
-
--- Money the player has, read from the game (nil when it cannot be read).
+-- Money the player has, read from the game (nil when it cannot be read). This is the plain
+-- value the controller keeps for the player's screen; calling SCUM's GetCurrencyBalanceText
+-- (it builds a formatted text) crashed a live server, so it is not used.
 local function balanceOf(session)
-    local text = safe(function() return session.controller:GetCurrencyBalanceText(CASH):ToString() end)
-    local digits = text and string.gsub(text, "[^%d]", "")
-    return digits and digits ~= "" and tonumber(digits) or nil
+    local money = safe(function() return session.controller._moneyBalanceRep end)
+    return type(money) == "number" and math.floor(money) or nil
 end
 
 -- Finds out once per run whether SCUM runs commands sent without an admin: 1 coin is added to a

@@ -666,9 +666,13 @@ local inventory = {}
 function gus.pawn:PlaceItemInInventoryOrHolster(item) inventory[#inventory + 1] = item end
 local teleported = nil
 function gus.pawn:K2_TeleportTo(location) teleported = location return true end
-local money = "250"
--- Only cash (ECurrencyType 1) holds the balance; None (0) and Gold (2) read differently.
-function gus:GetCurrencyBalanceText(kind) return { ToString = function() return kind == 1 and money or "0" end } end
+local money = 250
+-- The controller's plain money value (_moneyBalanceRep), read live like UE4SS does.
+local function liveMoney(controller, read)
+    setmetatable(controller, { __index = function(_, key) if key == "_moneyBalanceRep" then return read() end end })
+end
+function gus:GetCurrencyBalanceText() error("GetCurrencyBalanceText crashed a live server and must not be called") end
+liveMoney(gus, function() return money end)
 login("76561198000000040", "Gus")
 players = { gus }
 step(12)
@@ -694,7 +698,7 @@ players = { gus }
 chat("76561198000000040", "Gus", "!tp b4")
 step(3)
 check("teleport refused when broke", lastPrivate("Gus") == "Teleport cancelled: you need 300 and have 250." and teleported == nil)
-money = "1,250"
+money = 1250
 login("76561198000000041", "Hal")
 local admin = Player("Hal", true)
 players = { gus, admin }
@@ -704,11 +708,11 @@ check("direct teleport", teleported and teleported.X == 10 and teleported.Z == 3
 check("teleport charged through the admin", ran("ChangeCurrencyBalance Normal -300 76561198000000040") ~= nil)
 check("no Teleport admin command with the direct method", ran("Teleport 76561198000000040 10 20 30") == nil)
 
-money = "50"
+money = 50
 chat("76561198000000040", "Gus", "!bounty Hal 200")
 step()
 check("bounty refused when broke", lastPrivate("Gus") == "You cannot place that bounty: you need 200 and have 50.")
-money = "?"
+money = nil
 chat("76561198000000040", "Gus", "!bounty Hal 200")
 step()
 check("unreadable balance refuses", lastPrivate("Gus") == "You cannot place that bounty: your balance could not be read.")
@@ -755,7 +759,7 @@ local function startHelperRun()
     }]])
     dofile(dir .. "/Scripts/main.lua")
     local ivy = Player("Ivy")
-    function ivy:GetCurrencyBalanceText(kind) return { ToString = function() return kind == 1 and tostring(balance) or "0" end } end
+    liveMoney(ivy, function() return balance end)
     login("76561198000000050", "Ivy")
     players = { ivy }
 end
@@ -771,7 +775,7 @@ write(dir .. "/config.lua", [[return {
 }]])
 dofile(dir .. "/Scripts/main.lua")
 local quiet = Player("Ivy")
-function quiet:GetCurrencyBalanceText() balanceReads = balanceReads + 1 return { ToString = function() return "1000" end } end
+liveMoney(quiet, function() balanceReads = balanceReads + 1 return 1000 end)
 login("76561198000000050", "Ivy")
 players = { quiet }
 step(20)
@@ -800,7 +804,7 @@ check("helper not tried again once ignored", #helperSent == sentWhenIgnored)
 helperWorks, helperSent = true, {}
 local _, unreadableBefore = string.gsub(read(dir .. "/playertools.log"), "no player's balance can be read", "")
 startHelperRun()
-players[1].GetCurrencyBalanceText = function() return { ToString = function() return "" end } end
+liveMoney(players[1], function() return nil end)
 step(20)
 local _, unreadable = string.gsub(read(dir .. "/playertools.log"), "no player's balance can be read", "")
 check("unreadable balance reported once, nothing sent", unreadable == unreadableBefore + 1 and #helperSent == 0)
