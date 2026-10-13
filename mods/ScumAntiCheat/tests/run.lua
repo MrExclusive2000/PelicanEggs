@@ -480,6 +480,23 @@ check("admin log header skipped", not has(text, "Game version"))
 check("admin command shown", has(text, "SCUM admin command: 2026.10.11-12.40.00: '76561198000000001:Admin(1)' Command: 'ListPlayers'"))
 check("game violation counted as strike", has(text, "Reported (76561198000000007): SCUM reported:"))
 
+-- A command ExclsvConsole ran for a regular player (no-admin route) is allowed, exactly once.
+local payee = Player("Payee", Pawn("BP_Prisoner_C", 0, 0, 0))
+login("76561198000000012", "Payee")
+players = { payee }
+tick()
+write(dir .. "/allowed_commands.txt", clock .. " ChangeCurrencyBalance Normal 1 76561198000000012\n", "a")
+write(gameLogDir .. "/admin_1.log", "2026.10.11-12.40.30: '76561198000000012:Payee(4)' Command: 'ChangeCurrencyBalance Normal 1 76561198000000012'\n", "a")
+step()
+step()
+check("command run by our console allowed", has(acLog(), "Allowed: run by ExclsvConsole without an admin")
+    and not has(acLog(), "Payee (76561198000000012) ran an admin command") and not has(read(configDir .. "/BannedUsers.ini"), "76561198000000012"))
+check("allowed commands file consumed", read(dir .. "/allowed_commands.txt") == "")
+write(gameLogDir .. "/admin_1.log", "2026.10.11-12.40.40: '76561198000000012:Payee(4)' Command: 'ChangeCurrencyBalance Normal 1 76561198000000012'\n", "a")
+step()
+step()
+check("the same command again is not allowed", has(acLog(), "Payee (76561198000000012) ran an admin command but is not in AdminUsers.ini"))
+
 -- An admin command in SCUM's admin log from a player who is not in AdminUsers.ini.
 local rogueAdmin = Player("Sneaky", Pawn("BP_Prisoner_C", 0, 0, 0))
 login("76561198000000009", "Sneaky")

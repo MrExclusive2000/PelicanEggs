@@ -146,6 +146,11 @@ local OFFENSES_FILE = DIR .. "/offenses.txt"
 -- when they teleport a player, so the teleport check does not flag it.
 local ALLOWED_TELEPORTS_FILE = DIR .. "/allowed_teleports.txt"
 local ALLOWED_TELEPORT_SECONDS = 15
+-- PelicanConsole writes "<os.time> <command>" here just before it runs one of its few commands
+-- as a regular player (no-admin-commands.txt), so the admin log check does not kick for it.
+-- Each line allows that exact command once, for a few minutes (SCUM writes its logs late).
+local ALLOWED_COMMANDS_FILE = DIR .. "/allowed_commands.txt"
+local ALLOWED_COMMAND_SECONDS = 300
 local LOG_FILES = { DIR .. "/anticheat.log", DIR .. "/../PelicanConsole/console.log" }
 
 -- ------------------------------------------------------------------ output and config
@@ -406,6 +411,35 @@ local function handleKillLine(line)
     pendingKills[#pendingKills + 1] = kill
 end
 
+local allowedCommands = {}   -- { time, text } of commands our console ran without an admin
+
+local function readAllowedCommands(now)
+    local text = readFile(ALLOWED_COMMANDS_FILE)
+    if text ~= nil and text ~= "" then
+        for time, command in string.gmatch(text, "(%d+) ([^\r\n]+)") do
+            allowedCommands[#allowedCommands + 1] = { time = tonumber(time), text = command }
+        end
+        local file = io.open(ALLOWED_COMMANDS_FILE, "w")
+        if file then file:close() end
+    end
+    for index = #allowedCommands, 1, -1 do
+        if now - allowedCommands[index].time > ALLOWED_COMMAND_SECONDS then table.remove(allowedCommands, index) end
+    end
+end
+
+-- Uses up the allowance for the command in this admin log line, if there is one.
+local function takeAllowedCommand(line, now)
+    local command = string.match(line, "Command: '(.*)'%s*$")
+    if command == nil then return false end
+    for index, entry in ipairs(allowedCommands) do
+        if entry.text == command and now - entry.time <= ALLOWED_COMMAND_SECONDS then
+            table.remove(allowedCommands, index)
+            return true
+        end
+    end
+    return false
+end
+
 local function handleGameLogLine(kind, line)
     if string.match(line, "^%s*$") then return end
     if kind == "kill" then
@@ -419,9 +453,14 @@ local function handleGameLogLine(kind, line)
     if kind == "violation" and config.strikeOnGameViolations then
         pendingViolations[id] = line
     end
-    -- An admin command from someone who is not in AdminUsers.ini: rights from a cheat.
+    -- An admin command from someone who is not in AdminUsers.ini: rights from a cheat, unless
+    -- our own console ran exactly this command for them a moment ago.
     if kind == "admin command" and config.checks.adminLog and adminIds and not adminIds[id] then
-        pendingRogueCommands[id] = line
+        if takeAllowedCommand(line, os.time()) then
+            output("Allowed: run by ExclsvConsole without an admin: " .. line)
+        else
+            pendingRogueCommands[id] = line
+        end
     end
 end
 
@@ -446,6 +485,7 @@ end
 
 local function refreshFiles(now)
     readAllowedTeleports()
+    readAllowedCommands(now)
     for _, line in ipairs(readTail(serverLog)) do
         handleServerLogLine(line)
     end

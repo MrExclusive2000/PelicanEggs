@@ -801,6 +801,18 @@ local function runElevated(command, executor, quiet)
     end
 
     local text = (string.gsub(command, "^#+", ""))
+    -- SCUM writes the command to its admin log under the player's name; tell ScumAntiCheat (if
+    -- installed) it was ours, so it does not kick them for running an admin command.
+    local antiCheat = DIR .. "/../ScumAntiCheat"
+    local probe = io.open(antiCheat .. "/config.lua", "r")
+    if probe ~= nil then
+        probe:close()
+        local file = io.open(antiCheat .. "/allowed_commands.txt", "a")
+        if file then
+            file:write(os.time() .. " " .. text .. "\n")
+            file:close()
+        end
+    end
     local lowered = true
     for _, target in ipairs(targets) do
         if safe(function() target._requiredExecutorLevel = REGULAR return true end) ~= true then lowered = false end
