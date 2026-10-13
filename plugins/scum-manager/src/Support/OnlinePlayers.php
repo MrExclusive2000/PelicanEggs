@@ -7,7 +7,7 @@ namespace MrExclusive\ScumManager\Support;
  * server runs.
  *
  *   # updated <unix time>
- *   steamId <tab> name <tab> x <tab> y <tab> z <tab> place <tab> vehicle <tab> admin <tab> online seconds
+ *   steamId <tab> name <tab> x <tab> y <tab> z <tab> place <tab> vehicle <tab> admin <tab> online seconds [<tab> ping ms]
  */
 final class OnlinePlayers
 {
@@ -15,7 +15,7 @@ final class OnlinePlayers
     public const FRESH_SECONDS = 60;
 
     /**
-     * @return array{updated: ?int, fresh: bool, players: list<array{steamId: string, name: string, x: ?int, y: ?int, z: ?int, place: string, vehicle: bool, admin: bool, seconds: int}>}
+     * @return array{updated: ?int, fresh: bool, players: list<array{steamId: string, name: string, x: ?int, y: ?int, z: ?int, place: string, vehicle: bool, admin: bool, seconds: int, ping: ?int}>}
      */
     public static function parse(?string $tsv, int $now): array
     {
@@ -42,6 +42,8 @@ final class OnlinePlayers
                 'vehicle' => trim($parts[6]) === '1',
                 'admin' => trim($parts[7]) === '1',
                 'seconds' => max(0, (int) $parts[8]),
+                // Written by ExclsvPlayerTools 1.34.0 and later; empty when the game does not say.
+                'ping' => isset($parts[9]) && preg_match('/^\d+$/', trim($parts[9])) ? (int) trim($parts[9]) : null,
             ];
         }
 

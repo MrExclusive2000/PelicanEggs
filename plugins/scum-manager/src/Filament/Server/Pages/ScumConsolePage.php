@@ -2,11 +2,13 @@
 
 namespace MrExclusive\ScumManager\Filament\Server\Pages;
 
+use App\Enums\ContainerStatus;
 use App\Enums\SubuserPermission;
 use App\Models\Server;
 use App\Traits\Filament\BlockAccessInConflict;
 use Exception;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -23,6 +25,7 @@ use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\ItemSelect;
+use MrExclusive\ScumManager\Support\ServerStatus;
 use MrExclusive\ScumManager\Support\TeleportDestinations;
 use MrExclusive\ScumManager\Support\Brand;
 
@@ -65,6 +68,27 @@ class ScumConsolePage extends Page
     #[Locked]
     public ?string $reportsLog = null;
 
+    #[Locked]
+    public ?string $deathsLog = null;
+
+    #[Locked]
+    public string $deaths = '';
+
+    #[Locked]
+    public string $serverLog = '';
+
+    /** @var array{state: string, cpu: float, memory: int, memoryLimit: int, uptime: int} */
+    #[Locked]
+    public array $resources = ['state' => '', 'cpu' => 0.0, 'memory' => 0, 'memoryLimit' => 0, 'uptime' => 0];
+
+    /** @var array{updated: ?int, fresh: bool, fps: ?float, frameMs: ?float, slowestMs: ?float, players: ?int} */
+    #[Locked]
+    public array $gameStatus = [];
+
+    /** @var list<array{name: string, ping: ?int, admin: bool}> */
+    #[Locked]
+    public array $online = [];
+
     public static function canAccess(): bool
     {
         /** @var Server $server */
@@ -95,6 +119,44 @@ class ScumConsolePage extends Page
         $this->reportsLog = $service->reportsLogPath($server);
         $this->output = $this->modInstalled ? $service->consoleOutput($server) : '';
         $this->reports = $service->playerReports($server);
+        $this->deathsLog = $service->deathsLogPath($server);
+        $this->readLogs();
+        $this->pollServer();
+    }
+
+    /** Deaths and the server log, read with the output. */
+    private function readLogs(): void
+    {
+        $service = app(ScumServerService::class);
+        $server = $this->getServer();
+
+        if ($this->deathsLog !== null) {
+            $this->deaths = implode("\n", ServerStatus::deaths($service->tailOf($server, $this->deathsLog, 60)));
+        }
+        if ($this->consoleLog !== null) {
+            $this->serverLog = $service->tailOf($server, dirname($this->consoleLog) . '/server.log', 120);
+        }
+    }
+
+    /** Power state, resources, server FPS and players' ping; every 10 seconds while the page is open. */
+    public function pollServer(): void
+    {
+        $service = app(ScumServerService::class);
+        $server = $this->getServer();
+
+        try {
+            $this->resources = $service->resources($server);
+            $this->gameStatus = ServerStatus::parse(
+                $this->consoleLog !== null ? $service->read($server, dirname($this->consoleLog) . '/status.txt') : null,
+                time(),
+            );
+            $this->online = array_map(
+                fn (array $player) => ['name' => $player['name'], 'ping' => $player['ping'], 'admin' => $player['admin']],
+                $service->onlinePlayers($server)['players'] ?? [],
+            );
+        } catch (Exception) {
+            // The server's files are briefly out of reach (e.g. restarting): keep what is shown.
+        }
     }
 
     /** Called every few seconds by the page while live updates are on. */
@@ -114,6 +176,7 @@ class ScumConsolePage extends Page
             if ($this->reportsLog !== null) {
                 $this->reports = $service->newestFirst($service->tailOf($server, $this->reportsLog, 30));
             }
+            $this->readLogs();
         } catch (Exception) {
             // The server's files are briefly out of reach (e.g. restarting): keep what is shown.
         }
@@ -122,17 +185,66 @@ class ScumConsolePage extends Page
     public function content(Schema $schema): Schema
     {
         return $schema->components([
+            Section::make('Server')
+                ->icon('tabler-server')
+                ->description('Updates every 10 seconds. Start, restart and stop are under Power.')
+                ->extraAttributes(fn () => $this->live ? ['wire:poll.10s' => 'pollServer'] : [])
+                ->columns(['default' => 1, 'md' => 3])
+                ->schema([
+                    TextEntry::make('server_state')->label('Status')
+                        ->state(fn () => ContainerStatus::tryFrom($this->resources['state'])?->getLabel() ?? 'Unknown')
+                        ->badge()
+                        ->color(fn () => ScumServerService::isStoppedState($this->resources['state']) ? 'danger' : 'success'),
+                    TextEntry::make('server_uptime')->label('Uptime')
+                        ->state(fn () => ScumServerService::isStoppedState($this->resources['state']) ? '-' : ServerStatus::uptime($this->resources['uptime'])),
+                    TextEntry::make('server_fps')->label('Server FPS')
+                        ->state(fn () => ServerStatus::fpsLabel($this->gameStatus + ['fresh' => false, 'fps' => null])[0])
+                        ->color(fn () => ServerStatus::fpsLabel($this->gameStatus + ['fresh' => false, 'fps' => null])[1])
+                        ->hint(fn () => ($this->gameStatus['fresh'] ?? false) ? null : ($this->modInstalled ? 'Shown while the server runs' : 'Needs ' . Brand::mod('ExclsvConsole'))),
+                    TextEntry::make('server_cpu')->label('CPU')
+                        ->state(fn () => sprintf('%.0f%%', $this->resources['cpu'])),
+                    TextEntry::make('server_memory')->label('Memory')
+                        ->state(fn () => ServerStatus::bytes($this->resources['memory'])
+                            . ($this->resources['memoryLimit'] > 0 ? ' of ' . ServerStatus::bytes($this->resources['memoryLimit']) : '')),
+                    TextEntry::make('server_players')->label('Players and ping')
+                        ->state(fn () => $this->playersAndPing()),
+                ]),
             Section::make('Output')
                 ->extraAttributes(fn () => $this->live && $this->modInstalled ? ['wire:poll.5s' => 'pollOutput'] : [])
                 ->description(fn () => $this->modInstalled
                     ? 'Click "Run a command" and pick what to do. "Works any time" commands need nobody in game. "Needs an admin in game" commands only run while an admin from AdminUsers.ini is online, as if that admin typed them in chat.'
                     : 'Install the ' . Brand::mod('ExclsvConsole') . ' mod on the ' . Brand::PAGE_MODS . ' page ("Install our mods") and restart the server to use this page.')
                 ->schema([$this->logEntry('console_output', fn () => $this->output, 'No output yet.')]),
+            Section::make('Deaths')
+                ->icon('tabler-skull')
+                ->description('Every death in SCUM\'s kill log, newest first, suicides included (' . Brand::mod('ExclsvPlayerTools') . '). SCUM does not log deaths to zombies, animals, falls or hunger.')
+                ->collapsible()
+                ->schema([$this->logEntry('deaths', fn () => $this->deaths, 'No deaths logged yet.')]),
+            Section::make('Server log')
+                ->icon('tabler-file-text')
+                ->description('The end of SCUM.log, without the "Global Stats" lines (shown as Server FPS above).')
+                ->collapsible()
+                ->collapsed()
+                ->schema([$this->logEntry('server_log', fn () => $this->serverLog, $this->modInstalled ? 'Shown while the server runs.' : 'Needs ' . Brand::mod('ExclsvConsole') . '.')]),
             Section::make('Player reports')
                 ->description('Sent by players with !report <name> <what happened> (' . Brand::mod('ExclsvPlayerTools') . ' mod), newest first.')
                 ->collapsible()
                 ->schema([$this->logEntry('player_reports', fn () => $this->reports, 'No reports.')]),
         ]);
+    }
+
+    private function playersAndPing(): string
+    {
+        if ($this->online === []) {
+            return ($this->gameStatus['fresh'] ?? false) && ($this->gameStatus['players'] ?? 0) > 0
+                ? $this->gameStatus['players'] . ' online'
+                : 'Nobody online';
+        }
+
+        return count($this->online) . ' online: ' . implode(', ', array_map(
+            fn (array $player) => $player['name'] . ($player['ping'] !== null ? ' ' . $player['ping'] . ' ms' : ''),
+            $this->online,
+        ));
     }
 
     private function logEntry(string $name, \Closure $text, string $empty): TextEntry
@@ -194,7 +306,38 @@ class ScumConsolePage extends Page
 
     protected function getHeaderActions(): array
     {
+        $server = $this->getServer();
+        $power = fn (string $action, string $label, string $icon, string $color, SubuserPermission $permission, ?string $confirm, \Closure $visible) => Action::make('power_' . $action)
+            ->label($label)
+            ->icon($icon)
+            ->color($color)
+            ->visible($visible)
+            ->authorize(fn () => user()?->can($permission, $server))
+            ->requiresConfirmation($confirm !== null)
+            ->modalDescription($confirm)
+            ->action(function (ScumServerService $service) use ($server, $action, $label) {
+                try {
+                    $service->power($server, $action);
+                    Notification::make()->title($label . ': sent')->success()->send();
+                } catch (Exception $exception) {
+                    report($exception);
+                    Notification::make()->title('Could not ' . strtolower($label))->body($exception->getMessage())->danger()->send();
+                }
+                $this->pollServer();
+            });
+        $stopped = fn () => ScumServerService::isStoppedState($this->resources['state']);
+
         return [
+            ActionGroup::make([
+                $power('start', 'Start', 'tabler-player-play', 'success', SubuserPermission::ControlStart, null, $stopped),
+                $power('restart', 'Restart', 'tabler-reload', 'warning', SubuserPermission::ControlRestart, 'Players are disconnected. SCUM takes a few minutes to come back up.', fn () => !$stopped()),
+                $power('stop', 'Stop', 'tabler-player-stop', 'danger', SubuserPermission::ControlStop, 'Players are disconnected and SCUM saves and shuts down.', fn () => !$stopped()),
+                $power('kill', 'Kill', 'tabler-skull', 'danger', SubuserPermission::ControlStop, 'Ends SCUM at once without saving. Only use this when Stop does not work.', fn () => !$stopped()),
+            ])
+                ->label('Power')
+                ->icon('tabler-power')
+                ->button()
+                ->color('gray'),
             Action::make('send')
                 ->label('Run a command')
                 ->icon('tabler-player-play')

@@ -466,12 +466,17 @@ local function handleServerLogLine(line)
     if id then steamIdByName[name] = id end
 end
 
+local logDeath   -- writes deaths.log; set with the kill feed below
+
 local function handleKillLine(line)
     local kill = parseKill(line)
-    if kill == nil or kill.killerId == nil or kill.killerId == kill.victimId then return end
-    local key = kill.killerId .. ">" .. tostring(kill.victimId) .. "@" .. (string.match(line, "^([%d%.%-]+)") or line)
+    if kill == nil then return end
+    local stamp = string.match(line, "^([%d%.%-]+)")
+    local key = tostring(kill.killerId) .. ">" .. tostring(kill.victimId) .. "@" .. (stamp or line)
     if recentKillKeys[key] then return end
     recentKillKeys[key] = true
+    pcall(logDeath, kill, stamp)
+    if kill.killerId == nil or kill.killerId == kill.victimId then return end
     pendingKills[#pendingKills + 1] = kill
 end
 
@@ -933,6 +938,36 @@ local function weaponName(weapon)
     weapon = string.gsub(weapon, "^Weapon_", "")
     weapon = string.gsub(weapon, "_C$", "")
     return (string.gsub(weapon, "_", " "))
+end
+
+-- Every death in SCUM's kill log, suicides included, newest last, for the panel's Console page:
+--   2026-10-11 13:01:00 | Alice (76561198000000001) killed Bob (76561198000000002) with AK47, 250 m
+-- Kept to about 512 KB: the older half moves to deaths.old.log.
+local DEATHS_FILE = DIR .. "/deaths.log"
+local DEATHS_MAX_BYTES = 512 * 1024
+
+logDeath = function(kill, stamp)
+    local y, mo, d, h, mi, se = string.match(stamp or "", "^(%d+)%.(%d+)%.(%d+)%-(%d+)%.(%d+)%.(%d+)")
+    local when = y and string.format("%s-%s-%s %s:%s:%s", y, mo, d, h, mi, se) or os.date("!%Y-%m-%d %H:%M:%S")
+    local function who(name, id) return tostring(name or "?") .. (id and " (" .. id .. ")" or "") end
+    local what
+    if kill.killerId ~= nil and kill.killerId == kill.victimId then
+        what = who(kill.victimName, kill.victimId) .. " killed themselves"
+    else
+        what = who(kill.killerName, kill.killerId) .. " killed " .. who(kill.victimName, kill.victimId)
+    end
+    if kill.weapon and kill.weapon ~= "" then what = what .. " with " .. weaponName(kill.weapon) end
+    if kill.distance and kill.killerId ~= kill.victimId then what = what .. string.format(", %.0f m", kill.distance) end
+
+    local file = io.open(DEATHS_FILE, "a")
+    if not file then return end
+    file:write(when .. " | " .. string.gsub(what, "[\r\n]", " ") .. "\n")
+    local size = file:seek("end")
+    file:close()
+    if size and size > DEATHS_MAX_BYTES then
+        os.remove(DIR .. "/deaths.old.log")
+        os.rename(DEATHS_FILE, DIR .. "/deaths.old.log")
+    end
 end
 
 local recentVictims = {}   -- "killer>victim" -> time, to stop streak and bounty farming
@@ -2667,14 +2702,27 @@ local lastTopAnnouncement = nil
 
 -- Who is online and where, for the panel's Overview page. Rewritten every 15 seconds:
 --   # updated <unix time>
---   steamId <tab> name <tab> x <tab> y <tab> z <tab> place <tab> vehicle <tab> admin <tab> online seconds
--- x/y/z are centimetres (empty when unknown); vehicle and admin are 1 or 0.
+--   steamId <tab> name <tab> x <tab> y <tab> z <tab> place <tab> vehicle <tab> admin <tab> online seconds <tab> ping
+-- x/y/z are centimetres (empty when unknown); vehicle and admin are 1 or 0; ping is in ms (empty
+-- when the game does not say).
 local ONLINE_FILE = DIR .. "/online.tsv"
 local ONLINE_EVERY = 15
 local lastOnlineWrite = 0
 
 local function cell(value)
     return (string.gsub(tostring(value or ""), "[\t\r\n]", " "))
+end
+
+-- The player's ping in ms from their PlayerState: Unreal keeps it divided by 4 in "Ping".
+local function pingOf(controller)
+    local value = safe(function()
+        local state = controller.PlayerState
+        if not isValid(state) then return nil end
+        return state.Ping
+    end)
+    value = tonumber(value)
+    if value == nil or value <= 0 then return nil end
+    return math.floor(value * 4 + 0.5)
 end
 
 local function writeOnline(time)
@@ -2695,6 +2743,7 @@ local function writeOnline(time)
             vehicle and "1" or "0",
             isAdmin(session.controller) and "1" or "0",
             string.format("%d", math.max(0, time - (session.since or time))),
+            pingOf(session.controller) or "",
         }
         for index, value in ipairs(fields) do fields[index] = cell(value) end
         lines[#lines + 1] = table.concat(fields, "\t")

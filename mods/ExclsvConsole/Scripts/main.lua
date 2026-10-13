@@ -958,8 +958,59 @@ os.remove(PROCESSING_FILE)
 local ITEM_RESCAN = 30 * 60
 local itemsWritten, itemTries, worldSeenAt, lastItemCheck, lastItemScan = false, 0, nil, nil, nil
 
+-- For the panel's Console page, which can only read whole files: every 5 seconds the end of
+-- SCUM.log goes into server.log (without SCUM's "Global Stats" lines), and status.txt gets
+--   # updated <unix time>
+--   <the newest Global Stats line: server frame times, FPS and counts>
+-- Only files are touched here, never game objects.
+local SERVER_LOG = DIR and (DIR .. "/../../../../../Saved/Logs/SCUM.log") or nil
+local STATUS_FILE = DIR and (DIR .. "/status.txt") or nil
+local SERVER_TAIL_FILE = DIR and (DIR .. "/server.log") or nil
+local STATUS_EVERY, STATUS_READ_BYTES, STATUS_TAIL_LINES = 5, 64 * 1024, 120
+local lastStatus, lastStatsLine, statusFailed = 0, nil, false
+
+local function writeStatus(now)
+    if SERVER_LOG == nil or now - lastStatus < STATUS_EVERY then return end
+    lastStatus = now
+    local log = io.open(SERVER_LOG, "rb")
+    if log == nil then return end
+    local size = log:seek("end") or 0
+    local start = math.max(0, size - STATUS_READ_BYTES)
+    log:seek("set", start)
+    local data = log:read("a") or ""
+    log:close()
+
+    local lines = {}
+    for line in string.gmatch(data, "([^\n]*)\n") do
+        line = string.gsub(line, "\r$", "")
+        if string.find(line, "Global Stats:", 1, true) then
+            lastStatsLine = line
+        elseif string.find(line, "%S") then
+            lines[#lines + 1] = line
+        end
+    end
+    if start > 0 and #lines > 0 then table.remove(lines, 1) end   -- the first line is cut off
+    local first = math.max(1, #lines - STATUS_TAIL_LINES + 1)
+
+    local tail = io.open(SERVER_TAIL_FILE, "w")
+    if tail then
+        tail:write(table.concat(lines, "\n", first, #lines) .. "\n")
+        tail:close()
+    end
+    local status = io.open(STATUS_FILE, "w")
+    if status then
+        status:write(string.format("# updated %d\n%s\n", now, lastStatsLine or ""))
+        status:close()
+    end
+end
+
 every(1000, function()
     local now = os.time()
+    local wrote, statusError = pcall(writeStatus, now)
+    if not wrote and not statusFailed then
+        statusFailed = true
+        output("Writing status.txt failed: " .. tostring(statusError))
+    end
     if itemsWritten and lastItemScan and now - lastItemScan >= ITEM_RESCAN then
         lastItemScan = now
         ExecuteInGameThread(function()

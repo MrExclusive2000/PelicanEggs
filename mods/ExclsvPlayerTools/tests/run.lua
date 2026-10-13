@@ -267,6 +267,7 @@ write(gameLogDir .. "/kill_1.log", '2026.10.11-13.01.00: {"Killer":{"ServerLocat
 step()
 check("kill feed", hud[#hud] == "Alice killed Bob with Weapon AK47 (250 m)" or hud[#hud] == "Alice killed Bob with AK47 (250 m)")
 check("kill counted once", #hud == 1)
+check("death logged once for the Console page", read(dir .. "/deaths.log") == "2026-10-11 13:01:00 | Alice (76561198000000001) killed Bob (76561198000000002) with AK47, 250 m\n")
 check("no errors so far", not has(read(dir .. "/playertools.log"), "failed"))
 private = {}
 chat("76561198000000001", "Alice", "!stats")
@@ -349,15 +350,18 @@ function car:GetClass() return { GetFName = function() return { ToString = funct
 function car:K2_GetActorLocation() return { X = 500000, Y = 600000, Z = 1000 } end
 local bobPawn = bob.pawn
 bob.pawn = car
+alice.PlayerState.IsValid = function() return true end
+alice.PlayerState.Ping = 15   -- Unreal keeps ping / 4
 step(16)
 local online = read(dir .. "/online.tsv")
 local stamped = tonumber(string.match(online, "^# updated (%d+)\n"))
 check("online.tsv stamped within the last 15 s", stamped ~= nil and stamped <= clock and stamped > clock - 15)
 check("online.tsv: player, SteamID and position", has(online, "76561198000000001\tAlice\t123400\t-56700\t8900\t"))
-check("online.tsv: driving player marked, admin marked", string.match(online, "\tBob\t500000\t600000\t1000\t[^\t]*\t1\t1\t%d+\n") ~= nil)
+check("online.tsv: driving player marked, admin marked, no ping when unknown", string.match(online, "\tBob\t500000\t600000\t1000\t[^\t]*\t1\t1\t%d+\t\n") ~= nil)
 check("online.tsv: one line per online player", select(2, string.gsub(online, "\n", "")) == 1 + #players)
-local aliceSeconds = tonumber(string.match(online, "\tAlice\t[^\n]*\t0\t0\t(%d+)\n"))
-check("online.tsv: time online counted", aliceSeconds and aliceSeconds > 60)
+local aliceSeconds, alicePing = string.match(online, "\tAlice\t[^\n]*\t0\t0\t(%d+)\t(%d*)\n")
+check("online.tsv: time online counted", tonumber(aliceSeconds) and tonumber(aliceSeconds) > 60)
+check("online.tsv: ping in ms", alicePing == "60")
 bob.pawn = bobPawn
 
 -- ------------------------------------------------------------------ saving, playtime and reload
@@ -378,6 +382,10 @@ private = {}
 chat("76561198000000001", "Alice", "/online")
 step()
 check("kill feed turned off by reload", #hud == 0)
+check("deaths still logged with the kill feed off", has(read(dir .. "/deaths.log"), "2026-10-11 14:00:00 | Bob (76561198000000002) killed Alice (76561198000000001) with Knife, 1 m\n"))
+write(gameLogDir .. "/kill_1.log", "2026.10.11-14.05.00: Died: Carol (76561198000000003), Killer: Carol (76561198000000003) Weapon: Grenade S[Distance: 0.00 m]\n", "a")
+step()
+check("suicides logged, not counted as kills", has(read(dir .. "/deaths.log"), "2026-10-11 14:05:00 | Carol (76561198000000003) killed themselves with Grenade\n"))
 check("new prefix after reload", has(lastPrivate("Alice"), "3 online: Alice, Bob, Carol"))
 
 -- A broken config keeps working with defaults.

@@ -89,8 +89,13 @@ function LoopInGameThreadWithDelay(delay, callback) loopDelay, loopCallback = de
 -- Run a temp copy of the mod so the real folder is untouched.
 local tmp = os.tmpname()
 os.remove(tmp)
-local dir = tmp .. "/ExclsvConsole"
-os.execute("mkdir -p '" .. dir .. "/Scripts'")
+local dir = tmp .. "/SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole"
+os.execute("mkdir -p '" .. dir .. "/Scripts' '" .. tmp .. "/SCUM/Saved/Logs'")
+-- SCUM.log for status.txt and server.log (read every 5 s for the panel's Console page).
+assert(io.open(tmp .. "/SCUM/Saved/Logs/SCUM.log", "w")):write(
+    "[2026.10.12-13.05.58:100][250]LogSCUM: '1.2.3.4 76561198000000001:Alice(2)' logged in at: X=1 Y=2 Z=3\r\n"
+    .. "[2026.10.12-13.05.59:789][256]LogSCUM: Global Stats:  32.4ms ( 30.8FPS),  38.1ms ( 26.2FPS), 400.0ms (  2.5FPS) | C:   1 (  1), P:   1 (  1), Z:   0 (  0)\r\n"
+    .. "[2026.10.12-13.06.00:000][260]LogSCUM: [Vehicle] Player mounted vehicle\r\n"):close()
 local source = assert(io.open("mods/ExclsvConsole/Scripts/main.lua")):read("a")
 local copy = dir .. "/Scripts/main.lua"
 assert(io.open(copy, "w")):write(source):close()
@@ -122,6 +127,17 @@ check("stale commands.txt removed at startup", not exists("commands.txt"))
 check("stale commands.processing removed at startup", not exists("commands.processing"))
 check("ready message in console.log", string.find(consoleLog(), "[ExclsvConsole] Ready.", 1, true) ~= nil)
 check("ready message printed to UE4SS log", string.find(table.concat(log), "Ready.", 1, true) ~= nil)
+loopCallback()
+local function readFile(file)
+    local handle = io.open(dir .. "/" .. file)
+    if not handle then return "" end
+    local text = handle:read("a")
+    handle:close()
+    return text
+end
+check("status.txt: stamped, with the newest Global Stats line", string.match(readFile("status.txt"), "^# updated %d+\n%[2026%.10%.12%-13%.05%.59:789%].-30%.8FPS.-P:   1 %(  1%), Z:   0 %(  0%)\n$") ~= nil)
+check("server.log: the end of SCUM.log without Global Stats", readFile("server.log")
+    == "[2026.10.12-13.05.58:100][250]LogSCUM: '1.2.3.4 76561198000000001:Alice(2)' logged in at: X=1 Y=2 Z=3\n[2026.10.12-13.06.00:000][260]LogSCUM: [Vehicle] Player mounted vehicle\n")
 
 -- Nothing queued: nothing runs and the loop keeps going.
 check("loop keeps running", loopCallback() == false)

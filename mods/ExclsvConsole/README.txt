@@ -13,6 +13,10 @@ Use:
 
 Output goes to console.log in this folder, shown on the Admin Console page.
 
+For the Console page, every 5 seconds the mod also writes status.txt (SCUM's newest "Global
+Stats" line: server FPS and frame times) and server.log (the end of SCUM.log without those
+lines). It only reads SCUM.log; it never touches game objects for this.
+
 How commands run:
  - Announce <message>, ListPlayers and Kick <name> are handled by the mod itself and work
    with no admin in game.

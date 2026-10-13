@@ -499,7 +499,7 @@ $tsv = "# updated 1000\n76561198000000001\tAlice\t123400\t-56700\t8900\tin secto
     . "garbage line\n";
 $online = OnlinePlayers::parse($tsv, 1030);
 check('online: three players, sorted by name', array_column($online['players'], 'name'), ['Alice', 'bob', 'Newbie']);
-check('online: fields read', $online['players'][1], ['steamId' => '76561198000000002', 'name' => 'bob', 'x' => 500000, 'y' => 600000, 'z' => 1000, 'place' => '', 'vehicle' => true, 'admin' => true, 'seconds' => 75]);
+check('online: fields read', $online['players'][1], ['steamId' => '76561198000000002', 'name' => 'bob', 'x' => 500000, 'y' => 600000, 'z' => 1000, 'place' => '', 'vehicle' => true, 'admin' => true, 'seconds' => 75, 'ping' => null]);
 check('online: fresh within a minute', [$online['fresh'], $online['updated']], [true, 1000]);
 check('online: stale list shows nobody', OnlinePlayers::parse($tsv, 1000 + OnlinePlayers::FRESH_SECONDS + 1)['players'], []);
 check('online: missing file', OnlinePlayers::parse(null, 1000), ['updated' => null, 'fresh' => false, 'players' => []]);
@@ -739,6 +739,24 @@ check('rename: a custom command without the old path is left alone', FolderRenam
 check('rename: old export keys import under the new folders', array_keys(SettingsBundle::parse(json_encode(['format' => 'exclsv-settings', 'version' => 1, 'mods' => ['PlayerTools' => ['enabled' => true], 'ScumAntiCheat' => []]]))['mods']),
     ['ExclsvPlayerTools', 'ExclsvAntiCheat']);
 check('rename: the new key wins when an export has both', FolderRename::renameKeys(['PlayerTools' => ['a' => 1], 'ExclsvPlayerTools' => ['a' => 2]]), ['ExclsvPlayerTools' => ['a' => 2]]);
+
+
+// ---------------------------------------------------------------- ServerStatus (Console page)
+use MrExclusive\ScumManager\Support\ServerStatus;
+use MrExclusive\ScumManager\Support\OnlinePlayers as OnlineList;
+$statusTxt = "# updated 1000\n[2026.10.12-13.05.59:789][256]LogSCUM: Global Stats:  32.4ms ( 30.8FPS),  38.1ms ( 26.2FPS), 400.0ms (  2.5FPS) | C:   5 (  5), P:   2 (  2), Z:   2 (  2)\n";
+$parsed = ServerStatus::parse($statusTxt, 1010);
+check('status: fps, frame times and players', [$parsed['fps'], $parsed['frameMs'], $parsed['slowestMs'], $parsed['players'], $parsed['fresh']], [30.8, 32.4, 400.0, 2, true]);
+check('status: label', ServerStatus::fpsLabel($parsed), ['30.8 FPS (32 ms a frame, slowest 400 ms)', 'success']);
+check('status: old file is not current', ServerStatus::fpsLabel(ServerStatus::parse($statusTxt, 1100)), ['Unknown', 'gray']);
+check('status: struggling server', ServerStatus::fpsLabel(ServerStatus::parse("# updated 1000\nLogSCUM: Global Stats: 199.3ms (  5.0FPS), 216.5ms (  4.6FPS), 400.0ms (  2.5FPS) | C: 0 (0), P:   0 (  0)\n", 1000))[1], 'danger');
+check('status: no stats line yet', ServerStatus::parse("# updated 1000\n\n", 1000)['fps'], null);
+check('status: missing file', ServerStatus::parse(null, 1000)['fresh'], false);
+check('deaths: newest first, blank lines dropped', ServerStatus::deaths("a\nb\n\nc\n", 2), ['c', 'b']);
+check('bytes', [ServerStatus::bytes(512), ServerStatus::bytes(1536), ServerStatus::bytes(3 * 1024 ** 3)], ['512 B', '1.5 KiB', '3.0 GiB']);
+check('uptime from milliseconds', [ServerStatus::uptime(90_000), ServerStatus::uptime(3 * 86400_000 + 7200_000)], ['1 min', '3 d 2 h']);
+$withPing = OnlineList::parse("# updated 1000\n76561198000000001\tAlice\t1\t2\t3\tB2\t0\t0\t60\t48\n76561198000000002\tBob\t1\t2\t3\t\t0\t0\t60\t\n76561198000000003\tCarol\t1\t2\t3\t\t0\t0\t60\n", 1000)['players'];
+check('online: ping in ms, empty or missing (older mod) is null', array_column($withPing, 'ping', 'name'), ['Alice' => 48, 'Bob' => null, 'Carol' => null]);
 
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

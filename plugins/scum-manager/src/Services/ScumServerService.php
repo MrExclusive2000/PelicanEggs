@@ -1522,6 +1522,37 @@ class ScumServerService
         return $log === '' ? '' : implode("\n", array_reverse(explode("\n", $log)));
     }
 
+    /**
+     * Power state and Wings' resource figures (CPU %, memory and uptime), for the Console page.
+     *
+     * @return array{state: string, cpu: float, memory: int, memoryLimit: int, uptime: int}
+     */
+    public function resources(Server $server): array
+    {
+        try {
+            $details = $this->daemon($server)->getDetails();
+        } catch (Throwable $exception) {
+            report($exception);
+            $details = [];
+        }
+
+        return [
+            'state' => (ContainerStatus::tryFrom((string) Arr::get($details, 'state')) ?? ContainerStatus::Missing)->value,
+            'cpu' => (float) Arr::get($details, 'utilization.cpu_absolute', 0),
+            'memory' => (int) Arr::get($details, 'utilization.memory_bytes', 0),
+            'memoryLimit' => (int) Arr::get($details, 'utilization.memory_limit_bytes', 0),
+            'uptime' => (int) Arr::get($details, 'utilization.uptime', 0),
+        ];
+    }
+
+    /** Where ExclsvPlayerTools logs every death (from SCUM's kill log), or null without UE4SS. */
+    public function deathsLogPath(Server $server): ?string
+    {
+        $ue4ss = $this->ue4ss($server);
+
+        return $ue4ss['installed'] ? $ue4ss['mods'] . '/ExclsvPlayerTools/deaths.log' : null;
+    }
+
     /** The end of ExclsvConsole's console.log (command results and mod messages). */
     public function consoleOutput(Server $server, int $lines = 60): string
     {
