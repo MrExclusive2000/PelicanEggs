@@ -141,12 +141,8 @@ function print(text)
     if string.find(text, "Scanning reflection data", 1, true) and not scannedAtTick then scannedAtTick = loopTicks end
 end
 function ForEachUObject() error("the probe must not walk every object") end
--- Real UE4SS: FindAllOf never returns class definitions, only live instances.
--- The census counts live vehicles; nothing else exists in this fake world.
-function FindAllOf(name)
-    if name == "VehicleBase" then return { {}, {}, {} } end
-    return nil
-end
+-- FindAllOf includes objects still loading or being destroyed; the probe must not use it.
+function FindAllOf() error("the census must use FindObjects with the loading/destroyed filter") end
 local findObjectsWorks = true
 local flagFilterWorks = true
 local bannedSeen = {}
@@ -159,7 +155,9 @@ function FindObjects(count, className, objectName, required, banned, exact)
     if className == "Enum" then return enums end
     if className == "ScriptStruct" then return structs end
     if className == "DataTable" then return dataTables end
-    assert(className == "Class")
+    -- The census counts live vehicles; nothing else exists in this fake world.
+    if className == "VehicleBase" then return banned ~= 0 and { {}, {}, {} } or { {}, {}, {}, {} } end
+    if className ~= "Class" then return {} end
     local all = {}
     for _, c in ipairs(nativeClasses) do all[#all + 1] = c end
     for _, c in ipairs(blueprintClasses) do all[#all + 1] = c end
@@ -235,13 +233,14 @@ check("enum values listed", string.find(report, "/Script/ConZ.ESquadMemberRank: 
 check("unrelated enum skipped", string.find(report, "EWeaponSlot", 1, true) == nil)
 check("struct fields listed", string.find(report, "/Script/ConZ.SquadMemberInfo (UserId: StrProperty, Rank: ByteProperty)", 1, true) ~= nil)
 check("data tables listed", string.find(report, "== Data tables ==\n/Game/ConZ/Data/DT_LootSpawners.DT_LootSpawners", 1, true) ~= nil)
-check("census counted", string.find(report, "     3  /Script/ConZ.VehicleBase  [Vehicles]", 1, true) ~= nil)
+check("census off by default", string.find(report, "== Census: off (census = true in probe-settings.lua turns it on) ==", 1, true) ~= nil
+    and string.find(report, "VehicleBase  [Vehicles]", 1, true) == nil)
 check("summary per topic", string.find(report, "Squads: 0 classes, 0 functions, 0 properties, 0 events, 1 enums, 1 structs", 1, true) ~= nil)
 
 local logText = table.concat(log)
 check("FindObjects count logged", string.find(logText, "FindObjects returned 13 classes", 1, true) ~= nil)
 check("summary logged", string.find(logText, "5 matching functions, 4 matching classes", 1, true) ~= nil)
-check("census logged", string.find(logText, "Census done: 3 world objects across 1 classes", 1, true) ~= nil)
+check("census not run by default", string.find(logText, "Census done", 1, true) == nil and string.find(logText, "Counting ", 1, true) == nil)
 check("report path logged", string.find(logText, "probe-output.txt", 1, true) ~= nil)
 
 check("still-loading and destroyed objects left out", bannedSeen[1] == 0x400 | 0x1000 | 0x8000 | 0x10000)
@@ -282,6 +281,20 @@ check("probe.lua whole class listed", string.find(itemReport, "ConZGameMode:Broa
 check("probe.lua native only", string.find(itemReport, "BP_AdminTools", 1, true) == nil)
 check("probe.lua second scan after its minutes", string.find(table.concat(log), "second scan, 1 min later", 1, true) ~= nil
     and string.find(itemReport, "(second scan, 1 min later)", 1, true) ~= nil)
+
+-- Fifth scenario: census = true counts live objects, filtered, each class logged first.
+assert(io.open(tmp .. "/ScumCommandProbe/probe-settings.lua", "w")):write("return { census = true }"):close()
+log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick, flagFilterWorks = {}, 0, 0, 1, nil, true
+dofile(copy)
+local censusReport = assert(io.open(tmp .. "/ScumCommandProbe/probe-output.txt")):read("a")
+check("census counted without loading/destroyed objects", string.find(censusReport, "     3  /Script/ConZ.VehicleBase  [Vehicles]", 1, true) ~= nil)
+check("census logged", string.find(table.concat(log), "Census done: 3 world objects across 1 classes", 1, true) ~= nil)
+check("census names each class before counting", string.find(table.concat(log), "Counting /Script/ConZ.VehicleBase", 1, true) ~= nil)
+-- A UE4SS build that ignores the filter: the census counts nothing rather than search unsafely.
+log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick, flagFilterWorks = {}, 0, 0, 1, nil, false
+dofile(copy)
+check("census never searches unfiltered", string.find(table.concat(log), "Census done: 0 world objects", 1, true) ~= nil)
+flagFilterWorks = true
 
 os.execute("rm -rf '" .. tmp .. "'")
 print = _G.print

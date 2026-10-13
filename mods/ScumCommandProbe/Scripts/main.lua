@@ -106,13 +106,16 @@ end
 
 -- Optional probe-settings.lua in the mod folder (an old probe.lua is ignored on purpose) narrows the search to one topic:
 --   return { title = "...", keywords = { ... }, nativeOnly = true, wholeClasses = { ... },
---            lateScanMinutes = 45 }
+--            lateScanMinutes = 45, census = true }
 -- nativeOnly skips Blueprint (/Game/) classes; wholeClasses lists every function of classes
 -- whose name contains one of these words; lateScanMinutes = 45 scans again 45 minutes later
--- (off by default: the scan briefly freezes the server, which players would notice).
+-- (off by default: the scan briefly freezes the server, which players would notice);
+-- census = true also counts the live world objects of each topic (off by default: counting
+-- touches live objects, which is riskier than reading class definitions).
 local TITLE = "ExclsvProbe report"
 local NATIVE_ONLY = false
 local LATE_SCAN_MINUTES = 0
+local CENSUS = false
 do
     local source = string.gsub(debug.getinfo(1, "S").source or "", "^@", "")
     local dir = string.match(source, "^(.*)[/\\]Scripts[/\\]main%.lua$")
@@ -125,6 +128,7 @@ do
         NATIVE_ONLY = settings.nativeOnly == true
         WHOLE_CLASSES = settings.wholeClasses or WHOLE_CLASSES
         if type(settings.lateScanMinutes) == "number" then LATE_SCAN_MINUTES = settings.lateScanMinutes end
+        CENSUS = settings.census == true
     end
 end
 
@@ -350,10 +354,11 @@ local function unsafeFlags()
 end
 
 -- Every object of a type (non-exact, so subclasses count too), searched on the C++ side.
-local function findAll(className)
+-- filteredOnly: never fall back to a search that includes loading/destroyed objects.
+local function findAll(className, filteredOnly)
     local noFlags = (type(EObjectFlags) == "table" and EObjectFlags.RF_NoFlags) or 0
     local found = safe(function() return FindObjects(0, className, nil, noFlags, unsafeFlags(), false) end)
-    if type(found) ~= "table" or next(found) == nil then
+    if not filteredOnly and (type(found) ~= "table" or next(found) == nil) then
         -- Some UE4SS builds may not take the flag filter; then search without it.
         found = safe(function() return FindObjects(0, className, nil, noFlags, noFlags, false) end)
         if type(found) == "table" and next(found) ~= nil then
@@ -411,7 +416,9 @@ local function render(report, pass)
     section("== Data tables ==", report.dataTables)
 
     lines[#lines + 1] = ""
-    if report.censusDone then
+    if not CENSUS then
+        lines[#lines + 1] = "== Census: off (census = true in probe-settings.lua turns it on) =="
+    elseif report.censusDone then
         lines[#lines + 1] = "== Census (live objects right now; a count of 1 can be the class template) =="
         table.sort(report.census, function(a, b) return a.count > b.count or (a.count == b.count and a.path < b.path) end)
         for _, row in ipairs(report.census) do
@@ -445,8 +452,11 @@ end
 
 -- Counts the live objects of the matched world classes, a few per second so the server does
 -- not stall, then writes the report again with the census. Only the number of objects is
--- read; none of them is touched.
+-- read; none of them is touched. Objects still loading or being destroyed are left out (the
+-- old FindAllOf count included them, which could crash the server), and each class is named
+-- in UE4SS.log before it is counted so a crash can be traced to it.
 local function runCensus(report, pass)
+    if not CENSUS then return end
     local list = report.censusList
     local nextIndex = 1
     local queued = false
@@ -477,8 +487,8 @@ local function runCensus(report, pass)
                     if entry == nil then break end
                     nextIndex = nextIndex + 1
                     progress = "census " .. entry.path
-                    local found = safe(function() return FindAllOf(entry.name) end)
-                    local count = type(found) == "table" and #found or 0
+                    print(TAG .. "Counting " .. entry.path .. "\n")
+                    local count = #findAll(entry.name, true)
                     if count > 0 then
                         table.insert(report.census, { path = entry.path, topic = entry.topic, count = count })
                     end
