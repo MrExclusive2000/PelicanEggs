@@ -8,6 +8,7 @@ namespace MrExclusive\ScumManager\Support;
  *   - PlayerTools' online.tsv (who is on now, and where)
  *   - SCUM's player lists (AdminUsers.ini, BannedUsers.ini, WhitelistedUsers.ini, ...)
  *   - ScumAntiCheat's offenses.txt (how often the anti-cheat kicked them)
+ *   - SCUM's save database (bank balances, fame, squad, alive; see SaveDatabase::players())
  */
 final class PlayerDirectory
 {
@@ -27,14 +28,14 @@ final class PlayerDirectory
      * @return array<string, array{steamId: string, name: string, kills: int, deaths: int, playtime: int, longest: int, bounty: int, first: int, lastSeen: int, online: bool, where: string, vehicle: bool, kicks: int, flags: array<string, bool>}>
      *         keyed by SteamID, most recently seen first
      */
-    public static function build(?string $playersTsv, array $online, array $lists, ?string $offenses): array
+    public static function build(?string $playersTsv, array $online, array $lists, ?string $offenses, array $save = []): array
     {
         $players = [];
         $player = function (string $id) use (&$players) {
             return $players[$id] ??= [
                 'steamId' => $id, 'name' => '', 'kills' => 0, 'deaths' => 0, 'playtime' => 0, 'longest' => 0,
                 'bounty' => 0, 'first' => 0, 'lastSeen' => 0, 'online' => false, 'where' => '', 'vehicle' => false,
-                'kicks' => 0, 'flags' => array_fill_keys(array_values(self::LISTS), false),
+                'kicks' => 0, 'flags' => array_fill_keys(array_values(self::LISTS), false), 'save' => null,
             ];
         };
 
@@ -85,6 +86,17 @@ final class PlayerDirectory
                 $entry['kicks'] = (int) $match[2];
                 $players[$match[1]] = $entry;
             }
+        }
+
+        foreach ($save as $steamId => $saved) {
+            $steamId = (string) $steamId;
+            if (!self::isSteamId($steamId)) {
+                continue;
+            }
+            $entry = $player($steamId);
+            $entry['name'] = $entry['name'] !== '' ? $entry['name'] : (string) ($saved['name'] ?? '');
+            $entry['save'] = $saved;
+            $players[$steamId] = $entry;
         }
 
         uasort($players, fn (array $a, array $b) => [$b['online'], $b['lastSeen'], $a['name']] <=> [$a['online'], $a['lastSeen'], $b['name']]);

@@ -20,6 +20,7 @@ use MrExclusive\ScumManager\Support\ModList;
 use MrExclusive\ScumManager\Support\ModManifest;
 use MrExclusive\ScumManager\Support\OnlinePlayers;
 use MrExclusive\ScumManager\Support\PlayerDirectory;
+use MrExclusive\ScumManager\Support\SaveDatabase;
 use Throwable;
 use MrExclusive\ScumManager\Support\Ue4ssSettings;
 use RuntimeException;
@@ -970,6 +971,45 @@ class ScumServerService
         return "$dir/SCUM.db";
     }
 
+    /**
+     * Balances, fame, squads, stats and inventories from SCUM's save database, read from a copy
+     * and cached for five minutes (a failed read is remembered for two).
+     *
+     * @return array{players: array<string, array>, inventories: array<string, list<array>>, readAt: ?int, error: ?string}
+     */
+    public function saveData(Server $server, bool $fresh = false): array
+    {
+        $key = "scum-manager:save-data:$server->uuid";
+        if (!$fresh && is_array($cached = Cache::get($key))) {
+            return $cached;
+        }
+
+        $copy = null;
+        try {
+            $copy = $this->copySaveDatabase($server);
+            $save = new SaveDatabase($copy);
+            $players = $save->players();
+            $inventories = [];
+            foreach (array_slice($players, 0, 500, true) as $steamId => $player) {
+                if ($player['prisonerId'] !== null) {
+                    $inventories[(string) $steamId] = $save->inventory($player['prisonerId']);
+                }
+            }
+            $data = ['players' => $players, 'inventories' => $inventories, 'readAt' => time(), 'error' => null];
+            Cache::put($key, $data, 300);
+        } catch (Throwable $exception) {
+            report($exception);
+            $data = ['players' => [], 'inventories' => [], 'readAt' => null, 'error' => $exception->getMessage()];
+            Cache::put($key, $data, 120);
+        } finally {
+            if ($copy !== null) {
+                $this->removeSaveDatabaseCopy($copy);
+            }
+        }
+
+        return $data;
+    }
+
     public function removeSaveDatabaseCopy(string $path): void
     {
         $dir = dirname($path);
@@ -998,6 +1038,7 @@ class ScumServerService
             $this->onlinePlayers($server)['players'],
             $lists,
             $mods === null ? null : $this->read($server, "$mods/ScumAntiCheat/offenses.txt"),
+            $this->saveData($server)['players'],
         );
     }
 

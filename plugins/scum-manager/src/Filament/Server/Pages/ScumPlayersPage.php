@@ -9,6 +9,7 @@ use Exception;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
@@ -17,6 +18,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Support\HtmlString;
 use Livewire\Attributes\Locked;
 use MrExclusive\ScumManager\Filament\Server\Concerns\RunsPlayerCommands;
 use MrExclusive\ScumManager\Services\ScumServerService;
@@ -108,8 +110,9 @@ class ScumPlayersPage extends Page implements HasTable
         return $table
             ->records(function (?string $search, ?string $sortColumn, ?string $sortDirection) {
                 $players = PlayerDirectory::search(app(ScumServerService::class)->playerDirectory($this->getServer()), $search);
-                if (in_array($sortColumn, ['kills', 'deaths', 'playtime', 'lastSeen', 'kicks', 'bounty'], true)) {
-                    uasort($players, fn (array $a, array $b) => $sortDirection === 'asc' ? $a[$sortColumn] <=> $b[$sortColumn] : $b[$sortColumn] <=> $a[$sortColumn]);
+                $value = fn (array $p) => in_array($sortColumn, ['cash', 'gold', 'fame'], true) ? ($p['save'][$sortColumn] ?? -INF) : ($p[$sortColumn] ?? 0);
+                if (in_array($sortColumn, ['kills', 'deaths', 'playtime', 'lastSeen', 'kicks', 'bounty', 'cash', 'gold', 'fame'], true)) {
+                    uasort($players, fn (array $a, array $b) => $sortDirection === 'asc' ? $value($a) <=> $value($b) : $value($b) <=> $value($a));
                 }
 
                 return $players;
@@ -118,7 +121,7 @@ class ScumPlayersPage extends Page implements HasTable
             ->paginated(false)
             ->poll('30s')
             ->heading('Everyone who has played, or is on one of your lists')
-            ->description('Stats come from ' . Brand::mod('PlayerTools') . ', bans and admins from SCUM\'s player lists, kicks from ' . Brand::mod('ScumAntiCheat') . '. Online players first.')
+            ->description(fn () => $this->saveSummary())
             ->emptyStateHeading('No players yet')
             ->emptyStateDescription(Brand::mod('PlayerTools') . ' records everyone who joins.')
             ->columns([
@@ -142,6 +145,22 @@ class ScumPlayersPage extends Page implements HasTable
                         ? $record['where']
                         : ($record['lastSeen'] > 0 ? OnlinePlayers::duration(max(0, time() - $record['lastSeen'])) . ' ago' : 'never seen by ' . Brand::mod('PlayerTools')))
                     ->wrap(),
+                TextColumn::make('cash')->label('Cash')->sortable()
+                    ->state(fn (array $record) => $record['save']['cash'] ?? null)
+                    ->numeric()
+                    ->placeholder('-')
+                    ->tooltip('Bank balance from the save (updates when SCUM saves)'),
+                TextColumn::make('gold')->label('Gold')->sortable()
+                    ->state(fn (array $record) => $record['save']['gold'] ?? null)
+                    ->numeric()
+                    ->placeholder('-'),
+                TextColumn::make('fame')->label('Fame')->sortable()
+                    ->state(fn (array $record) => $record['save']['fame'] ?? null)
+                    ->placeholder('-'),
+                TextColumn::make('squad')->label('Squad')
+                    ->state(fn (array $record) => ($record['save']['squad'] ?? '') !== '' ? $record['save']['squad'] . ' (' . $record['save']['squadRank'] . ')' : null)
+                    ->placeholder('-')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('kills')->label('Kills')->sortable()->numeric(),
                 TextColumn::make('deaths')->label('Deaths')->sortable()->numeric(),
                 TextColumn::make('kd')->label('K/D')
@@ -156,6 +175,18 @@ class ScumPlayersPage extends Page implements HasTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->recordActions([
+                Action::make('details')
+                    ->label('Details')
+                    ->icon('tabler-id')
+                    ->color('gray')
+                    ->modalHeading(fn (array $record) => ($record['name'] ?: $record['steamId']) . ' (' . $record['steamId'] . ')')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Close')
+                    ->schema(fn (array $record) => [
+                        TextEntry::make('details')
+                            ->hiddenLabel()
+                            ->state(fn () => new HtmlString($this->detailsHtml($record))),
+                    ]),
                 Action::make('command')
                     ->label('Run a command')
                     ->icon('tabler-player-play')
@@ -189,6 +220,17 @@ class ScumPlayersPage extends Page implements HasTable
                 ])->tooltip('Lists'),
             ])
             ->headerActions([
+                Action::make('reload_save')
+                    ->label('Reload save data')
+                    ->icon('tabler-refresh')
+                    ->color('gray')
+                    ->authorize(fn () => user()?->can(SubuserPermission::FileReadContent, $this->getServer()))
+                    ->action(function (ScumServerService $service) {
+                        $data = $service->saveData($this->getServer(), fresh: true);
+                        $data['error'] === null
+                            ? Notification::make()->title('Save data reloaded')->body(count($data['players']) . ' players in the save.')->success()->send()
+                            : Notification::make()->title('Could not read the save')->body($data['error'])->danger()->send();
+                    }),
                 Action::make('scan_db')
                     ->label('Scan save database')
                     ->icon('tabler-database-search')
@@ -226,6 +268,58 @@ class ScumPlayersPage extends Page implements HasTable
         }
 
         return response()->streamDownload(fn () => print($report), 'scum-db-schema-' . now()->format('Y-m-d') . '.txt', ['Content-Type' => 'text/plain']);
+    }
+
+    private function saveSummary(): string
+    {
+        $data = app(ScumServerService::class)->saveData($this->getServer());
+        $parts = ['Stats from ' . Brand::mod('PlayerTools') . ', bans and admins from SCUM\'s player lists, kicks from ' . Brand::mod('ScumAntiCheat') . '.'];
+        $parts[] = $data['error'] !== null
+            ? 'Money, fame and inventories could not be read from the save: ' . $data['error']
+            : 'Money, fame and inventories from SCUM\'s save, read ' . OnlinePlayers::duration(max(0, time() - (int) $data['readAt'])) . ' ago (SCUM saves every few minutes).';
+
+        return implode(' ', $parts);
+    }
+
+    private function detailsHtml(array $record): string
+    {
+        $save = $record['save'];
+        $data = app(ScumServerService::class)->saveData($this->getServer());
+        $rows = [];
+        $row = fn (string $label, string $value) => '<tr><th style="text-align:left;padding:.2rem 1rem .2rem 0;font-weight:600;vertical-align:top;">' . e($label) . '</th><td style="padding:.2rem 0;">' . e($value) . '</td></tr>';
+
+        if ($save === null) {
+            $rows[] = $row('Save', $data['error'] !== null ? 'Not readable: ' . $data['error'] : 'Not in the save yet (SCUM writes new players on its next save).');
+        } else {
+            $rows[] = $row('Bank', number_format((int) ($save['cash'] ?? 0)) . ' cash, ' . number_format((int) ($save['gold'] ?? 0)) . ' gold');
+            $rows[] = $row('Fame', (string) $save['fame']);
+            $rows[] = $row('Squad', $save['squad'] !== '' ? $save['squad'] . ' (' . $save['squadRank'] . ')' : 'none');
+            $rows[] = $row('Character', $save['alive'] === null ? 'unknown' : ($save['alive'] ? 'alive' : 'dead'));
+            $stats = $save['stats'];
+            if ($stats !== []) {
+                $fired = (int) ($stats['shots_fired'] ?? 0);
+                $hit = (int) ($stats['shots_hit'] ?? 0);
+                $kills = (int) ($stats['kills'] ?? 0);
+                $rows[] = $row('Lifetime (SCUM)', sprintf('%d kills (%d players), %d deaths, longest kill %d m, %s survived',
+                    $kills, (int) ($stats['prisoner_kills'] ?? 0), (int) ($stats['deaths'] ?? 0), (int) ($stats['longest_kill_distance'] ?? 0),
+                    OnlinePlayers::duration((int) round(((float) ($stats['minutes_survived'] ?? 0)) * 60))));
+                $rows[] = $row('Shooting', $fired > 0
+                    ? sprintf('%d shots, %d%% hit, %d headshots', $fired, (int) round(100 * $hit / $fired), (int) ($stats['headshots'] ?? 0))
+                    : 'no shots recorded');
+            }
+        }
+        $rows[] = $row('Anti-cheat kicks', (string) $record['kicks']);
+
+        $items = $data['inventories'][(string) $record['steamId']] ?? [];
+        $list = $items === []
+            ? '<p style="opacity:.7;">' . ($save === null ? 'No inventory data.' : 'Nothing found on the character (or the save does not link items this way: tell us if this looks wrong).') . '</p>'
+            : '<ul style="margin:0;padding-left:1rem;">' . implode('', array_map(
+                fn (array $item) => '<li style="padding-left:' . (max(0, $item['depth'] - 1) * 1) . 'rem;">' . e($item['item']) . ($item['quantity'] !== null ? ' &times; ' . (int) $item['quantity'] : '') . '</li>',
+                $items,
+            )) . '</ul>';
+
+        return '<table style="font-size:.875rem;border-collapse:collapse;margin-bottom:1rem;">' . implode('', $rows) . '</table>'
+            . '<p style="font-weight:600;margin:.5rem 0;">Carrying (experimental, from the last save)</p>' . $list;
     }
 
     /** @return list<string> */

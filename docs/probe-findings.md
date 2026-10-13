@@ -41,3 +41,21 @@ what our mods can do is listed.
 - `GameModeBase:K2_PostLogin / K2_OnLogout` (Blueprint events): join and leave hooks.
 - `Prisoner:IsMemberOfMySquad(Prisoner)`, `ConZGameState:GetSquadForPrisoner`: squad-aware checks.
 - `GlobalRaidProtectionManager` multicasts: raid start and end announcements already exist in game.
+
+## The save database (SCUM/Saved/SaveFiles/SCUM.db, SQLite)
+
+From a schema scan on 2026-10-12. The panel reads a copy (never the live file) for the Players page.
+
+| What | Where |
+| --- | --- |
+| SteamID, name, fame, profile money, playtime | `user_profile` (`user_id` is the SteamID64; `prisoner_id` links the character) |
+| Bank balances | `bank_account_registry_currencies.account_balance` by `currency_type` (1 cash, 2 gold), joined on `bank_account_id = bank_account_registry.id`, owner `account_owner_user_profile_id` |
+| Squads | `squad`, `squad_member` (`rank`: 0 None, 1 Member, 2 Enforcer, 3 Underboss, 4 Boss) |
+| Lifetime stats | `survival_stats` (kills, deaths, shots fired and hit, headshots, longest kill, ...) |
+| Inventory | `prisoner_entity` gives the character entity; carried items are the `entity` rows below it by `parent_entity_id`; stack sizes in `discrete_amount_entity_component` via `entity_component` |
+| Vehicles | `vehicle_spawner`, `vehicle_entity` |
+| Bases and flags | `base`, `base_element`, `base_element_flag` |
+
+Writing: SCUM keeps this data in memory while running and saves over the file, so changes are
+only possible while the server is stopped (with a backup first). That makes "pay owed money at
+the daily restart" possible: stop, add to `account_balance`, start.

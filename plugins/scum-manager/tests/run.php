@@ -563,5 +563,57 @@ file_put_contents($dbFile, 'not a database');
 throws('db: refuses a broken copy', fn () => new SaveDatabase($dbFile), 'not an SQLite database');
 @unlink($dbFile);
 
+// ---------------------------------------------------------------- save database: players and inventories
+$saveFile = sys_get_temp_dir() . '/exclsv-save-' . getmypid() . '.db';
+@unlink($saveFile);
+$pdo = new PDO('sqlite:' . $saveFile);
+$pdo->exec(<<<'SQL'
+CREATE TABLE user (id TEXT PRIMARY KEY, name TEXT);
+CREATE TABLE user_profile (id INTEGER PRIMARY KEY, user_id TEXT, name TEXT, fame_points REAL, money_balance INTEGER, play_time INTEGER, prisoner_id INTEGER);
+CREATE TABLE bank_account_registry (id INTEGER PRIMARY KEY, map_id INTEGER, user_profile_id INTEGER, account_owner_user_profile_id INTEGER, bank_account_number INTEGER);
+CREATE TABLE bank_account_registry_currencies (id INTEGER PRIMARY KEY, bank_account_id INTEGER, currency_type INTEGER, account_balance INTEGER);
+CREATE TABLE squad (id INTEGER PRIMARY KEY, name TEXT);
+CREATE TABLE squad_member (id INTEGER PRIMARY KEY, squad_id INTEGER, user_profile_id INTEGER, rank INTEGER);
+CREATE TABLE prisoner (id INTEGER PRIMARY KEY, user_profile_id INTEGER, is_alive INTEGER);
+CREATE TABLE survival_stats (user_profile_id INTEGER PRIMARY KEY, kills INTEGER, deaths INTEGER, prisoner_kills INTEGER, headshots INTEGER, shots_fired INTEGER, shots_hit INTEGER,
+    longest_kill_distance REAL, minutes_survived REAL, puppets_killed INTEGER, animals_killed INTEGER, locks_picked INTEGER, containers_looted INTEGER);
+CREATE TABLE prisoner_entity (entity_id INTEGER PRIMARY KEY, prisoner_id INTEGER);
+CREATE TABLE entity (id INTEGER PRIMARY KEY, class TEXT, owning_entity_id INTEGER, parent_entity_id INTEGER);
+CREATE TABLE entity_component (id INTEGER PRIMARY KEY, entity_id INTEGER, name TEXT);
+CREATE TABLE discrete_amount_entity_component (entity_component_id INTEGER PRIMARY KEY, quantity INTEGER);
+INSERT INTO user_profile VALUES (1, 'server', 'Server', 0, 0, 0, NULL), (2, '76561198000000001', 'Alice', 120.6, 50, 7200, 10), (3, '76561198000000002', 'Bob', -5, 0, 60, 11);
+INSERT INTO bank_account_registry VALUES (100, 1, 1, 2, 555), (101, 1, 1, 3, 556);
+INSERT INTO bank_account_registry_currencies VALUES (1, 100, 1, 15000), (2, 100, 2, 3), (3, 101, 1, 200), (4, 101, 2, 0);
+INSERT INTO squad VALUES (7, 'Exclsv Crew');
+INSERT INTO squad_member VALUES (1, 7, 2, 4);
+INSERT INTO prisoner VALUES (10, 2, 1), (11, 3, 0);
+INSERT INTO survival_stats VALUES (2, 12, 3, 9, 4, 400, 120, 312.5, 900, 50, 3, 2, 40);
+INSERT INTO prisoner_entity VALUES (1000, 10);
+INSERT INTO entity VALUES (1000, 'BP_Prisoner_C', NULL, NULL), (1001, 'BP_Backpack_01_C', NULL, 1000), (1002, 'BP_Weapon_AK47_C', NULL, 1000),
+    (1003, 'Water_05l_C', NULL, 1001), (1004, 'BP_Cal_762x39_Ammobox_C', NULL, 1001), (2000, 'BP_Weapon_M9_C', NULL, NULL);
+INSERT INTO entity_component VALUES (1, 1004, 'stack');
+INSERT INTO discrete_amount_entity_component VALUES (1, 30);
+SQL);
+$pdo = null;
+$save = new SaveDatabase($saveFile);
+$savePlayers = $save->players();
+check('save: players by SteamID, server profile left out', array_column(array_values($savePlayers), 'steamId'), ['76561198000000001', '76561198000000002']);
+$alice = $savePlayers['76561198000000001'];
+check('save: bank cash and gold, fame, profile money', [$alice['cash'], $alice['gold'], $alice['fame'], $alice['profileMoney']], [15000, 3, 120.6, 50]);
+check('save: squad and rank', [$alice['squad'], $alice['squadRank'], $savePlayers['76561198000000002']['squad']], ['Exclsv Crew', 'Boss', '']);
+check('save: alive', [$alice['alive'], $savePlayers['76561198000000002']['alive']], [true, false]);
+check('save: survival stats', [$alice['stats']['shots_fired'], $alice['stats']['shots_hit'], $alice['stats']['headshots'], $alice['stats']['longest_kill_distance']], [400, 120, 4, 312.5]);
+check('save: no stats row, empty stats', $savePlayers['76561198000000002']['stats'], []);
+$inventory = $save->inventory(10);
+check('save: inventory follows the character tree', array_column($inventory, 'item'), ['Backpack 01', 'Weapon AK47', 'Cal 762x39 Ammobox', 'Water 05l']);
+check('save: stack sizes', array_column($inventory, 'quantity'), [null, null, 30, null]);
+check('save: items not carried are left out', in_array('Weapon M9', array_column($inventory, 'item'), true), false);
+check('save: no character, no items', $save->inventory(11), []);
+check('save: item names', [SaveDatabase::itemName('BP_Weapon_AK47_C'), SaveDatabase::itemName('BPC_Dirtbike_C'), SaveDatabase::itemName('Water_05l_C')], ['Weapon AK47', 'Dirtbike', 'Water 05l']);
+$merged = PlayerDirectory::build("76561198000000001\tAlice\t1\t0\t60\t0\t\t1\t0\t\t0\t0\t0\t5\n", [], [], null, $savePlayers);
+check('directory: save data merged, save-only players added', [$merged['76561198000000001']['save']['cash'], $merged['76561198000000002']['name'], $merged['76561198000000002']['save']['alive']], [15000, 'Bob', false]);
+check('directory: no save data, save is null', PlayerDirectory::build("76561198000000001\tAlice\n", [], [], null)['76561198000000001']['save'], null);
+@unlink($saveFile);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

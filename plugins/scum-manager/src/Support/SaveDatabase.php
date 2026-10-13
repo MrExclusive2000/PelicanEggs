@@ -56,6 +56,135 @@ final class SaveDatabase
         return $tables;
     }
 
+    /** SCUM's ECurrencyType (from the game): 1 Normal (cash), 2 Gold. */
+    private const CASH = 1;
+
+    private const GOLD = 2;
+
+    /** SCUM's EConZSquadMemberRank (from the game). */
+    public const SQUAD_RANKS = [0 => 'None', 1 => 'Member', 2 => 'Enforcer', 3 => 'Underboss', 4 => 'Boss'];
+
+    /**
+     * What the save knows about each player, keyed by SteamID64.
+     *
+     * @return array<string, array{steamId: string, name: string, profileId: int, prisonerId: ?int, fame: float, profileMoney: int, cash: ?int, gold: ?int, playtime: int, alive: ?bool, squad: string, squadRank: string, stats: array<string, float|int>}>
+     */
+    public function players(): array
+    {
+        $players = [];
+        $byProfile = [];
+        $rows = $this->rows('SELECT up.id, up.user_id, up.name, up.fame_points, up.money_balance, up.play_time, up.prisoner_id FROM user_profile up');
+        foreach ($rows as $row) {
+            $steamId = (string) $row['user_id'];
+            if (!preg_match('/^7656\d{13}$/', $steamId)) {
+                continue; // the server's own profile and non-Steam entries
+            }
+            $players[$steamId] = [
+                'steamId' => $steamId,
+                'name' => (string) $row['name'],
+                'profileId' => (int) $row['id'],
+                'prisonerId' => $row['prisoner_id'] !== null ? (int) $row['prisoner_id'] : null,
+                'fame' => round((float) $row['fame_points'], 1),
+                'profileMoney' => (int) $row['money_balance'],
+                'cash' => null,
+                'gold' => null,
+                'playtime' => (int) $row['play_time'],
+                'alive' => null,
+                'squad' => '',
+                'squadRank' => '',
+                'stats' => [],
+            ];
+            $byProfile[(int) $row['id']] = $steamId;
+        }
+
+        $bank = $this->rows('SELECT r.account_owner_user_profile_id AS profile, c.currency_type AS type, SUM(c.account_balance) AS balance
+            FROM bank_account_registry r JOIN bank_account_registry_currencies c ON c.bank_account_id = r.id
+            GROUP BY r.account_owner_user_profile_id, c.currency_type');
+        foreach ($bank as $row) {
+            $steamId = $byProfile[(int) $row['profile']] ?? null;
+            if ($steamId !== null && (int) $row['type'] === self::CASH) {
+                $players[$steamId]['cash'] = (int) $row['balance'];
+            } elseif ($steamId !== null && (int) $row['type'] === self::GOLD) {
+                $players[$steamId]['gold'] = (int) $row['balance'];
+            }
+        }
+
+        foreach ($this->rows('SELECT sm.user_profile_id AS profile, sm.rank, s.name FROM squad_member sm JOIN squad s ON s.id = sm.squad_id') as $row) {
+            if ($steamId = $byProfile[(int) $row['profile']] ?? null) {
+                $players[$steamId]['squad'] = (string) $row['name'];
+                $players[$steamId]['squadRank'] = self::SQUAD_RANKS[(int) $row['rank']] ?? '';
+            }
+        }
+
+        foreach ($this->rows('SELECT id, is_alive FROM prisoner') as $row) {
+            foreach ($players as $steamId => $player) {
+                if ($player['prisonerId'] === (int) $row['id']) {
+                    $players[$steamId]['alive'] = (bool) $row['is_alive'];
+                }
+            }
+        }
+
+        $stats = $this->rows('SELECT user_profile_id AS profile, kills, deaths, prisoner_kills, headshots, shots_fired, shots_hit,
+            longest_kill_distance, minutes_survived, puppets_killed, animals_killed, locks_picked, containers_looted FROM survival_stats');
+        foreach ($stats as $row) {
+            if ($steamId = $byProfile[(int) $row['profile']] ?? null) {
+                unset($row['profile']);
+                $players[$steamId]['stats'] = array_map(fn ($value) => is_numeric($value) ? $value + 0 : 0, $row);
+            }
+        }
+
+        return $players;
+    }
+
+    /**
+     * What a player's character carries: every entity below their prisoner entity, with stack
+     * sizes where the save has them. Experimental: follows parent_entity_id.
+     *
+     * @return list<array{item: string, class: string, quantity: ?int, depth: int}>
+     */
+    public function inventory(int $prisonerId, int $limit = 300): array
+    {
+        $rows = $this->rows('WITH RECURSIVE tree(id, depth) AS (
+                SELECT entity_id, 0 FROM prisoner_entity WHERE prisoner_id = :prisoner
+                UNION ALL
+                SELECT e.id, t.depth + 1 FROM entity e JOIN tree t ON e.parent_entity_id = t.id WHERE t.depth < 8
+            )
+            SELECT e.class, t.depth,
+                (SELECT SUM(d.quantity) FROM entity_component ec JOIN discrete_amount_entity_component d ON d.entity_component_id = ec.id WHERE ec.entity_id = e.id) AS quantity
+            FROM tree t JOIN entity e ON e.id = t.id
+            WHERE t.depth > 0
+            ORDER BY t.depth, e.class
+            LIMIT ' . max(1, $limit), ['prisoner' => $prisonerId]);
+
+        return array_map(fn (array $row) => [
+            'item' => self::itemName((string) $row['class']),
+            'class' => (string) $row['class'],
+            'quantity' => $row['quantity'] !== null ? (int) $row['quantity'] : null,
+            'depth' => (int) $row['depth'],
+        ], $rows);
+    }
+
+    /** "BP_Weapon_AK47_C" -> "Weapon AK47" */
+    public static function itemName(string $class): string
+    {
+        $name = preg_replace(['/^(BPC?|BP_Item)_/', '/_C$/'], '', $class);
+
+        return trim(str_replace('_', ' ', (string) $name)) ?: $class;
+    }
+
+    /** @return list<array<string, mixed>> rows, or none when a table SCUM no longer has is asked for */
+    private function rows(string $sql, array $params = []): array
+    {
+        try {
+            $statement = $this->pdo->prepare($sql);
+            $statement->execute($params);
+
+            return $statement->fetchAll();
+        } catch (\PDOException) {
+            return [];
+        }
+    }
+
     /**
      * A plain-text report of the schema: table names, column names and types, row counts.
      * No row contents, so it holds no player data and can be shared.
