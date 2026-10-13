@@ -28,7 +28,7 @@ final class WorldMap
         'player' => '#16a34a',
         'base' => '#d97706',
         'warning' => '#dc2626',
-        'outpost' => '#2563eb',
+        'outpost' => '#3b82f6',
     ];
 
     /** "B2", or null outside the map. */
@@ -75,6 +75,8 @@ final class WorldMap
         $cell = $size / 5;
 
         $out = [sprintf('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %1$d %1$d" width="100%%" style="max-width:%1$dpx;display:block;margin:0 auto;font-family:ui-sans-serif,system-ui,sans-serif;" role="img" aria-label="Live map">', $size)];
+        // Labels get a dark outline so they read on a map picture as well as on the plain grid.
+        $out[] = '<style>text{paint-order:stroke;stroke:rgba(0,0,0,0.75);stroke-width:3px;stroke-linejoin:round;}</style>';
         $out[] = sprintf('<rect x="0" y="0" width="%1$d" height="%1$d" fill="rgba(127,127,127,0.06)" stroke="rgba(127,127,127,0.5)"/>', $size);
         if ($background !== null) {
             $out[] = sprintf('<image href="%1$s" x="0" y="0" width="%2$d" height="%2$d" preserveAspectRatio="none"/>', htmlspecialchars($background, ENT_QUOTES), $size);

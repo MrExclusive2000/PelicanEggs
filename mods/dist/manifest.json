@@ -1,6 +1,6 @@
 {
   "format": "exclsv-mods",
-  "manager": "1.24.0",
+  "manager": "1.24.1",
   "mods": {
     "PelicanConsole": { "file": "PelicanConsole.zip", "build": "e96807db3313", "sha256": "5bf96e1d479fcae09ca242be0331dfcd2225c2398dbf26a1a0cfe037224188a4", "bytes": 12965 },
     "PlayerTools": { "file": "PlayerTools.zip", "build": "b4930a511bc4", "sha256": "b982db20a5cc7497c3c86d2b0d9ab7252530d00fc6268327065c914271ba1fc4", "bytes": 33481 },
