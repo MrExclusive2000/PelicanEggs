@@ -1,6 +1,6 @@
 # ExclsvSCUM Manager (Pelican plugin, id scum-manager)
 
-Adds five pages to SCUM servers in the Pelican client area:
+Adds these pages to SCUM servers in the Pelican client area:
 
 | Page | What it does |
 |------|--------------|
@@ -9,6 +9,7 @@ Adds five pages to SCUM servers in the Pelican client area:
 | **SCUM Player Lists** | Admins, settings admins, whitelist, exclusive, banned and silenced players |
 | **SCUM Mods** | Installs or updates UE4SS and our mods, uploads mods, and turns them on/off or deletes them |
 | **ExclsvSCUM Mod Settings** | Settings for our mods (with Export / Import of everything in one file): player tools (chat commands, kill feed, stats, AFK, voting, starter kit, rewards, bounties, teleports, manhunt, King of the Hill...), messages and restart warnings, anti-cheat. Item fields are searchable dropdowns of the server's items |
+| **Help & guide** | How to set up and use the plugin and our mods: first-time setup, what each page is for, everyday tasks, updating, player chat commands, money and the no-admin route, the anti-cheat, troubleshooting and where the files are |
 
 The pages only appear on SCUM servers: eggs with the `scum_manager` feature or `scum` tag, or any server whose startup command runs `SCUMServer.exe`.
 

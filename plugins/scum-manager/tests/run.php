@@ -689,5 +689,34 @@ check('defaults capture: only the egg keys are left in place', MrExclusive\ScumM
     ['General' => ['scum.ServerName' => '{{x}}', 'scum.ServerPassword' => '{{y}}', 'scum.ServerPlaystyle' => '{{z}}']],
 ), "[General]\nscum.ServerName=Exclsv\nscum.ServerPassword=secret\n");
 
+
+// ---------------------------------------------------------------- Guide
+use MrExclusive\ScumManager\Support\Guide;
+$topics = Guide::topics();
+$ids = array_column($topics, 'id');
+check('guide: topic ids are unique', count($ids), count(array_unique($ids)));
+check('guide: every topic renders something', array_filter($topics, fn ($t) => trim(strip_tags(Guide::html($t))) === ''), []);
+check('guide: contents links every topic', substr_count(Guide::contents(), 'href="#guide-'), count($topics));
+check('guide: text is escaped', Guide::html(['blocks' => [['type' => 'text', 'text' => '<b>x</b> & "y"']]]), '<p style="margin: .5rem 0; line-height: 1.5;">&lt;b&gt;x&lt;/b&gt; &amp; &quot;y&quot;</p>');
+check('guide: rows render as terms', substr_count(Guide::html(['blocks' => [['type' => 'rows', 'items' => ['a' => 'b', 'c' => 'd']]]]), '<dt'), 2);
+// Every chat command the guide lists must be one PlayerTools answers to.
+$playerTools = file_get_contents(__DIR__ . '/../../../mods/PlayerTools/Scripts/main.lua');
+$chat = current(array_filter($topics, fn ($t) => $t['id'] === 'chat'));
+preg_match_all('/!([a-z]+)/', implode(' ', array_keys($chat['blocks'][0]['items'])), $commands);
+check('guide: lists the chat commands', count($commands[1]) >= 20, true);
+check('guide: every chat command exists in PlayerTools', array_values(array_filter(array_unique($commands[1]), fn ($c) => !str_contains($playerTools, '"' . $c . '"'))), []);
+// Page names in the guide match the sidebar labels.
+$labels = [];
+foreach (glob(__DIR__ . '/../src/Filament/Server/Pages/*.php') as $page) {
+    if (preg_match("/navigationLabel = '([^']+)'/", file_get_contents($page), $m)) {
+        $labels[] = $m[1];
+    }
+}
+$pages = current(array_filter($topics, fn ($t) => $t['id'] === 'pages'));
+$listed = array_keys($pages['blocks'][0]['items']);
+sort($labels);
+sort($listed);
+check('guide: describes every page by its sidebar name', $listed, $labels);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

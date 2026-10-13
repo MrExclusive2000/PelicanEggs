@@ -30,6 +30,8 @@ final class Brand
 
     public const PAGE_PLAYER_LISTS = 'ExclsvSCUM Player lists';
 
+    public const PAGE_HELP = 'ExclsvSCUM Help & guide';
+
     /** Mod folder => display name. */
     public const MODS = [
         'PlayerTools' => 'ExclsvPlayerTools',
