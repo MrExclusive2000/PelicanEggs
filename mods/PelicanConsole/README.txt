@@ -22,6 +22,25 @@ How commands run:
  - With no admin online the mod falls back to SCUM's internal
    MiscStatics.Test_ProcessAdminCommand, which SCUM ignores for most commands.
 
+Commands without an admin (experimental, off until you turn it on):
+ - Turn on: create an empty file no-admin-commands.txt in this folder (File Manager:
+   SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole/). No restart needed.
+ - Turn off: delete that file. No restart needed. A restart also always puts SCUM's own
+   admin levels back, because they are only changed in memory.
+ - What it does: for ChangeCurrencyBalance, ChangeFamePoints, SpawnItem and Teleport only,
+   it lowers that one command's required admin level, runs it through an online player's own
+   command channel and puts the level back at once, on the game thread, so no player can
+   use the command in between. It reads the level back afterwards; if that ever fails it
+   switches itself off and tells you to restart.
+ - Test on yourself first:
+     Balance <your name>
+     AsPlayer <your name> ChangeCurrencyBalance Normal 1 <your SteamID>
+     Balance <your name>          (money should be 1 higher)
+ - AsPlayer <player> <command> picks who runs it. SpawnItem and Teleport act on whoever runs
+   them, so AsPlayer is how to aim them at a player. Other commands with no admin online use
+   the first online player.
+ - At least one player must be online.
+
 Experimental commands (no admin needed; new, try them on yourself first):
  - WhereIs <player>                      a player's coordinates
  - Balance <player>                      money, gold and fame

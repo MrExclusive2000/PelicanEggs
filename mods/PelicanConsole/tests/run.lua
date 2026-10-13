@@ -409,6 +409,84 @@ loopCallback()
 check("unloaded item class not touched", not touchedUnloaded)
 online = {}
 
+-- ------------------------------------------------------------------ commands without an admin
+-- SCUM's command registry: each command object keeps the lowest level allowed to run it.
+local function RegistryCommand(className, level)
+    local command = object({ _requiredExecutorLevel = level })
+    function command:GetClass() return { GetFName = function() return { ToString = function() return className end } end } end
+    return command
+end
+local currency = RegistryCommand("AdminCommand_ChangeCurrencyBalance", 1)
+local godMode = RegistryCommand("AdminCommand_SetGodMode", 1)
+local registryList = { godMode, currency }
+local gameInstance = object({ _adminCommandRegistry = { _commands = {
+    ForEach = function(_, callback)
+        for index, command in ipairs(registryList) do callback(index, { get = function() return command end }) end
+    end,
+} } })
+local findFirstBefore = FindFirstOf
+function FindFirstOf(className)
+    if className == "ConZGameInstance" then return gameInstance end
+    return findFirstBefore(className)
+end
+local levelsSeen = {}
+local regular = Player("Bob", false)
+function regular.channel:Chat_Server_ProcessAdminCommand(command)
+    rpc[#rpc + 1] = { by = "Bob", command = command }
+    levelsSeen[#levelsSeen + 1] = currency._requiredExecutorLevel
+end
+online = { regular }
+for key in pairs(rpc) do rpc[key] = nil end
+calls = {}
+
+writeCommands("AsPlayer Bob ChangeCurrencyBalance Normal 1 76561198000000001\n")
+loopCallback()
+check("off without the switch file", #rpc == 0 and currency._requiredExecutorLevel == 1
+    and string.find(consoleLog(), "Commands without an admin are off. Create no-admin-commands.txt", 1, true) ~= nil)
+
+assert(io.open(dir .. "/no-admin-commands.txt", "w")):close()
+writeCommands("AsPlayer Bob ChangeCurrencyBalance Normal 1 76561198000000001\n")
+loopCallback()
+check("run through the player's own channel, without the #", rpc[1] and rpc[1].by == "Bob" and rpc[1].command == "ChangeCurrencyBalance Normal 1 76561198000000001")
+check("level lowered only while the command runs", levelsSeen[1] == 0 and currency._requiredExecutorLevel == 1)
+check("other commands untouched", godMode._requiredExecutorLevel == 1)
+check("reported as experimental", string.find(consoleLog(), "Ran without an admin, as Bob: ChangeCurrencyBalance Normal 1", 1, true) ~= nil)
+
+writeCommands("ChangeCurrencyBalance Normal 5 76561198000000001\n")
+loopCallback()
+check("used automatically when no admin is online", rpc[2] and rpc[2].command == "ChangeCurrencyBalance Normal 5 76561198000000001"
+    and #calls == 0 and currency._requiredExecutorLevel == 1)
+
+writeCommands("AsPlayer Bob SetGodMode 1\nSetGodMode 1\n")
+loopCallback()
+check("only whitelisted commands", #rpc == 2 and godMode._requiredExecutorLevel == 1
+    and string.find(consoleLog(), "AsPlayer only runs ChangeCurrencyBalance", 1, true) ~= nil)
+check("other commands still go to SCUM's helper", calls[1] and calls[1].command == "SetGodMode 1")
+
+-- The level cannot be put back: warn, and never use the route again.
+local stuckLevel = 1
+local stuck = setmetatable({}, {
+    __index = function(_, k) if k == "_requiredExecutorLevel" then return stuckLevel end return currency[k] end,
+    __newindex = function(t, k, v)
+        if k ~= "_requiredExecutorLevel" then return rawset(t, k, v) end
+        if v ~= 0 then error("write failed") end
+        stuckLevel = v
+    end,
+})
+function stuck:GetClass() return currency:GetClass() end
+registryList = { stuck }
+writeCommands("ChangeCurrencyBalance Normal 1 76561198000000001\n")
+loopCallback()
+check("failed restore is reported", string.find(consoleLog(), "WARNING: could not restore the admin level of changecurrencybalance", 1, true) ~= nil)
+writeCommands("ChangeCurrencyBalance Normal 1 76561198000000001\n")
+loopCallback()
+check("route switched off after a failed restore", #rpc == 3
+    and string.find(consoleLog(), "switched off after a problem", 1, true) ~= nil)
+
+os.remove(dir .. "/no-admin-commands.txt")
+FindFirstOf = findFirstBefore
+online = {}
+
 -- Started from an unexpected path: disabled with a message instead of erroring.
 log, loopCallback = {}, nil
 local strayPath = tmp .. "/stray.lua"

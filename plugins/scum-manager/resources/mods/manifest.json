@@ -1,8 +1,8 @@
 {
   "format": "exclsv-mods",
-  "manager": "1.25.1",
+  "manager": "1.26.0",
   "mods": {
-    "PelicanConsole": { "file": "PelicanConsole.zip", "build": "54755be6f3f6", "sha256": "b6401191363208d39328ecbf248dd7c90ab3ad168ac82db797ef24fffa7ceef9", "bytes": 13405 },
+    "PelicanConsole": { "file": "PelicanConsole.zip", "build": "00c6f0b66e4a", "sha256": "b1da83aa6d04b4c83b288a0525ea1e1401fcaa39e7944507a188e32180112807", "bytes": 15305 },
     "PlayerTools": { "file": "PlayerTools.zip", "build": "a124af19f773", "sha256": "bdef2dbc652880d485a4c7feb4a1982b0981ee597ff5ab40c1d048bb12a70d8f", "bytes": 33944 },
     "ScumAntiCheat": { "file": "ScumAntiCheat.zip", "build": "0a15850925e9", "sha256": "9b48e458ab2124c64c57ff45c4a1f66ca48881c18bf4415456273fd640f77b86", "bytes": 19466 },
     "ScumCommandProbe": { "file": "ScumCommandProbe.zip", "build": "60b020ed46bd", "sha256": "b27c9012ace2a083a6e3372c7463e31561c7b00818dd937733701227d0d9da36", "bytes": 10105 },

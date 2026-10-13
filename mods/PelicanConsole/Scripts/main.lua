@@ -654,6 +654,124 @@ local function findOutposts()
     end
 end
 
+-- ------------------------------------------------------------------ commands without an admin (experimental, opt-in)
+-- Every SCUM admin command is an object in the game instance's command registry and keeps
+-- the lowest executor level allowed to run it (_requiredExecutorLevel, EExecutorStatus:
+-- 0 Regular, 1 Admin, ...). For one command, on the game thread, the level is set to Regular,
+-- the command is sent through an online player's own chat command channel, and the level is
+-- put back at once. Chat from players is handled on this same thread, so nobody can slip a
+-- command in while it is lowered. Only the commands below, which our mods use, are allowed.
+-- Off unless no-admin-commands.txt exists in this mod's folder: delete it to turn this off.
+-- The levels live only in memory, so a server restart always puts SCUM's own values back.
+local ELEVATED_COMMANDS = {
+    changecurrencybalance = true, changefamepoints = true, spawnitem = true, teleport = true,
+}
+local ELEVATED_SWITCH = "no-admin-commands.txt"
+local REGULAR = 0
+local GAME_INSTANCE_CLASSES = { "BP_ConZGameInstance_C", "ConZGameInstance", "GameInstance" }
+local elevatedBroken = false
+
+local function elevatedEnabled()
+    if DIR == nil then return false end
+    local file = io.open(DIR .. "/" .. ELEVATED_SWITCH, "r")
+    if file == nil then return false end
+    file:close()
+    return true
+end
+
+local function registryCommand(name)
+    local instance = findFirst(GAME_INSTANCE_CLASSES)
+    local commands = instance and safe(function() return instance._adminCommandRegistry._commands end)
+    if commands == nil then return nil end
+    local wanted = { ["admincommand_" .. name] = true, [name .. "_c"] = true }
+    local found = nil
+    safe(function()
+        commands:ForEach(function(_, element)
+            local command = element:get()
+            local class = safe(function() return string.lower(command:GetClass():GetFName():ToString()) end)
+            if found == nil and class and wanted[class] then found = command end
+        end)
+    end)
+    return found
+end
+
+local function channelOf(controller)
+    local key = address(controller)
+    for _, channel in ipairs(findAll({ "PlayerRpcChannel" })) do
+        local owner = safe(function() return channel:GetOwner() end)
+        local ownerOwner = owner and safe(function() return owner:GetOwner() end)
+        if (owner ~= nil and address(owner) == key) or (ownerOwner ~= nil and address(ownerOwner) == key) then
+            return channel
+        end
+    end
+    return nil
+end
+
+-- Runs one whitelisted command as a regular player. Returns true when SCUM was asked.
+local function runElevated(command, executor, quiet)
+    local name = verb(command)
+    if not ELEVATED_COMMANDS[name] then return false end
+    if not elevatedEnabled() then
+        if not quiet then
+            output("Commands without an admin are off. Create " .. ELEVATED_SWITCH .. " in the ExclsvConsole mod folder to try them.")
+        end
+        return false
+    end
+    if elevatedBroken then
+        output("Commands without an admin were switched off after a problem; restart the server to try again.")
+        return false
+    end
+    executor = executor or players()[1]
+    if executor == nil then return false end
+    local channel = channelOf(executor.controller)
+    local target = registryCommand(name)
+    if channel == nil or target == nil then
+        output("Could not run " .. command .. " without an admin: "
+            .. (channel == nil and ("no command channel for " .. executor.name) or ("SCUM's " .. name .. " command was not found")) .. ".")
+        return false
+    end
+    local level = safe(function() return target._requiredExecutorLevel end)
+    if type(level) ~= "number" then
+        output("Could not read the admin level of SCUM's " .. name .. " command.")
+        return false
+    end
+
+    local text = (string.gsub(command, "^#+", ""))
+    local lowered = safe(function() target._requiredExecutorLevel = REGULAR return true end) == true
+    local ok, err = false, "the admin level could not be changed"
+    if lowered then
+        ok, err = pcall(function() channel:Chat_Server_ProcessAdminCommand(text) end)
+    end
+    -- Put the level back, check it, and never use this route again if that fails.
+    for _ = 1, 3 do
+        safe(function() target._requiredExecutorLevel = level end)
+        if safe(function() return target._requiredExecutorLevel end) == level then break end
+    end
+    if safe(function() return target._requiredExecutorLevel end) ~= level then
+        elevatedBroken = true
+        output("WARNING: could not restore the admin level of " .. name .. ". Restart the server now so players cannot use it.")
+    end
+
+    if ok then
+        output("Ran without an admin, as " .. executor.name .. ": " .. text .. " (experimental: check it worked, e.g. with Balance)")
+    else
+        output("Failed without an admin: " .. text .. " (" .. tostring(err) .. ")")
+    end
+    return ok
+end
+
+-- AsPlayer <name> <command>: runs a whitelisted command as that player without an admin.
+-- SpawnItem and Teleport act on whoever runs them, so this is how to aim them at a player.
+local function asPlayer(rest)
+    local player, command = playerAndRest(rest, "Usage: AsPlayer <player> <command>")
+    if player == nil then return end
+    if not ELEVATED_COMMANDS[verb(command or "")] then
+        output("AsPlayer only runs ChangeCurrencyBalance, ChangeFamePoints, SpawnItem and Teleport.")
+        return
+    end
+    runElevated(command, player)
+end
+
 local function run(command)
     local name, rest = verb(command)
 
@@ -665,6 +783,7 @@ local function run(command)
     if name == "teleportplayer" then return teleportPlayer(rest) end
     if name == "finditem" then return findItems(rest) end
     if name == "giveitem" then return giveItem(rest) end
+    if name == "asplayer" then return asPlayer(rest) end
     if name == "listplayers" then return listPlayers() end
     if name == "announce" then return announce(rest) end
     if name == "kick" and kick(rest) then return end
@@ -685,6 +804,7 @@ local function run(command)
     if admin ~= nil then
         output("Found admin " .. admin.name .. " online but not their command channel; trying without.")
     end
+    if runElevated(command, nil, true) then return end
     -- Sent with the "#", SCUM's command helper did nothing for ChangeCurrencyBalance on a live
     -- server; the admin channel works without it, so send it the same way.
     runWithoutAdmin((string.gsub(command, "^#+", "")))
