@@ -205,6 +205,64 @@ final class ModSettings
                         'koth.rewardItems' => ['rows', 'Reward items (experimental)', [], 'numeric' => [1], 'itemColumn' => 'item', 'columns' => ['item' => 'Item', 'amount' => 'Amount']],
                     ],
                 ],
+                'Shop' => [
+                    'description' => '!shop lists these, !buy <name> [count] buys. The price is taken first (the balance is checked), then the item goes into the buyer\'s inventory; if it cannot be handed over the money is refunded. Needs an admin online or the no-admin route (Without an admin online). Item names as in SpawnItem.',
+                    'fields' => [
+                        'shop.enabled' => ['toggle', 'Shop on', false],
+                        'shop.items' => ['rows', 'Items for sale', [], 'numeric' => [2, 3], 'itemColumn' => 'item', 'columns' => ['name' => 'Name (!buy name)', 'item' => 'Item', 'amount' => 'Amount', 'price' => 'Price']],
+                        'shop.maxPerPurchase' => ['int', 'Most of one item per purchase', 5],
+                    ],
+                ],
+                'Pay other players' => [
+                    'description' => '!pay <name> <amount> moves money between two online players. The payer\'s balance is checked first; the fee is taken on top and removed from the economy.',
+                    'fields' => [
+                        'pay.enabled' => ['toggle', '!pay on', false],
+                        'pay.minAmount' => ['int', 'Smallest payment', 10],
+                        'pay.maxAmount' => ['int', 'Largest payment', 100000],
+                        'pay.feePercent' => ['int', 'Fee (% of the amount)', 0],
+                    ],
+                ],
+                'Lottery' => [
+                    'description' => '!lottery shows the pot, !lottery buy [count] buys tickets. At each draw one ticket wins the pot minus the house share; with too few tickets everyone is refunded. Tickets survive restarts (lottery.tsv); winnings are paid when the winner is next online.',
+                    'fields' => [
+                        'lottery.enabled' => ['toggle', 'Lottery on', false],
+                        'lottery.ticketPrice' => ['int', 'Ticket price', 100],
+                        'lottery.maxTicketsPerPlayer' => ['int', 'Most tickets per player per draw', 10],
+                        'lottery.drawEveryMinutes' => ['int', 'Draw every (min)', 60],
+                        'lottery.housePercent' => ['int', 'House share (% kept, not paid out)', 10],
+                        'lottery.minTickets' => ['int', 'Fewest tickets for a draw', 2],
+                    ],
+                ],
+                'Daily tasks' => [
+                    'description' => '!tasks shows today\'s progress. Kinds: playtime (minutes online), kills (player kills, not squadmates), longshot (one kill from at least this many metres). Progress resets at midnight UTC; rewards are paid when the task is done.',
+                    'fields' => [
+                        'dailyTasks.enabled' => ['toggle', 'Daily tasks on', false],
+                        'dailyTasks.tasks' => ['rows', 'Tasks', [
+                            ['kind' => 'playtime', 'target' => 60, 'reward' => 300, 'text' => 'Play for 60 minutes'],
+                            ['kind' => 'kills', 'target' => 3, 'reward' => 500, 'text' => 'Kill 3 players'],
+                            ['kind' => 'longshot', 'target' => 200, 'reward' => 500, 'text' => 'Get a kill from 200 m or more'],
+                        ], 'numeric' => [1, 2], 'columns' => ['kind' => 'Kind (playtime, kills, longshot)', 'target' => 'Target', 'reward' => 'Reward', 'text' => 'Shown as']],
+                    ],
+                ],
+                'Kill race' => [
+                    'description' => 'Every so often a kill race starts: whoever gets the most player kills (not squadmates) before it ends wins the prize. !race shows the time left and your kills.',
+                    'fields' => [
+                        'killRace.enabled' => ['toggle', 'Kill race on', false],
+                        'killRace.everyMinutes' => ['int', 'A race every (min)', 120],
+                        'killRace.durationMinutes' => ['int', 'Lasts (min)', 20],
+                        'killRace.minPlayers' => ['int', 'Only with at least this many players online', 3],
+                        'killRace.prize' => ['int', 'Prize', 2000],
+                    ],
+                ],
+                'Squad bonus' => [
+                    'description' => 'Every so often each player gets this much for every squadmate online with them, to reward playing together.',
+                    'fields' => [
+                        'squadBonus.enabled' => ['toggle', 'Squad bonus on', false],
+                        'squadBonus.everyMinutes' => ['int', 'Paid every (min)', 60],
+                        'squadBonus.amountPerMate' => ['int', 'Amount per squadmate online', 25],
+                        'squadBonus.maxMates' => ['int', 'Counts at most this many squadmates', 4],
+                    ],
+                ],
                 'Info and reports' => [
                     'description' => '!info shows server time, uptime, players online and the next restart (from Messages > Restart warnings), then these lines. !report <name> <what happened> goes to reports.log, the Admin Console page and online admins.',
                     'fields' => [
@@ -333,8 +391,9 @@ final class ModSettings
         'PlayerTools' => [
             'Chat & info' => ['Chat commands', 'Welcome back', 'Info and reports', 'Feature tips'],
             'Economy' => ['New players', 'Playtime rewards', 'Bounties', 'Item rewards (experimental)', 'Without an admin online (experimental)'],
+            'Shop & money' => ['Shop', 'Pay other players', 'Lottery', 'Daily tasks', 'Squad bonus'],
             'Teleports' => ['Teleports'],
-            'Events & PvP' => ['Kill feed', 'Stats', 'Kill streaks', 'Death recap and hotspots', 'Manhunt', 'King of the Hill', 'Voting'],
+            'Events & PvP' => ['Kill feed', 'Stats', 'Kill streaks', 'Death recap and hotspots', 'Manhunt', 'King of the Hill', 'Kill race', 'Voting'],
             'Moderation' => ['AFK kicker'],
         ],
         'ScumAntiCheat' => [

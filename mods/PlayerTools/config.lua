@@ -225,4 +225,60 @@ return {
     -- teleports. It is tested once per run (1 coin added and taken back) and only used if SCUM
     -- accepts it. The test reads players' balances, which may have crashed a server: off.
     noAdminFallback = false,
+
+    -- Economy. Money moves with ChangeCurrencyBalance, so these need an admin online or the
+    -- no-admin route (no-admin-commands.txt in the PelicanConsole folder). Spending always checks
+    -- the player's balance first; winnings are paid when the winner is next online.
+
+    -- !shop and !buy <name> [count]. Items: { name = "water", item = "Water_05l", amount = 1, price = 50 }
+    shop = {
+        enabled = false,
+        maxPerPurchase = 5,
+        items = {},
+    },
+
+    -- !pay <name> <amount> between online players; the fee is taken on top.
+    pay = {
+        enabled = false,
+        minAmount = 10,
+        maxAmount = 100000,
+        feePercent = 0,
+    },
+
+    -- !lottery and !lottery buy [count]. The winner gets the pot minus the house share.
+    lottery = {
+        enabled = false,
+        ticketPrice = 100,
+        maxTicketsPerPlayer = 10,
+        drawEveryMinutes = 60,
+        housePercent = 10,
+        minTickets = 2,
+    },
+
+    -- !tasks. Kinds: playtime (minutes), kills (player kills), longshot (metres). Reset at midnight UTC.
+    dailyTasks = {
+        enabled = false,
+        tasks = {
+            { kind = "playtime", target = 60, reward = 300, text = "Play for 60 minutes" },
+            { kind = "kills", target = 3, reward = 500, text = "Kill 3 players" },
+            { kind = "longshot", target = 200, reward = 500, text = "Get a kill from 200 m or more" },
+        },
+    },
+
+    -- Most player kills during the race wins. !race shows the time left.
+    killRace = {
+        enabled = false,
+        everyMinutes = 120,
+        durationMinutes = 20,
+        minPlayers = 3,
+        prize = 2000,
+    },
+
+    -- Every so often, this much per squadmate online with the player.
+    squadBonus = {
+        enabled = false,
+        everyMinutes = 60,
+        amountPerMate = 25,
+        maxMates = 4,
+    },
 }

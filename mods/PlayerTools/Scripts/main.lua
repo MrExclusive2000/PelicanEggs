@@ -103,6 +103,21 @@ local DEFAULTS = {
         minSeconds = 60, zones = {},
         rewardCommands = { "ChangeCurrencyBalance Normal 1000 {steamId}" }, rewardItems = {},
     },
+    -- Economy. Money moves with ChangeCurrencyBalance, so these need an admin online or the
+    -- no-admin route (PelicanConsole/no-admin-commands.txt). Spending always checks the balance.
+    shop = { enabled = false, maxPerPurchase = 5, items = {} },   -- items: { name, item, amount, price }
+    pay = { enabled = false, minAmount = 10, maxAmount = 100000, feePercent = 0 },
+    lottery = { enabled = false, ticketPrice = 100, maxTicketsPerPlayer = 10, drawEveryMinutes = 60, housePercent = 10, minTickets = 2 },
+    dailyTasks = {
+        enabled = false,
+        tasks = {
+            { kind = "playtime", target = 60, reward = 300, text = "Play for 60 minutes" },
+            { kind = "kills", target = 3, reward = 500, text = "Kill 3 players" },
+            { kind = "longshot", target = 200, reward = 500, text = "Get a kill from 200 m or more" },
+        },
+    },
+    killRace = { enabled = false, everyMinutes = 120, durationMinutes = 20, minPlayers = 3, prize = 2000 },
+    squadBonus = { enabled = false, everyMinutes = 60, amountPerMate = 25, maxMates = 4 },
 }
 
 local function safe(fn, ...)
@@ -286,12 +301,13 @@ end
 
 -- SteamID -> { name, kills, deaths, playtime (s), longest (m), kit ("pending"/"given"), first (os.time),
 --   rewarded (playtime already rewarded, s), daily (UTC date of the last daily bonus),
---   bestStreak, bounty (on this player), owed (bounty cash waiting to be paid to this player) }
+--   bestStreak, bounty (on this player), owed (bounty cash waiting to be paid to this player),
+--   credit (lottery, event, task and squad winnings waiting to be paid), tasks (today's task progress) }
 -- Not saved: streak (current kill streak), new (first seen joining this session).
 local records = {}
 local recordsDirty = false
 local FIELDS = { "name", "kills", "deaths", "playtime", "longest", "kit", "first", "rewarded", "daily", "bestStreak", "bounty", "owed",
-    "lastSeen", "manhunt" }
+    "lastSeen", "manhunt", "credit", "tasks" }
 
 local function loadRecords()
     local text = readText(PLAYERS_FILE) or ""
@@ -309,6 +325,7 @@ local function loadRecords()
                 rewarded = tonumber(parts[9]) or playtime, daily = parts[10] or "",
                 bestStreak = tonumber(parts[11]) or 0, bounty = tonumber(parts[12]) or 0,
                 owed = tonumber(parts[13]) or 0, lastSeen = tonumber(parts[14]) or 0, manhunt = parts[15] or "",
+                credit = tonumber(parts[16]) or 0, tasks = parts[17] or "",
                 streak = 0,
             }
         end
@@ -359,7 +376,7 @@ local function record(id, name, joined)
         entry = {
             name = name or "?", kills = 0, deaths = 0, playtime = 0, longest = 0, kit = joined and "pending" or "",
             first = os.time(), rewarded = 0, daily = "", bestStreak = 0, bounty = 0, owed = 0, lastSeen = 0,
-            manhunt = "", streak = 0,
+            manhunt = "", credit = 0, tasks = "", streak = 0,
             new = joined or nil,
         }
         records[id] = entry
@@ -723,6 +740,8 @@ end
 -- put back and checked at once. Player chat is handled on this same thread, so no player can use
 -- the command in between. Off unless ue4ss/Mods/PelicanConsole/no-admin-commands.txt exists
 -- (one switch for both mods); a restart always puts SCUM's own levels back.
+-- In its own function to keep this file under Lua's 200 locals per function.
+local runElevated = (function()
 local ELEVATED_COMMANDS = {
     changecurrencybalance = "ChangeCurrencyBalance", changefamepoints = "ChangeFamePoints",
     spawnitem = "SpawnItem", teleport = "Teleport",
@@ -839,6 +858,9 @@ local function runElevated(command)
     if not ok then return false, tostring(err) end
     return true, "as " .. tostring(executor.name) .. ", without an admin"
 end
+
+    return runElevated
+end)()
 
 -- Runs an admin command through an online admin's chat command channel, as if they typed it.
 -- With no admin online, the no-admin route above runs the commands it covers; otherwise SCUM's
@@ -1225,9 +1247,10 @@ end
 
 -- Gives { { item = "Water_05l", amount = 2 }, ... } to the player. Items go into the inventory,
 -- or at the player's feet when there is no room. Returns the number given, or nil and why.
-local function giveItems(session, items)
-    -- Item rewards have one switch for everything (starter kit, rewards, events).
-    if not config.itemRewards.enabled or items == nil or #items == 0 then return 0 end
+local function giveItems(session, items, always)
+    -- Item rewards have one switch for everything (starter kit, rewards, events); the shop
+    -- (always) has its own.
+    if (not always and not config.itemRewards.enabled) or items == nil or #items == 0 then return 0 end
     local pawn = characterOf(session.controller)
     local at = pawn and location(pawn)
     if at == nil then return nil, "the player has no character" end
@@ -1965,10 +1988,341 @@ local function kothTick(time, elapsed, online)
     output("King of the Hill started at " .. zone.name .. ".")
 end
 
+-- ------------------------------------------------------------------ economy
+-- Shop, !pay, lottery, daily tasks, kill race and squad bonus. Money moves with
+-- ChangeCurrencyBalance through runAdminCommand (an online admin, or the no-admin route).
+-- Spending always checks the balance first; whatever is won is kept in the player's record
+-- (credit) until it has been paid, so nothing is lost while they are offline or no route exists.
+-- Built inside its own function (Lua allows 200 locals per function and this file is near
+-- that); only what the rest of the file uses leaves it, through the economy table.
+local economy = (function()
+
+local function moneyCommand(steamId, amount)
+    return string.format("ChangeCurrencyBalance Normal %d %s", amount, steamId)
+end
+
+-- Takes money from an online player after checking they have it. Returns ok, why.
+local function charge(session, amount, what)
+    if amount <= 0 then return true end
+    if session.steamId == nil then return false, "your SteamID is not known yet; type any ! command and try again" end
+    local affordable, why = canAfford(session, amount, true)
+    if not affordable then return false, why end
+    local ok, detail = runAdminCommand(moneyCommand(session.steamId, -amount))
+    if not ok then return false, "money cannot be moved right now (" .. tostring(detail) .. ")" end
+    output(string.format("Charged %s %d for %s.", session.name, amount, what))
+    return true
+end
+
+-- Winnings: paid now when possible, otherwise kept and paid once they are online.
+local function credit(steamId, name, amount, why)
+    if amount <= 0 then return end
+    local entry = record(steamId, name)
+    entry.credit = (entry.credit or 0) + amount
+    recordsDirty = true
+    output(string.format("%s is owed %d (%s).", entry.name, amount, why))
+end
+
+local function payCredit(session)
+    local entry = session.steamId and records[session.steamId]
+    if entry == nil or (entry.credit or 0) <= 0 then return end
+    local ok = runAdminCommand(moneyCommand(session.steamId, entry.credit))
+    if ok then
+        tell(session, string.format("%d added to your account (winnings and rewards).", entry.credit))
+        output(string.format("Paid %d to %s.", entry.credit, session.name))
+        entry.credit = 0
+        recordsDirty = true
+    end
+end
+
+local function whole(text)
+    local value = text ~= nil and tonumber(text) or nil
+    if value == nil or value ~= math.floor(value) then return nil end
+    return value
+end
+
+-- !shop and !buy <name> [count]
+local function shopItem(name)
+    local wanted = string.lower(name or "")
+    for _, entry in ipairs(config.shop.items or {}) do
+        if string.lower(tostring(entry.name or entry.item or "")) == wanted then return entry end
+    end
+    return nil
+end
+
+local function shopCommand(session, word, rest)
+    local prefix = config.chatCommands.prefix
+    local items = config.shop.items or {}
+    if word == "shop" then
+        if #items == 0 then return tell(session, "The shop is empty.") end
+        local lines = { "Shop (" .. prefix .. "buy <name> [count]):" }
+        for _, entry in ipairs(items) do
+            lines[#lines + 1] = string.format("%s x%d: %d", tostring(entry.name or entry.item), tonumber(entry.amount) or 1, tonumber(entry.price) or 0)
+        end
+        return tell(session, lines)
+    end
+    local name, count = string.match(rest or "", "^(.-)%s+(%d+)$")
+    if name == nil then name, count = rest, "1" end
+    local entry = shopItem(name)
+    if entry == nil then return tell(session, "No shop item called " .. tostring(name) .. ". Type " .. prefix .. "shop for the list.") end
+    count = math.max(1, math.min(whole(count) or 1, tonumber(config.shop.maxPerPurchase) or 5))
+    local price = (tonumber(entry.price) or 0) * count
+    if characterOf(session.controller) == nil then return tell(session, "You need to be alive to buy something.") end
+    local paid, why = charge(session, price, count .. " x " .. tostring(entry.name or entry.item))
+    if not paid then return tell(session, "Purchase cancelled: " .. why .. ".") end
+    local given, failure = giveItems(session, { { item = entry.item, amount = (tonumber(entry.amount) or 1) * count } }, true)
+    if given == nil or given == 0 then
+        credit(session.steamId, session.name, price, "refund: the shop could not hand over " .. tostring(entry.item))
+        payCredit(session)
+        return tell(session, "The item could not be handed over (" .. tostring(failure or "unknown item") .. "); you have been refunded.")
+    end
+    tell(session, string.format("Bought %d x %s for %d.", count, tostring(entry.name or entry.item), price))
+end
+
+-- !pay <name> <amount>
+local function payCommand(session, rest)
+    local settings = config.pay
+    local name, amount = string.match(rest or "", "^(.-)%s+(%d+)$")
+    amount = whole(amount)
+    if name == nil or amount == nil then return tell(session, "Usage: " .. config.chatCommands.prefix .. "pay <name> <amount>") end
+    local target = onlineByName(name)
+    if target == nil or target.steamId == nil then return tell(session, "No player online called " .. name .. ".") end
+    if target == session then return tell(session, "You cannot pay yourself.") end
+    local low, high = tonumber(settings.minAmount) or 1, tonumber(settings.maxAmount) or 100000
+    if amount < low or amount > high then return tell(session, string.format("Amounts from %d to %d.", low, high)) end
+    local fee = math.floor(amount * (tonumber(settings.feePercent) or 0) / 100)
+    local paid, why = charge(session, amount + fee, "a payment to " .. target.name)
+    if not paid then return tell(session, "Payment cancelled: " .. why .. ".") end
+    credit(target.steamId, target.name, amount, "payment from " .. session.name)
+    payCredit(target)
+    tell(session, string.format("Paid %d to %s%s.", amount, target.name, fee > 0 and string.format(" (fee %d)", fee) or ""))
+    tell(target, string.format("%s paid you %d.", session.name, amount))
+end
+
+-- Lottery: tickets and the next draw are kept in lottery.tsv, so a restart loses nothing.
+local LOTTERY_FILE = DIR .. "/lottery.tsv"
+local lottery = nil   -- { draw = time, tickets = { steamId = { name, count } } }
+
+local function saveLottery()
+    local file = io.open(LOTTERY_FILE, "w")
+    if not file then return end
+    file:write("draw\t" .. string.format("%d", lottery.draw) .. "\n")
+    for steamId, entry in pairs(lottery.tickets) do
+        file:write(steamId .. "\t" .. (string.gsub(entry.name, "[\t\r\n]", " ")) .. "\t" .. entry.count .. "\n")
+    end
+    file:close()
+end
+
+local function loadLottery(time)
+    lottery = { draw = time + (tonumber(config.lottery.drawEveryMinutes) or 60) * 60, tickets = {} }
+    for line in string.gmatch(readText(LOTTERY_FILE) or "", "[^\r\n]+") do
+        local first, second, third = string.match(line, "^([^\t]*)\t([^\t]*)\t?([^\t]*)$")
+        if first == "draw" then
+            lottery.draw = tonumber(second) or lottery.draw
+        elseif first and string.match(first, "^%d+$") and tonumber(third) then
+            lottery.tickets[first] = { name = second, count = tonumber(third) }
+        end
+    end
+end
+
+local function lotteryTotals()
+    local tickets = 0
+    for _, entry in pairs(lottery.tickets) do tickets = tickets + entry.count end
+    return tickets, tickets * (tonumber(config.lottery.ticketPrice) or 0)
+end
+
+local function lotteryCommand(session, rest, time)
+    local settings = config.lottery
+    if lottery == nil then loadLottery(time) end
+    local buying = string.match(rest or "", "^buy%s*(%d*)$")
+    local count = buying ~= nil and (whole(buying ~= "" and buying or "1")) or nil
+    if count == nil then
+        local tickets, pot = lotteryTotals()
+        local mine = session.steamId and lottery.tickets[session.steamId]
+        return tell(session, {
+            string.format("Lottery: %d ticket(s), pot %d, draw in %d min. Ticket %d.", tickets, pot,
+                math.max(0, math.ceil((lottery.draw - time) / 60)), tonumber(settings.ticketPrice) or 0),
+            string.format("You have %d. Buy with %slottery buy [count].", mine and mine.count or 0, config.chatCommands.prefix),
+        })
+    end
+    local have = session.steamId and lottery.tickets[session.steamId] and lottery.tickets[session.steamId].count or 0
+    local limit = tonumber(settings.maxTicketsPerPlayer) or 10
+    count = math.max(1, math.min(count, limit - have))
+    if have >= limit then return tell(session, "You already have the most tickets allowed (" .. limit .. ").") end
+    local paid, why = charge(session, count * (tonumber(settings.ticketPrice) or 0), count .. " lottery ticket(s)")
+    if not paid then return tell(session, "No tickets bought: " .. why .. ".") end
+    lottery.tickets[session.steamId] = { name = session.name, count = have + count }
+    saveLottery()
+    tell(session, string.format("Bought %d ticket(s); you have %d. Good luck!", count, have + count))
+end
+
+local function lotteryTick(time)
+    local settings = config.lottery
+    if not settings.enabled then return end
+    if lottery == nil then loadLottery(time) end
+    if time < lottery.draw then return end
+    local tickets, pot = lotteryTotals()
+    if tickets > 0 and tickets < (tonumber(settings.minTickets) or 2) then
+        for steamId, entry in pairs(lottery.tickets) do
+            credit(steamId, entry.name, entry.count * (tonumber(settings.ticketPrice) or 0), "lottery refund, too few tickets")
+        end
+        announce("Lottery: not enough tickets this time, everyone has been refunded.")
+    elseif tickets > 0 then
+        local pick, winner = math.random(tickets), nil
+        for steamId, entry in pairs(lottery.tickets) do
+            pick = pick - entry.count
+            if pick <= 0 and winner == nil then winner = { steamId = steamId, name = entry.name } end
+        end
+        local prize = math.floor(pot * (100 - (tonumber(settings.housePercent) or 0)) / 100)
+        credit(winner.steamId, winner.name, prize, "lottery win")
+        announce(string.format("LOTTERY: %s wins %d! Next draw in %d min.", winner.name, prize, tonumber(settings.drawEveryMinutes) or 60))
+    end
+    lottery.tickets = {}
+    lottery.draw = time + (tonumber(settings.drawEveryMinutes) or 60) * 60
+    saveLottery()
+end
+
+-- Daily tasks: progress kept in the record as "date|kind=value,...|done=1,3".
+local function taskState(entry, time)
+    local date, values, done = string.match(entry.tasks or "", "^([^|]*)|([^|]*)|(.*)$")
+    local state = { date = os.date("!%Y-%m-%d", time), values = {}, done = {} }
+    if date ~= state.date then return state end
+    for kind, value in string.gmatch(values or "", "(%w+)=([%d%.]+)") do state.values[kind] = tonumber(value) end
+    for index in string.gmatch(done or "", "(%d+)") do state.done[tonumber(index)] = true end
+    return state
+end
+
+local function saveTaskState(entry, state)
+    local values, done = {}, {}
+    for kind, value in pairs(state.values) do values[#values + 1] = kind .. "=" .. string.format("%d", math.floor(value)) end
+    for index in pairs(state.done) do done[#done + 1] = tostring(index) end
+    table.sort(values)
+    table.sort(done)
+    entry.tasks = state.date .. "|" .. table.concat(values, ",") .. "|" .. table.concat(done, ",")
+    recordsDirty = true
+end
+
+-- kind: "playtime" (minutes, added), "kills" (added), "longshot" (metres, best so far).
+local function taskProgress(steamId, name, kind, amount, time)
+    local settings = config.dailyTasks
+    if not settings.enabled or steamId == nil then return end
+    local entry = record(steamId, name)
+    local state = taskState(entry, time)
+    if kind == "longshot" then
+        state.values[kind] = math.max(state.values[kind] or 0, amount)
+    else
+        state.values[kind] = (state.values[kind] or 0) + amount
+    end
+    for index, task in ipairs(settings.tasks or {}) do
+        if task.kind == kind and not state.done[index] and (state.values[kind] or 0) >= (tonumber(task.target) or math.huge) then
+            state.done[index] = true
+            credit(steamId, entry.name, tonumber(task.reward) or 0, "daily task: " .. tostring(task.text))
+            local session = sessionById(steamId)
+            if session then tell(session, "Daily task done: " .. tostring(task.text) .. ". Reward: " .. tostring(task.reward) .. ".") end
+        end
+    end
+    saveTaskState(entry, state)
+end
+
+local function tasksCommand(session, time)
+    local entry = session.steamId and records[session.steamId]
+    if entry == nil then return tell(session, "Your tasks start counting once the server knows your SteamID.") end
+    local state = taskState(entry, time)
+    local lines = { "Daily tasks (reset at midnight UTC):" }
+    for index, task in ipairs(config.dailyTasks.tasks or {}) do
+        local value = math.floor(state.values[task.kind] or 0)
+        lines[#lines + 1] = string.format("%s %s: %d/%d, reward %d", state.done[index] and "[done]" or "[ ]",
+            tostring(task.text), math.min(value, tonumber(task.target) or 0), tonumber(task.target) or 0, tonumber(task.reward) or 0)
+    end
+    tell(session, lines)
+end
+
+-- Kill race: most player kills during the race wins the prize.
+local race = { state = "idle", nextAt = nil, endsAt = nil, kills = {} }
+
+local function raceTick(time, online)
+    local settings = config.killRace
+    if not settings.enabled then race.state = "idle" return end
+    race.nextAt = race.nextAt or time + (tonumber(settings.everyMinutes) or 120) * 60
+    if race.state == "idle" and time >= race.nextAt then
+        race.nextAt = time + (tonumber(settings.everyMinutes) or 120) * 60
+        if online < (tonumber(settings.minPlayers) or 3) then return end
+        race.state, race.endsAt, race.kills = "running", time + (tonumber(settings.durationMinutes) or 20) * 60, {}
+        announce(string.format("KILL RACE! Most player kills in the next %d minutes wins %d.", tonumber(settings.durationMinutes) or 20, tonumber(settings.prize) or 0))
+    elseif race.state == "running" and time >= race.endsAt then
+        race.state = "idle"
+        local best, bestCount = nil, 0
+        for steamId, entry in pairs(race.kills) do
+            if entry.count > bestCount then best, bestCount = { steamId = steamId, name = entry.name }, entry.count end
+        end
+        if best == nil then return announce("Kill race over: nobody scored.") end
+        credit(best.steamId, best.name, tonumber(settings.prize) or 0, "kill race win")
+        announce(string.format("Kill race over: %s wins %d with %d kill(s)!", best.name, tonumber(settings.prize) or 0, bestCount))
+    end
+end
+
+-- Player kills that count for tasks and the race: not suicides or squadmates.
+local function economyKill(kill, time)
+    if kill.killerId == nil or kill.victimId == nil or kill.killerId == kill.victimId then return end
+    if sameSquad(kill.killerId, kill.victimId) then return end
+    taskProgress(kill.killerId, kill.killerName, "kills", 1, time)
+    if kill.distance then taskProgress(kill.killerId, kill.killerName, "longshot", kill.distance, time) end
+    if race.state == "running" then
+        local entry = race.kills[kill.killerId] or { name = kill.killerName or "?", count = 0 }
+        entry.count = entry.count + 1
+        race.kills[kill.killerId] = entry
+    end
+end
+
+-- Squad bonus: every so often, each player gets a little for every squadmate online with them.
+local function squadBonusCheck(session, time)
+    local settings = config.squadBonus
+    if not settings.enabled or session.steamId == nil then return end
+    local every = (tonumber(settings.everyMinutes) or 60) * 60
+    session.squadBonusAt = session.squadBonusAt or time + every
+    if time < session.squadBonusAt then return end
+    session.squadBonusAt = time + every
+    local mine = squadOf[session.steamId]
+    if mine == nil or mine == "" then return end
+    local mates = 0
+    for _, other in pairs(sessions) do
+        if other ~= session and other.steamId and squadOf[other.steamId] == mine then mates = mates + 1 end
+    end
+    mates = math.min(mates, tonumber(settings.maxMates) or 4)
+    if mates > 0 then
+        credit(session.steamId, session.name, mates * (tonumber(settings.amountPerMate) or 0), "squad bonus")
+    end
+end
+
+local playtimeCarry = {}   -- steamId -> seconds not yet counted towards the playtime task
+
+local function economyTick(time, elapsed, online)
+    lotteryTick(time)
+    raceTick(time, online)
+    for _, session in pairs(sessions) do
+        if session.steamId then
+            local carry = (playtimeCarry[session.steamId] or 0) + elapsed
+            if carry >= 60 then
+                taskProgress(session.steamId, session.name, "playtime", math.floor(carry / 60), time)
+                carry = carry % 60
+            end
+            playtimeCarry[session.steamId] = carry
+            squadBonusCheck(session, time)
+            payCredit(session)
+        end
+    end
+end
+
+    return {
+        shopCommand = shopCommand, payCommand = payCommand, lotteryCommand = lotteryCommand,
+        tasksCommand = tasksCommand, economyTick = economyTick, economyKill = economyKill, race = race,
+    }
+end)()
+
 events.onKill = function(kill, time)
     deathRecap(kill)
     hotspotCheck(kill, time)
     manhuntKill(kill)
+    economy.economyKill(kill, time)
 end
 
 -- ------------------------------------------------------------------ chat commands
@@ -2002,6 +2356,11 @@ local function handleChat(chat, time)
         if config.teleports.enabled and config.teleports.toPlayer then more[#more + 1] = prefix .. "tpto <name>" end
         more[#more + 1] = prefix .. "seen <name>"
         if config.manhunt.enabled then more[#more + 1] = prefix .. "manhunt" end
+        if config.shop.enabled then more[#more + 1] = prefix .. "shop, " .. prefix .. "buy" end
+        if config.pay.enabled then more[#more + 1] = prefix .. "pay <name> <amount>" end
+        if config.lottery.enabled then more[#more + 1] = prefix .. "lottery" end
+        if config.dailyTasks.enabled then more[#more + 1] = prefix .. "tasks" end
+        if config.killRace.enabled then more[#more + 1] = prefix .. "race" end
         if config.reports.enabled then more[#more + 1] = prefix .. "report <name> <what happened>" end
         if #more > 0 then lines[#lines + 1] = table.concat(more, ", ") end
         tell(session, lines)
@@ -2061,6 +2420,21 @@ local function handleChat(chat, time)
         tell(session, entry.name .. " was last online " .. duration(time - entry.lastSeen) .. " ago.")
     elseif word == "manhunt" and config.manhunt.enabled then
         manhuntCommand(session, rest)
+    elseif (word == "shop" or word == "buy") and config.shop.enabled then
+        economy.shopCommand(session, word, rest)
+    elseif word == "pay" and config.pay.enabled then
+        economy.payCommand(session, rest)
+    elseif word == "lottery" and config.lottery.enabled then
+        economy.lotteryCommand(session, rest, time)
+    elseif word == "tasks" and config.dailyTasks.enabled then
+        economy.tasksCommand(session, time)
+    elseif word == "race" and config.killRace.enabled then
+        if economy.race.state == "running" then
+            local mine = session.steamId and economy.race.kills[session.steamId]
+            tell(session, string.format("Kill race: %d min left, you have %d kill(s).", math.max(0, math.ceil((economy.race.endsAt - time) / 60)), mine and mine.count or 0))
+        else
+            tell(session, string.format("Next kill race in about %d min.", math.max(0, math.ceil(((economy.race.nextAt or time) - time) / 60))))
+        end
     elseif word == "where" and isAdmin(session.controller) then
         local pawn = characterOf(session.controller)
         local position = pawn and location(pawn)
@@ -2372,6 +2746,8 @@ local function tick()
     if not ok then output("Manhunt failed: " .. tostring(err)) end
     ok, err = pcall(kothTick, time, elapsed, online)
     if not ok then output("King of the Hill failed: " .. tostring(err)) end
+    ok, err = pcall(economy.economyTick, time, elapsed, online)
+    if not ok then output("Economy update failed: " .. tostring(err)) end
 
     local every = (tonumber(config.stats.announceTopEveryMinutes) or 0) * 60
     if config.stats.enabled and every > 0 and online > 0 then
@@ -2429,4 +2805,7 @@ if config.bounties.enabled then features[#features + 1] = "bounties" end
 if config.teleports.enabled then features[#features + 1] = "teleports" end
 if config.manhunt.enabled then features[#features + 1] = "manhunt" end
 if config.koth.enabled then features[#features + 1] = "King of the Hill" end
+for _, name in ipairs({ "shop", "pay", "lottery", "dailyTasks", "killRace", "squadBonus" }) do
+    if config[name].enabled then features[#features + 1] = name end
+end
 output("Active: " .. (#features > 0 and table.concat(features, ", ") or "nothing enabled") .. ".")

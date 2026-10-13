@@ -586,7 +586,7 @@ check("waiting reward logged once", waits == 1)
 local saved = read(dir .. "/players.tsv")
 local fields = {}
 for field in string.gmatch(string.match(saved, "76561198000000010[^\n]*") .. "\t", "([^\t]*)\t") do fields[#fields + 1] = field end
-check("saved with the new columns", #fields == 15)
+check("saved with the new columns", #fields == 17)
 check("daily date saved", fields[10] == "1970-01-01")
 check("best streak saved", fields[11] == "3")
 check("bounty on Dave cleared", fields[12] == "0")
@@ -983,6 +983,96 @@ for _ = 1, 8 do
 end
 check("one backup per day", exists(backupName(clock)) and exists(backupName(clock - 86400)))
 check("backups older than 7 days removed", not exists(backupName(firstDay)) and exists(backupName(firstDay + 2 * 86400)))
+players = {}
+
+-- ================================================================== economy
+-- Shop, !pay, lottery, daily tasks, kill race and squad bonus, with an admin online (money moves
+-- through their channel). Spending checks the balance; winnings are paid as soon as possible.
+private, hud, adminCommands = {}, {}, {}
+write(dir .. "/players.tsv", "")
+os.remove(dir .. "/lottery.tsv")
+write(dir .. "/config.lua", [[return {
+    newPlayers = { starterKit = false },
+    playtimeRewards = { enabled = false },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 },
+    welcomeBack = { enabled = false },
+    killFeed = { enabled = false },
+    shop = { enabled = true, items = { { name = "water", item = "Water_05l", amount = 1, price = 50 } } },
+    pay = { enabled = true, minAmount = 10, maxAmount = 1000, feePercent = 10 },
+    lottery = { enabled = true, ticketPrice = 100, maxTicketsPerPlayer = 3, drawEveryMinutes = 2, housePercent = 10, minTickets = 2 },
+    dailyTasks = { enabled = true, tasks = {
+        { kind = "playtime", target = 1, reward = 100, text = "Play a minute" },
+        { kind = "kills", target = 2, reward = 300, text = "Kill 2 players" },
+    } },
+    killRace = { enabled = true, everyMinutes = 1, durationMinutes = 1, minPlayers = 1, prize = 2000 },
+}]])
+dofile(dir .. "/Scripts/main.lua")
+local boss, kim, lee = Player("Boss", true), Player("Kim"), Player("Lee")
+local kimMoney, leeMoney = 1000, 30
+liveMoney(kim, function() return kimMoney end)
+liveMoney(lee, function() return leeMoney end)
+login("76561198000000070", "Boss")
+login("76561198000000071", "Kim")
+login("76561198000000072", "Lee")
+players = { boss, kim, lee }
+step(2)
+-- The mod learns a player's SteamID from their chat.
+chat("76561198000000071", "Kim", "!help")
+chat("76561198000000072", "Lee", "!help")
+step()
+check("economy commands in !help", has(lastPrivate("Kim"), "!shop") or has(table.concat((function() local t = {} for _, m in ipairs(private) do t[#t + 1] = m.text end return t end)(), "|"), "!lottery"))
+
+chat("76561198000000071", "Kim", "!shop")
+step()
+check("shop lists items", has(lastPrivate("Kim"), "water x1: 50"))
+chat("76561198000000071", "Kim", "!buy water")
+step()
+-- No game world in this test: the item cannot be handed over, so the money comes back.
+check("purchase charged then refunded when the item cannot be given", ran("ChangeCurrencyBalance Normal -50 76561198000000071")
+    and ran("ChangeCurrencyBalance Normal 50 76561198000000071") and has(lastPrivate("Kim"), "you have been refunded"))
+
+chat("76561198000000071", "Kim", "!pay Lee 200")
+step()
+check("pay: payer charged amount and fee, receiver paid", ran("ChangeCurrencyBalance Normal -220 76561198000000071")
+    and ran("ChangeCurrencyBalance Normal 200 76561198000000072") and has(lastPrivate("Lee"), "Kim paid you 200."))
+chat("76561198000000072", "Lee", "!pay Kim 500")
+step()
+check("pay refused without the money", has(lastPrivate("Lee"), "you need 550 and have 30")
+    and not ran("ChangeCurrencyBalance Normal -550 76561198000000072"))
+
+leeMoney = 1000
+chat("76561198000000071", "Kim", "!lottery buy 5")
+chat("76561198000000072", "Lee", "!lottery buy")
+step()
+check("lottery tickets capped and charged", ran("ChangeCurrencyBalance Normal -300 76561198000000071") and ran("ChangeCurrencyBalance Normal -100 76561198000000072"))
+check("lottery saved for restarts", has(read(dir .. "/lottery.tsv"), "76561198000000071\tKim\t3"))
+step(120)
+check("lottery drawn and the winner paid 90% of the pot", anyHud("LOTTERY:") and (ran("ChangeCurrencyBalance Normal 360 76561198000000071") or ran("ChangeCurrencyBalance Normal 360 76561198000000072")))
+
+check("playtime task done and paid", ran("ChangeCurrencyBalance Normal 100 76561198000000071") and has(read(dir .. "/players.tsv"), "|playtime="))
+check("kill race started", anyHud("KILL RACE!"))
+kill("76561198000000071", "Kim", "76561198000000072", "Lee")
+kill("76561198000000071", "Kim", "76561198000000072", "Lee")
+chat("76561198000000071", "Kim", "!tasks")
+step()
+check("kill task done", has(table.concat((function() local t = {} for _, m in ipairs(private) do if m.to == "Kim" then t[#t + 1] = m.text end end return t end)(), "|"), "Daily task done: Kill 2 players")
+    and ran("ChangeCurrencyBalance Normal 300 76561198000000071"))
+step(61)
+check("kill race won and paid", anyHud("Kill race over: Kim wins 2000 with 2 kill(s)!") and ran("ChangeCurrencyBalance Normal 2000 76561198000000071"))
+
+-- Squad bonus: Kim and Lee in one squad, both online.
+adminCommands = {}
+write(dir .. "/config.lua", [[return {
+    newPlayers = { starterKit = false }, playtimeRewards = { enabled = false },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 }, welcomeBack = { enabled = false },
+    squadBonus = { enabled = true, everyMinutes = 1, amountPerMate = 25, maxMates = 4 },
+}]])
+step(31)
+local squad = object()
+function kim.pawn:GetSquad() return squad end
+function lee.pawn:GetSquad() return squad end
+step(70)
+check("squad bonus paid per squadmate online", ran("ChangeCurrencyBalance Normal 25 76561198000000071") and ran("ChangeCurrencyBalance Normal 25 76561198000000072"))
 players = {}
 
 -- ================================================================== no admin online: the no-admin route

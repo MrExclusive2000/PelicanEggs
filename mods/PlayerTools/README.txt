@@ -40,6 +40,18 @@ Quality-of-life features for SCUM players:
   Hill           longest in 15 minutes wins (1000 cash). Add zones on the settings page or
                  with "Add a place where a player stands" on the Admin Console.
 
+Economy (all off until switched on; they need an admin online or the no-admin route, and every
+purchase checks the player's balance first; winnings wait in players.tsv until paid):
+  !shop, !buy    Items you list with prices. The money is taken, then the item goes into the
+                 inventory; if it cannot be handed over, the money is refunded.
+  !pay           !pay <name> <amount> to another online player, with an optional fee.
+  !lottery       Tickets for a pot drawn every hour; the house keeps a share. Too few tickets:
+                 everyone is refunded. Tickets survive restarts (lottery.tsv).
+  !tasks         Daily tasks: minutes played, player kills, a long-range kill. Paid when done.
+  Kill race      Every 2 hours: most player kills in 20 minutes wins. !race shows the score.
+  Squad bonus    Every hour, a little for every squadmate online with you.
+  Kills between squadmates, and suicides, never count for tasks or the race.
+
 Experimental (found by the probe, not yet confirmed on a live server; off unless set):
  - Item lists for the starter kit, hourly rewards, the daily bonus, manhunt and King of the
    Hill: items go straight into the player's inventory (or at their feet when it is full),
