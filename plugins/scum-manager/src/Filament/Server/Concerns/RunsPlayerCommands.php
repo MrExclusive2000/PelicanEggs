@@ -86,12 +86,12 @@ trait RunsPlayerCommands
             return null;
         }
 
-        return app(ScumServerService::class)->saveData($this->getServer())['players'][$steamId] ?? null;
+        return app(ScumServerService::class)->saveSnapshot($this->getServer())['players'][$steamId] ?? null;
     }
 
     protected function savedBalance(?string $steamId): ?string
     {
-        $data = app(ScumServerService::class)->saveData($this->getServer());
+        $data = app(ScumServerService::class)->saveSnapshot($this->getServer());
 
         return BalanceCheck::summary($this->savedPlayer($steamId), $data['readAt'], time());
     }

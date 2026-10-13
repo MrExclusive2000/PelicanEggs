@@ -209,6 +209,8 @@ class ScumSettingsPage extends ServerFormPage
         };
 
         $field
+            // Fields hidden by the search box still save what was typed in them.
+            ->dehydratedWhenHidden()
             ->label($label)
             ->hint($setting['key'])
             ->rules($type->rules())

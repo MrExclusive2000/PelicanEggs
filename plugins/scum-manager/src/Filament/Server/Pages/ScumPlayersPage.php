@@ -92,6 +92,9 @@ class ScumPlayersPage extends Page implements HasTable
     public function mount(): void
     {
         $this->refreshState();
+        // Read the save once when the page opens (if the snapshot is older than five minutes);
+        // the table and its 30 s refresh only use the snapshot.
+        app(ScumServerService::class)->saveData($this->getServer());
     }
 
     private function refreshState(): void
@@ -258,7 +261,7 @@ class ScumPlayersPage extends Page implements HasTable
             ]);
     }
 
-    public function scanSaveDatabase(ScumServerService $service): ?\Symfony\Component\HttpFoundation\StreamedResponse
+    private function scanSaveDatabase(ScumServerService $service): ?\Symfony\Component\HttpFoundation\StreamedResponse
     {
         $server = $this->getServer();
         $copy = null;
@@ -281,7 +284,7 @@ class ScumPlayersPage extends Page implements HasTable
 
     private function saveSummary(): string
     {
-        $data = app(ScumServerService::class)->saveData($this->getServer());
+        $data = app(ScumServerService::class)->saveSnapshot($this->getServer());
         $parts = ['Stats from ' . Brand::mod('PlayerTools') . ', bans and admins from SCUM\'s player lists, kicks from ' . Brand::mod('ScumAntiCheat') . '.'];
         $parts[] = $data['error'] !== null
             ? 'Money, fame and inventories could not be read from the save: ' . $data['error']
@@ -293,7 +296,7 @@ class ScumPlayersPage extends Page implements HasTable
     private function detailsHtml(array $record): string
     {
         $save = $record['save'];
-        $data = app(ScumServerService::class)->saveData($this->getServer());
+        $data = app(ScumServerService::class)->saveSnapshot($this->getServer());
         $rows = [];
         $row = fn (string $label, string $value) => '<tr><th style="text-align:left;padding:.2rem 1rem .2rem 0;font-weight:600;vertical-align:top;">' . e($label) . '</th><td style="padding:.2rem 0;">' . e($value) . '</td></tr>';
 

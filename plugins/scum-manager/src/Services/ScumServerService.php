@@ -997,6 +997,7 @@ class ScumServerService
             }
             $data = ['players' => $players, 'inventories' => $inventories, 'bases' => $save->bases(), 'readAt' => time(), 'error' => null];
             Cache::put($key, $data, 300);
+            Cache::forever("$key:last", $data);
         } catch (Throwable $exception) {
             report($exception);
             $data = ['players' => [], 'inventories' => [], 'bases' => [], 'readAt' => null, 'error' => $exception->getMessage()];
@@ -1008,6 +1009,28 @@ class ScumServerService
         }
 
         return $data;
+    }
+
+    /**
+     * The last save snapshot without reading the save: for page renders and polls, which must not
+     * wait for a database copy. saveData() (on page open or Reload) refreshes it.
+     *
+     * @return array{players: array<string, array>, inventories: array<string, list<array>>, bases: list<array>, readAt: ?int, error: ?string}
+     */
+    public function saveSnapshot(Server $server): array
+    {
+        $key = "scum-manager:save-data:$server->uuid";
+        $fresh = Cache::get($key);
+        if (is_array($fresh) && $fresh['error'] === null) {
+            return $fresh;
+        }
+        $last = Cache::get("$key:last");
+        if (is_array($last)) {
+            return $last;
+        }
+
+        return ['players' => [], 'inventories' => [], 'bases' => [], 'readAt' => null,
+            'error' => is_array($fresh) ? $fresh['error'] : 'Not read yet: open the page again or press Reload save data.'];
     }
 
     public const SAVE_BACKUP_DIR = 'ExclsvBackups';
@@ -1160,6 +1183,12 @@ class ScumServerService
 
     private const MAP_TYPES = ['webp' => 'image/webp', 'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg'];
 
+    /** Map pictures are scaled down to this many pixels square. */
+    private const MAP_PIXELS = 1024;
+
+    /** Largest picture kept as it is when the panel cannot scale pictures. */
+    private const MAP_MAX_BYTES = 700 * 1024;
+
     /** Store a picture of SCUM's map (shown under the World page grid). */
     public function saveMapPicture(Server $server, string $contents, string $extension): void
     {
@@ -1170,6 +1199,16 @@ class ScumServerService
         $info = @getimagesizefromstring($contents);
         if ($info === false) {
             throw new RuntimeException('That file is not a picture.');
+        }
+        // The page carries the picture inline, so keep it small: 1024 px is plenty for the map.
+        if (function_exists('imagecreatefromstring') && ($image = @imagecreatefromstring($contents)) !== false) {
+            $scaled = imagescale($image, min(self::MAP_PIXELS, imagesx($image)), min(self::MAP_PIXELS, imagesy($image)));
+            ob_start();
+            imagejpeg($scaled ?: $image, null, 82);
+            $contents = (string) ob_get_clean();
+            $extension = 'jpg';
+        } elseif (strlen($contents) > self::MAP_MAX_BYTES) {
+            throw new RuntimeException('This panel cannot shrink pictures (no GD), so use one under ' . intdiv(self::MAP_MAX_BYTES, 1024) . ' KB, e.g. 1024 x 1024 px.');
         }
         if (!in_array(self::EXTRAS_DIR, array_column($this->listDirectory($server, '/'), 'name'), true)) {
             $this->files($server)->createDirectory(self::EXTRAS_DIR, '/');
@@ -1233,7 +1272,7 @@ class ScumServerService
             $this->onlinePlayers($server)['players'],
             $lists,
             $mods === null ? null : $this->read($server, "$mods/ScumAntiCheat/offenses.txt"),
-            $this->saveData($server)['players'],
+            $this->saveSnapshot($server)['players'],
         );
     }
 

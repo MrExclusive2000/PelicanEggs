@@ -73,9 +73,10 @@ class ScumWorldPage extends Page
     #[Locked]
     public string $serverState = '';
 
-    /** data: URI of the uploaded map picture, or null. */
+    /** Whether a map picture is stored. The picture itself is drawn from the cache, never kept in
+     * the page's state (Livewire refuses requests over 1 MB). */
     #[Locked]
-    public ?string $mapPicture = null;
+    public bool $hasMapPicture = false;
 
     public static function canAccess(): bool
     {
@@ -94,7 +95,7 @@ class ScumWorldPage extends Page
         $this->load();
     }
 
-    public function load(bool $freshSave = false): void
+    protected function load(bool $freshSave = false): void
     {
         $service = app(ScumServerService::class);
         $server = $this->getServer();
@@ -106,11 +107,7 @@ class ScumWorldPage extends Page
         $this->outposts = $service->outposts($server);
         $this->backups = $service->saveBackups($server);
         $this->serverState = $service->powerState($server)->value;
-        try {
-            $this->mapPicture = $service->mapPicture($server);
-        } catch (Exception) {
-            $this->mapPicture = null; // the grid works without it
-        }
+        $this->hasMapPicture = $this->mapPicture() !== null;
         $this->loadLive();
     }
 
@@ -131,7 +128,7 @@ class ScumWorldPage extends Page
                 ->icon('tabler-map-pin')
                 ->description('Players (green, live), bases (orange; red when close to an outpost) and outposts (blue). Hover a marker for details. Bases are as of SCUM\'s last save.')
                 ->extraAttributes(['wire:poll.15s' => 'loadLive'])
-                ->schema([TextEntry::make('map')->hiddenLabel()->state(fn () => new HtmlString(WorldMap::svg($this->markers(), 640, $this->mapPicture)))]),
+                ->schema([TextEntry::make('map')->hiddenLabel()->state(fn () => new HtmlString(WorldMap::svg($this->markers(), 640, $this->hasMapPicture ? $this->mapPicture() : null)))]),
             Section::make('Bases')
                 ->icon('tabler-building-castle')
                 ->description(fn () => $this->saveError !== null
@@ -145,6 +142,16 @@ class ScumWorldPage extends Page
                 ->collapsible()
                 ->schema([TextEntry::make('backups')->hiddenLabel()->state(fn () => new HtmlString($this->backupsTable()))]),
         ]);
+    }
+
+    /** The map picture as a data: URI (cached by the service), or null. */
+    private function mapPicture(): ?string
+    {
+        try {
+            return app(ScumServerService::class)->mapPicture($this->getServer());
+        } catch (Exception) {
+            return null; // the grid works without it
+        }
     }
 
     /** @return list<array{x: float|int, y: float|int, label: string, kind: string}> */
@@ -259,7 +266,7 @@ class ScumWorldPage extends Page
                     $this->load();
                 }),
             Action::make('map_picture')
-                ->label(fn () => $this->mapPicture !== null ? 'Change map picture' : 'Add map picture')
+                ->label(fn () => $this->hasMapPicture ? 'Change map picture' : 'Add map picture')
                 ->icon('tabler-photo')
                 ->color('gray')
                 ->authorize(fn () => user()?->can(SubuserPermission::FileCreate, $server) && user()?->can(SubuserPermission::FileUpdate, $server))
@@ -273,14 +280,14 @@ class ScumWorldPage extends Page
                         ->maxSize(8192)
                         ->storeFiles(false),
                 ])
-                ->extraModalFooterActions(fn () => $this->mapPicture === null ? [] : [
+                ->extraModalFooterActions(fn () => !$this->hasMapPicture ? [] : [
                     Action::make('remove_map_picture')
                         ->label('Remove picture')
                         ->color('danger')
                         ->requiresConfirmation()
                         ->action(function (ScumServerService $service) {
                             $service->removeMapPicture($this->getServer());
-                            $this->mapPicture = null;
+                            $this->hasMapPicture = false;
                             Notification::make()->title('Map picture removed')->success()->send();
                         }),
                 ])
@@ -289,7 +296,7 @@ class ScumWorldPage extends Page
                     $file = $data['picture'];
                     try {
                         $service->saveMapPicture($this->getServer(), (string) file_get_contents($file->getRealPath()), pathinfo($file->getClientOriginalName(), PATHINFO_EXTENSION));
-                        $this->mapPicture = $service->mapPicture($this->getServer());
+                        $this->hasMapPicture = true;
                         Notification::make()->title('Map picture saved')->success()->send();
                     } catch (Exception $exception) {
                         report($exception);

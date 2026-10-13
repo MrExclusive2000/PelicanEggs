@@ -132,8 +132,11 @@ class ScumOverviewPage extends Page
         $this->load();
     }
 
-    public function load(): void
+    protected function load(): void
     {
+        // Refresh the save snapshot on open and on Refresh (at most every five minutes); polls only read it.
+        app(ScumServerService::class)->saveData($this->getServer());
+
         $service = app(ScumServerService::class);
         $server = $this->getServer();
 
@@ -329,7 +332,7 @@ class ScumOverviewPage extends Page
     private function accuracyWatch(): array
     {
         $lines = [];
-        foreach (app(ScumServerService::class)->saveData($this->getServer())['players'] as $player) {
+        foreach (app(ScumServerService::class)->saveSnapshot($this->getServer())['players'] as $player) {
             if (Accuracy::suspicious($player['stats'])) {
                 $lines[] = sprintf('%s (%s): %d%% of %s shots, %d kills, %d headshots', $player['name'], $player['steamId'],
                     Accuracy::percent($player['stats']), number_format((int) $player['stats']['shots_fired']),
