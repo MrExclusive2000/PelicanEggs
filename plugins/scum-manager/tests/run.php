@@ -659,5 +659,16 @@ check('accuracy: a normal player is not flagged', Accuracy::suspicious(['shots_f
 check('accuracy: an aimbot-like rate is flagged', Accuracy::suspicious(['shots_fired' => 830, 'shots_hit' => 590]), true);
 check('accuracy: hits above shots are capped', Accuracy::percent(['shots_fired' => 200, 'shots_hit' => 999]), 100);
 
+// ---------------------------------------------------------------- inventory grouping
+check('inventory: SCUM suffix dropped', [SaveDatabase::itemName('Emergency_bandage_ES'), SaveDatabase::itemName('Weapon_M9_Silver_ES'), SaveDatabase::itemName('BP_Weapon_AK47_C')], ['Emergency bandage', 'Weapon M9 Silver', 'Weapon AK47']);
+check('inventory: worn and carried, stacks combined, cash counted', SaveDatabase::groupInventory([
+    ['item' => 'Military Helmet 01 09', 'quantity' => null, 'depth' => 1],
+    ['item' => 'Emergency bandage', 'quantity' => 2, 'depth' => 2],
+    ['item' => 'Emergency bandage', 'quantity' => 3, 'depth' => 3],
+    ['item' => 'Water 05l', 'quantity' => null, 'depth' => 2],
+    ['item' => 'Water 05l', 'quantity' => null, 'depth' => 2],
+    ['item' => 'Cash', 'quantity' => 99, 'depth' => 2],
+]), ['worn' => ['Military Helmet 01 09' => 1], 'carried' => ['Emergency bandage' => 5, 'Water 05l' => 2], 'cash' => 99]);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

@@ -51,8 +51,8 @@ From a schema scan on 2026-10-12. The panel reads a copy (never the live file) f
 | SteamID, name, fame, profile money, playtime | `user_profile` (`user_id` is the SteamID64; `prisoner_id` links the character) |
 | Bank balances | `bank_account_registry_currencies.account_balance` by `currency_type` (1 cash, 2 gold), joined on `bank_account_id = bank_account_registry.id`, owner `account_owner_user_profile_id` |
 | Squads | `squad`, `squad_member` (`rank`: 0 None, 1 Member, 2 Enforcer, 3 Underboss, 4 Boss) |
-| Lifetime stats | `survival_stats` (kills, deaths, shots fired and hit, headshots, longest kill, ...) |
-| Inventory | `prisoner_entity` gives the character entity; carried items are the `entity` rows below it by `parent_entity_id`; stack sizes in `discrete_amount_entity_component` via `entity_component` |
+| Lifetime stats | `survival_stats` (kills include puppets and animals; `prisoner_kills` are players; `headshots` counts melee and non-player hits too) |
+| Inventory | `prisoner_entity` gives the character entity; carried items are the `entity` rows below it by `parent_entity_id` (depth 1 worn or held, deeper in pockets and bags); stack sizes in `discrete_amount_entity_component` via `entity_component`. Confirmed against a live character on 2026-10-13. Item classes end in `_ES`; banknotes are `Cash`. |
 | Vehicles | `vehicle_spawner`, `vehicle_entity` |
 | Bases and flags | `base`, `base_element`, `base_element_flag` |
 

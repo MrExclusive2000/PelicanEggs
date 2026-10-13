@@ -316,22 +316,28 @@ class ScumPlayersPage extends Page implements HasTable
                     $kills, (int) ($stats['prisoner_kills'] ?? 0), (int) ($stats['deaths'] ?? 0), (int) ($stats['longest_kill_distance'] ?? 0),
                     OnlinePlayers::duration((int) round(((float) ($stats['minutes_survived'] ?? 0)) * 60))));
                 $rows[] = $row('Shooting', $fired > 0
-                    ? sprintf('%d shots, %d%% hit, %d headshots', $fired, (int) round(100 * $hit / $fired), (int) ($stats['headshots'] ?? 0))
+                    ? sprintf('%d shots, %d%% hit (headshots on anything, melee included: %d)', $fired, (int) round(100 * $hit / $fired), (int) ($stats['headshots'] ?? 0))
                     : 'no shots recorded');
             }
         }
         $rows[] = $row('Anti-cheat kicks', (string) $record['kicks']);
 
         $items = $data['inventories'][(string) $record['steamId']] ?? [];
-        $list = $items === []
-            ? '<p style="opacity:.7;">' . ($save === null ? 'No inventory data.' : 'Nothing found on the character (or the save does not link items this way: tell us if this looks wrong).') . '</p>'
-            : '<ul style="margin:0;padding-left:1rem;">' . implode('', array_map(
-                fn (array $item) => '<li style="padding-left:' . (max(0, $item['depth'] - 1) * 1) . 'rem;">' . e($item['item']) . ($item['quantity'] !== null ? ' &times; ' . (int) $item['quantity'] : '') . '</li>',
-                $items,
-            )) . '</ul>';
+        $grouped = SaveDatabase::groupInventory($items);
+        if ($grouped['cash'] > 0) {
+            $rows[] = $row('Cash on hand', number_format($grouped['cash']) . ' (banknotes in their inventory)');
+        }
+        $listOf = fn (array $group) => '<ul style="margin:0 0 .75rem;padding-left:1rem;columns:2;column-gap:2rem;">' . implode('', array_map(
+            fn (string $name, int $count) => '<li>' . e($name) . ($count > 1 ? ' &times; ' . number_format($count) : '') . '</li>',
+            array_keys($group), $group,
+        )) . '</ul>';
+        $carrying = $items === []
+            ? '<p style="opacity:.7;">' . ($save === null ? 'No inventory data.' : 'Nothing found on the character.') . '</p>'
+            : ($grouped['worn'] !== [] ? '<p style="font-weight:600;margin:.25rem 0;">Wearing and holding</p>' . $listOf($grouped['worn']) : '')
+                . ($grouped['carried'] !== [] ? '<p style="font-weight:600;margin:.25rem 0;">In pockets and bags</p>' . $listOf($grouped['carried']) : '');
 
         return '<table style="font-size:.875rem;border-collapse:collapse;margin-bottom:1rem;">' . implode('', $rows) . '</table>'
-            . '<p style="font-weight:600;margin:.5rem 0;">Carrying (experimental, from the last save)</p>' . $list;
+            . '<p style="font-size:.75rem;opacity:.7;margin:.25rem 0 .5rem;">Inventory as of SCUM\'s last save.</p>' . $carrying;
     }
 
     /** @return list<string> */

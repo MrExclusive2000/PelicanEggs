@@ -165,6 +165,31 @@ final class SaveDatabase
     }
 
     /**
+     * An inventory as a player reads it: what they wear or hold, then what is in their pockets
+     * and bags, identical items combined (stacks summed, single items counted).
+     *
+     * @param  list<array{item: string, quantity: ?int, depth: int}>  $items
+     * @return array{worn: array<string, int>, carried: array<string, int>, cash: int}
+     */
+    public static function groupInventory(array $items): array
+    {
+        $groups = ['worn' => [], 'carried' => [], 'cash' => 0];
+        foreach ($items as $item) {
+            $amount = $item['quantity'] ?? 1;
+            if (strtolower($item['item']) === 'cash') {
+                $groups['cash'] += $amount; // banknotes in the inventory
+                continue;
+            }
+            $group = $item['depth'] <= 1 ? 'worn' : 'carried';
+            $groups[$group][$item['item']] = ($groups[$group][$item['item']] ?? 0) + $amount;
+        }
+        ksort($groups['worn'], SORT_NATURAL | SORT_FLAG_CASE);
+        ksort($groups['carried'], SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $groups;
+    }
+
+    /**
      * Every base in the save, biggest first: where it is, who owns it, how many building parts
      * and flags it has, and who is taking it over (if anyone).
      *
@@ -194,10 +219,10 @@ final class SaveDatabase
         ], $rows);
     }
 
-    /** "BP_Weapon_AK47_C" -> "Weapon AK47" */
+    /** "BP_Weapon_AK47_C" -> "Weapon AK47"; "Emergency_bandage_ES" -> "Emergency bandage" */
     public static function itemName(string $class): string
     {
-        $name = preg_replace(['/^(BPC?|BP_Item)_/', '/_C$/'], '', $class);
+        $name = preg_replace(['/^(BPC?|BP_Item)_/', '/_C$/', '/_ES$/'], '', $class);
 
         return trim(str_replace('_', ' ', (string) $name)) ?: $class;
     }
