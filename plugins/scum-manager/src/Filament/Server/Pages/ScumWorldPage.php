@@ -283,6 +283,7 @@ class ScumWorldPage extends Page
                 ->extraModalFooterActions(fn () => !$this->hasMapPicture ? [] : [
                     Action::make('remove_map_picture')
                         ->label('Remove picture')
+                        ->button() // a modal footer button: keep the words even with Pelican's icon-only style
                         ->color('danger')
                         ->requiresConfirmation()
                         ->action(function (ScumServerService $service) {

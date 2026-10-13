@@ -14,6 +14,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\IconSize;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -212,6 +213,8 @@ class ScumPlayersPage extends Page implements HasTable
                     ->action(fn (array $record, array $data, ScumServerService $service) => $this->runPlayerCommand($record['steamId'], $record['name'], $data, $service)),
                 ActionGroup::make([
                     Action::make('ban')
+                        ->grouped()
+                        ->iconSize(IconSize::Small)
                         ->label('Ban')
                         ->icon('tabler-ban')
                         ->color('danger')
@@ -222,6 +225,8 @@ class ScumPlayersPage extends Page implements HasTable
                         ->modalDescription(fn (array $record) => 'Adds them to BannedUsers.ini' . ($record['online'] ? ' and kicks them now.' : '.') . ' Unban here or on the Player lists page.')
                         ->action(fn (array $record, ScumServerService $service) => $this->ban($record, $service)),
                     Action::make('unban')
+                        ->grouped()
+                        ->iconSize(IconSize::Small)
                         ->label('Unban')
                         ->icon('tabler-circle-check')
                         ->visible(fn (array $record) => $record['flags']['banned'])
@@ -229,7 +234,7 @@ class ScumPlayersPage extends Page implements HasTable
                         ->requiresConfirmation()
                         ->action(fn (array $record, ScumServerService $service) => $this->setList($record, 'BannedUsers.ini', false, 'Unbanned', $service)),
                     ...$this->listActions(),
-                ])->tooltip('Lists'),
+                ])->tooltip('Lists')->label('Lists'),
             ])
             ->headerActions([
                 Action::make('reload_save')
@@ -362,6 +367,8 @@ class ScumPlayersPage extends Page implements HasTable
         $actions = [];
         foreach (self::LIST_ACTIONS as $flag => [$file, $add, $remove, $icon]) {
             $actions[] = Action::make("list_$flag")
+                ->grouped()
+                ->iconSize(IconSize::Small)
                 ->label(fn (array $record) => $record['flags'][$flag] ? $remove : $add)
                 ->icon($icon)
                 ->authorize(fn () => user()?->can(SubuserPermission::FileUpdate, $this->getServer()))
