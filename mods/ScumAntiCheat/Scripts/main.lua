@@ -499,11 +499,13 @@ end
 -- turning one of those into a Lua object crashes the server natively, where pcall cannot
 -- catch it. FindObjects leaves them out; FindAllOf is only used on a UE4SS that cannot.
 local UNSAFE_OBJECT_FLAGS = 0x400 | 0x1000 | 0x8000 | 0x10000 -- NeedLoad, NeedPostLoad, BeginDestroyed, FinishDestroyed
+-- Class default objects and archetypes are templates, not players or world objects.
+local TEMPLATE_FLAGS = 0x10 | 0x20 -- ClassDefaultObject, ArchetypeObject
 local filteredSearchWorks = nil -- nil until a filtered search has found something
 
-local function liveObjects(className)
+local function liveObjects(className, withTemplates)
     if type(FindObjects) == "function" and filteredSearchWorks ~= false then
-        local found = safe(function() return FindObjects(0, className, nil, 0, UNSAFE_OBJECT_FLAGS, false) end)
+        local found = safe(function() return FindObjects(0, className, nil, 0, withTemplates and UNSAFE_OBJECT_FLAGS or (UNSAFE_OBJECT_FLAGS | TEMPLATE_FLAGS), false) end)
         if type(found) == "table" and next(found) ~= nil then
             filteredSearchWorks = true
             local list = {}

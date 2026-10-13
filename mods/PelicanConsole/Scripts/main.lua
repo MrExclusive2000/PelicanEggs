@@ -101,11 +101,13 @@ end
 -- turning one of those into a Lua object crashes the server natively, where pcall cannot
 -- catch it. FindObjects leaves them out; FindAllOf is only used on a UE4SS that cannot.
 local UNSAFE_OBJECT_FLAGS = 0x400 | 0x1000 | 0x8000 | 0x10000 -- NeedLoad, NeedPostLoad, BeginDestroyed, FinishDestroyed
+-- Class default objects and archetypes are templates, not players or world objects.
+local TEMPLATE_FLAGS = 0x10 | 0x20 -- ClassDefaultObject, ArchetypeObject
 local filteredSearchWorks = nil -- nil until a filtered search has found something
 
-local function liveObjects(className)
+local function liveObjects(className, withTemplates)
     if type(FindObjects) == "function" and filteredSearchWorks ~= false then
-        local found = safe(function() return FindObjects(0, className, nil, 0, UNSAFE_OBJECT_FLAGS, false) end)
+        local found = safe(function() return FindObjects(0, className, nil, 0, withTemplates and UNSAFE_OBJECT_FLAGS or (UNSAFE_OBJECT_FLAGS | TEMPLATE_FLAGS), false) end)
         if type(found) == "table" and next(found) ~= nil then
             filteredSearchWorks = true
             local list = {}
@@ -728,7 +730,7 @@ local function commandObjects(name)
         end
     end
     for _, class in ipairs({ className .. "_C", "AdminCommand_" .. className }) do
-        for _, object in ipairs(liveObjects(class)) do add(object) end
+        for _, object in ipairs(liveObjects(class, true)) do add(object) end -- the default object is a template
     end
     local instance = findFirst(GAME_INSTANCE_CLASSES)
     local commands = instance and safe(function() return instance._adminCommandRegistry._commands end)
@@ -775,8 +777,16 @@ local function runElevated(command, executor, quiet)
         output("Commands without an admin were switched off after a problem; restart the server to try again.")
         return false
     end
-    executor = executor or players()[1]
-    if executor == nil then return false end
+    if executor == nil then
+        -- Any online player whose name can be read; AsPlayer picks one on purpose.
+        for _, player in ipairs(players()) do
+            if player.name ~= "?" then executor = player break end
+        end
+    end
+    if executor == nil then
+        output("Could not run " .. command .. " without an admin: no player is online to run it.")
+        return false
+    end
     local channel = channelOf(executor.controller)
     local targets = commandObjects(name)
     if channel == nil or #targets == 0 then
@@ -784,9 +794,10 @@ local function runElevated(command, executor, quiet)
             .. (channel == nil and ("no command channel for " .. executor.name) or ("SCUM's " .. ELEVATED_COMMANDS[name] .. " command was not found")) .. ".")
         return false
     end
-    local levels = {}
+    local levels, found = {}, {}
     for index, target in ipairs(targets) do
         levels[index] = safe(function() return target._requiredExecutorLevel end)
+        found[index] = (safe(function() return target:GetFName():ToString() end) or "?") .. "=" .. tostring(levels[index])
     end
 
     local text = (string.gsub(command, "^#+", ""))
@@ -813,8 +824,8 @@ local function runElevated(command, executor, quiet)
     end
 
     if ok then
-        output("Ran without an admin, as " .. executor.name .. ": " .. text .. " (experimental; " .. #targets
-            .. " command object(s) at level " .. table.concat(levels, "/") .. "; check it worked, e.g. with Balance)")
+        output("Ran without an admin, as " .. executor.name .. ": " .. text .. " (experimental; command level "
+            .. table.concat(found, ", ") .. "; check it worked, e.g. with Balance)")
     else
         output("Failed without an admin: " .. text .. " (" .. tostring(err) .. ")")
     end

@@ -68,7 +68,9 @@ function gameMode:SendHUDMessageToAll(message, beep) assert(beep == false) hud[#
 -- UE4SS FindObjects: object searches must leave out objects still loading or being destroyed.
 function FindObjects(count, className, name, required, banned, exact)
     if className == "Class" then return {} end
-    assert(banned == 0x400 | 0x1000 | 0x8000 | 0x10000, "object searches must leave out objects being destroyed")
+    local unsafe = 0x400 | 0x1000 | 0x8000 | 0x10000
+    assert(banned & unsafe == unsafe, "object searches must leave out objects being destroyed")
+    if banned & (0x10 | 0x20) == 0 then templateSearches = (templateSearches or 0) + 1 end
     liveSearches = (liveSearches or 0) + 1
     return FindAllOf(className) or {}
 end
@@ -257,5 +259,6 @@ FindObjects, FindFirstOf = savedFindObjects, savedFindFirst
 
 os.execute("rm -rf '" .. tmp .. "'")
 check("player searches leave out objects being destroyed (FindObjects, not FindAllOf)", (liveSearches or 0) > 0)
+check("player searches leave out class default objects and archetypes", templateSearches == nil)
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))
 os.exit(failures == 0 and 0 or 1)

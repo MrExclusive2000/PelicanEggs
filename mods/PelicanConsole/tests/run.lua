@@ -68,7 +68,9 @@ end
 -- UE4SS FindObjects: object searches must leave out objects still loading or being destroyed.
 function FindObjects(count, className, name, required, banned, exact)
     if className == "Class" then return {} end
-    assert(banned == 0x400 | 0x1000 | 0x8000 | 0x10000, "object searches must leave out objects being destroyed")
+    local unsafe = 0x400 | 0x1000 | 0x8000 | 0x10000
+    assert(banned & unsafe == unsafe, "object searches must leave out objects being destroyed")
+    if banned & (0x10 | 0x20) == 0 then templateSearches = (templateSearches or 0) + 1 end
     liveSearches = (liveSearches or 0) + 1
     return FindAllOf(className) or {}
 end
@@ -485,7 +487,7 @@ end
 writeCommands("ChangeCurrencyBalance Normal 2 76561198000000001\n")
 loopCallback()
 check("default object of a registry class lowered while it runs", cdoLevels[1] == 0 and cdo._requiredExecutorLevel == 1 and #rpc == 3
-    and string.find(consoleLog(), "1 command object(s) at level 1", 1, true) ~= nil)
+    and string.find(consoleLog(), "command level ?=1", 1, true) ~= nil)
 FindAllOf = findAllBefore
 function regular.channel:Chat_Server_ProcessAdminCommand(command) rpc[#rpc + 1] = { by = "Bob", command = command } end
 
