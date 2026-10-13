@@ -86,7 +86,9 @@ function FindFirstOf(className)
 end
 function ExecuteInGameThread(callback) callback() end
 local loop
-function LoopAsync(delay, callback) assert(delay == 1000) loop = callback end
+-- UE4SS game-thread timer; LoopAsync would run Lua on a background thread.
+function LoopAsync() error("timers must run on the game thread (LoopInGameThreadWithDelay)") end
+function LoopInGameThreadWithDelay(delay, callback) assert(delay == 1000) loop = callback end
 
 local gameLogFiles = {}
 io.popen = function(command)

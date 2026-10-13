@@ -91,7 +91,9 @@ function StaticFindObject(path)
 end
 function ExecuteInGameThread(callback) callback() end
 local tick, aimTick
-function LoopAsync(delay, callback)
+-- UE4SS game-thread timer; LoopAsync would run Lua on a background thread.
+function LoopAsync() error("timers must run on the game thread (LoopInGameThreadWithDelay)") end
+function LoopInGameThreadWithDelay(delay, callback)
     if delay == 1000 then tick = callback elseif delay == 100 then aimTick = callback else error("unexpected delay " .. delay) end
 end
 

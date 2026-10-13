@@ -104,6 +104,34 @@ local function safe(fn, ...)
     return nil
 end
 
+-- UE4SS runs LoopAsync callbacks on a background thread without locking this mod's Lua state,
+-- while game-thread callbacks and hooks use it at the same time; together they corrupt the
+-- state and crash the server (twice on a live server, inside UE4SS). So timers run on the game
+-- thread when this UE4SS has LoopInGameThreadWithDelay; on an older one the background thread
+-- only hands the work over. The callback returns true to stop.
+local function every(milliseconds, callback)
+    if type(LoopInGameThreadWithDelay) == "function" then
+        local handle
+        handle = LoopInGameThreadWithDelay(milliseconds, function()
+            local stop = callback()
+            if stop == true and handle ~= nil and type(CancelDelayedAction) == "function" then
+                CancelDelayedAction(handle)
+            end
+            return stop
+        end)
+        return handle
+    end
+    local stopped = false
+    return LoopAsync(milliseconds, function()
+        if not stopped then
+            ExecuteInGameThread(function()
+                if callback() == true then stopped = true end
+            end)
+        end
+        return stopped
+    end)
+end
+
 -- Optional probe-settings.lua in the mod folder (an old probe.lua is ignored on purpose) narrows the search to one topic:
 --   return { title = "...", keywords = { ... }, nativeOnly = true, wholeClasses = { ... },
 --            lateScanMinutes = 45, census = true }
@@ -474,7 +502,7 @@ local function runCensus(report, pass)
         return
     end
 
-    LoopAsync(1000, function()
+    every(1000, function()
         if nextIndex > #list then
             return true
         end
@@ -570,7 +598,7 @@ local queued = false
 local attempts = 0
 local firstScanAt = nil
 
-LoopAsync(TICK_SECONDS * 1000, function()
+every(TICK_SECONDS * 1000, function()
     attempts = attempts + 1
 
     if scans == 0 and attempts > 60 then

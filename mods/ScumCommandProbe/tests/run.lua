@@ -180,7 +180,9 @@ function FindFirstOf(name)
     return nil
 end
 function ExecuteInGameThread(callback) callback() end
-function LoopAsync(_, callback)
+-- UE4SS game-thread timer; LoopAsync would run Lua on a background thread.
+function LoopAsync() error("timers must run on the game thread (LoopInGameThreadWithDelay)") end
+function LoopInGameThreadWithDelay(_, callback)
     for _ = 1, 100 do
         loopTicks = loopTicks + 1
         if callback() then return end

@@ -27,6 +27,34 @@ local function safe(fn, ...)
     return nil
 end
 
+-- UE4SS runs LoopAsync callbacks on a background thread without locking this mod's Lua state,
+-- while game-thread callbacks and hooks use it at the same time; together they corrupt the
+-- state and crash the server (twice on a live server, inside UE4SS). So timers run on the game
+-- thread when this UE4SS has LoopInGameThreadWithDelay; on an older one the background thread
+-- only hands the work over. The callback returns true to stop.
+local function every(milliseconds, callback)
+    if type(LoopInGameThreadWithDelay) == "function" then
+        local handle
+        handle = LoopInGameThreadWithDelay(milliseconds, function()
+            local stop = callback()
+            if stop == true and handle ~= nil and type(CancelDelayedAction) == "function" then
+                CancelDelayedAction(handle)
+            end
+            return stop
+        end)
+        return handle
+    end
+    local stopped = false
+    return LoopAsync(milliseconds, function()
+        if not stopped then
+            ExecuteInGameThread(function()
+                if callback() == true then stopped = true end
+            end)
+        end
+        return stopped
+    end)
+end
+
 local function modDir()
     local source = string.gsub(debug.getinfo(1, "S").source or "", "^@", "")
     return string.match(source, "^(.*)[/\\]Scripts[/\\]main%.lua$")
@@ -855,7 +883,7 @@ os.remove(PROCESSING_FILE)
 local ITEM_RESCAN = 30 * 60
 local itemsWritten, itemTries, worldSeenAt, lastItemCheck, lastItemScan = false, 0, nil, nil, nil
 
-LoopAsync(1000, function()
+every(1000, function()
     local now = os.time()
     if itemsWritten and lastItemScan and now - lastItemScan >= ITEM_RESCAN then
         lastItemScan = now

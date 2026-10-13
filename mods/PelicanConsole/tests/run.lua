@@ -80,7 +80,9 @@ end
 local gameThreadRuns = 0
 function ExecuteInGameThread(callback) gameThreadRuns = gameThreadRuns + 1; callback() end
 local loopCallback, loopDelay
-function LoopAsync(delay, callback) loopDelay, loopCallback = delay, callback end
+-- UE4SS game-thread timer; LoopAsync would run Lua on a background thread.
+function LoopAsync() error("timers must run on the game thread (LoopInGameThreadWithDelay)") end
+function LoopInGameThreadWithDelay(delay, callback) loopDelay, loopCallback = delay, callback end
 
 -- Run a temp copy of the mod so the real folder is untouched.
 local tmp = os.tmpname()
