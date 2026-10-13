@@ -1094,6 +1094,15 @@ adminCommands = {}
 chat("76561198000000071", "Kim", "!sell")
 step()
 check("sell: nothing removed or paid when the drop fails", not stuck.destroyed and #adminCommands == 0 and has(lastPrivate("Kim"), "nothing was sold"))
+-- Another item on the ground, and an item the game replaces as it is dropped.
+local nearby = heldItem("BP_Weapon_AK47_C")
+local swapped = heldItem("BP_Weapon_AK47_C")
+kim.pawn.inHands = swapped
+function kim.pawn:DropItemFromHands() swapped.valid = false self.inHands = nil end
+chat("76561198000000071", "Kim", "!sell")
+step()
+check("sell: an item replaced on drop is not removed or paid, and nothing nearby is touched",
+    not swapped.destroyed and not nearby.destroyed and #adminCommands == 0 and has(lastPrivate("Kim"), "at your feet"))
 
 -- Squad bonus: Kim and Lee in one squad, both online.
 adminCommands = {}

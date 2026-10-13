@@ -2357,6 +2357,12 @@ local function sellCommand(session, rest)
     if not dropped or (isValid(stillHeld) and address(stillHeld) == address(item)) then
         return tell(session, "Could not take the item from your hands; nothing was sold.")
     end
+    -- Only the exact item that was in their hands is removed: nothing nearby is looked at. If
+    -- the game has replaced it since the drop, nothing is removed and nothing is paid.
+    if not isValid(item) then
+        output("Selling: " .. session.name .. "'s " .. tostring(entry.item) .. " changed when it was dropped; not removed, not paid.")
+        return tell(session, "The sale failed; the item is on the ground at your feet.")
+    end
     local removed = pcall(function() item:K2_DestroyActor() end)
     if not removed then
         output("Selling: " .. session.name .. "'s " .. tostring(entry.item) .. " was dropped but could not be removed; not paid.")
