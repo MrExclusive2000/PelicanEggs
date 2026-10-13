@@ -30,3 +30,9 @@ Use:
 Optional: a probe-settings.lua next to this file (an old probe.lua is ignored) narrows the search to one topic, e.g.
   return { title = "Item probe", keywords = { "item", "inventory" }, nativeOnly = true,
            wholeClasses = { "inventory" } }
+
+Ready-made settings in presets/ (copy one to probe-settings.lua next to this file):
+  cash-and-stacks.lua   cash items and stack amounts
+  sell-items.lua        how SCUM takes items out of an inventory (for selling to the server)
+In wholeClasses, a word starting with "=" must be the whole class name ("=item" is the Item
+class only); other words match any class whose name contains them.

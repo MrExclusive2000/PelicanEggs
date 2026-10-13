@@ -271,7 +271,7 @@ check("fallback still reports PlayerController functions", string.find(fallbackR
 
 -- Fourth scenario: probe-settings.lua narrows the topic, skips Blueprints and lists whole classes.
 assert(io.open(tmp .. "/ScumCommandProbe/probe-settings.lua", "w")):write([[return {
-    title = "Item probe", keywords = { "inventory" }, nativeOnly = true, wholeClasses = { "gamemode" }, lateScanMinutes = 1,
+    title = "Item probe", keywords = { "inventory" }, nativeOnly = true, wholeClasses = { "=conzgamemode", "=mode" }, lateScanMinutes = 1,
 }]]):close()
 log, loopTicks, findCalls, gameModeAvailableAfter, scannedAtTick, findObjectsWorks = {}, 0, 0, 1, nil, true
 dofile(copy)

@@ -313,8 +313,13 @@ local function inspectClass(class, report)
     end
 
     local whole = false
+    -- A word starting with "=" must be the whole class name ("=item" is Item, not every item).
     for _, word in ipairs(WHOLE_CLASSES) do
-        if string.find(lower(className), word, 1, true) then whole = true end
+        if string.sub(word, 1, 1) == "=" then
+            if lower(className) == string.sub(word, 2) then whole = true end
+        elseif string.find(lower(className), word, 1, true) then
+            whole = true
+        end
     end
 
     for _, func in ipairs((collect(class, "ForEachFunction"))) do
