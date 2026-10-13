@@ -670,5 +670,30 @@ check('inventory: worn and carried, stacks combined, cash counted', SaveDatabase
     ['item' => 'Cash', 'quantity' => 99, 'depth' => 2],
 ]), ['worn' => ['Military Helmet 01 09' => 1], 'carried' => ['Emergency bandage' => 5, 'Water 05l' => 2], 'cash' => 99]);
 
+// ---------------------------------------------------------------- setting help and defaults
+use MrExclusive\ScumManager\Support\SettingHelp;
+use MrExclusive\ScumManager\Support\SettingDefaults;
+check('help: written key', SettingHelp::describe('scum.MaxPlayers'), 'Most players online at once.');
+check('help: -1 explained where SCUM picks', str_contains((string) SettingHelp::describe('scum.MaxAllowedPuppets'), '-1 = SCUM decides'), true);
+check('help: families', [
+    SettingHelp::describe('scum.WolfPrevalenceMultiplier') !== null,
+    str_contains((string) SettingHelp::describe('scum.SectorRespawnPrice'), 'in a chosen sector'),
+    str_contains((string) SettingHelp::describe('scum.ShelterRespawnCooldown'), 'at their shelter'),
+    SettingHelp::describe('scum.TurretsAttackPrisoners'),
+], [true, true, true, 'Base turrets shoot at prisoners.']);
+check('help: unknown key gives nothing', SettingHelp::describe('scum.SomethingNew'), null);
+check('help: no sentence starts lower case', array_filter(array_map(fn ($k) => SettingHelp::describe("scum.$k"), ['BearMaxHealthMultiplier', 'GasolinePeriodicRefillAmountMultiplier', 'ChestMaxAmountPerFlagArea']), fn ($t) => $t === null || ctype_lower($t[0])), []);
+$defaults = SettingDefaults::fromIni("[General]\r\nscum.MaxPlayers=64\r\n[World]\r\nscum.PuppetHealthMultiplier=1.000000\r\n");
+check('defaults: read by section and key', $defaults, ['General' => ['scum.MaxPlayers' => '64'], 'World' => ['scum.PuppetHealthMultiplier' => '1.000000']]);
+check('defaults: formatting is not a change', [SettingDefaults::differs('1', '1.000000'), SettingDefaults::differs('true', 'True'), SettingDefaults::differs(' 64', '64'), SettingDefaults::differs('24:00:00', '24:00:00')], [false, false, false, false]);
+check('defaults: real changes', [SettingDefaults::differs('1.5', '1.000000'), SettingDefaults::differs('False', 'True'), SettingDefaults::differs('2g', '1g'), SettingDefaults::differs('abc', '1')], [true, true, true, true]);
+check('defaults: labels', [SettingDefaults::label('1.500000'), SettingDefaults::label('10.000000'), SettingDefaults::label('True'), SettingDefaults::label(''), SettingDefaults::label('-1'), SettingDefaults::label('-1.000000'), SettingDefaults::label('0.000000')],
+    ['Default: 1.5', 'Default: 10', 'Default: on', 'Default: (empty)', 'Default: -1 (SCUM decides)', 'Default: -1 (SCUM decides)', 'Default: 0']);
+
+check('defaults capture: only the egg keys are left in place', MrExclusive\ScumManager\Services\ScumServerService::eggKeysOnly(
+    "[General]\r\nscum.ServerName=Exclsv\r\nscum.ServerPassword=secret\r\nscum.MaxPing=200\r\n[World]\r\nscum.MaxAllowedPuppets=5\r\n",
+    ['General' => ['scum.ServerName' => '{{x}}', 'scum.ServerPassword' => '{{y}}', 'scum.ServerPlaystyle' => '{{z}}']],
+), "[General]\nscum.ServerName=Exclsv\nscum.ServerPassword=secret\n");
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

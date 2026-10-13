@@ -22,6 +22,8 @@ use MrExclusive\ScumManager\Support\OnlinePlayers;
 use MrExclusive\ScumManager\Support\PlayerDirectory;
 use MrExclusive\ScumManager\Support\SaveDatabase;
 use Throwable;
+use MrExclusive\ScumManager\Support\IniDocument;
+use MrExclusive\ScumManager\Support\SettingDefaults;
 use MrExclusive\ScumManager\Support\Ue4ssSettings;
 use RuntimeException;
 use MrExclusive\ScumManager\Support\Brand;
@@ -29,6 +31,12 @@ use MrExclusive\ScumManager\Support\Brand;
 class ScumServerService
 {
     public const SETTINGS_FILE = 'ServerSettings.ini';
+
+    /** SCUM's own defaults, captured once from a file the game generated from scratch. */
+    public const SETTINGS_DEFAULTS_FILE = 'ServerSettings.defaults.ini';
+
+    /** Where the real settings wait while SCUM generates a fresh file. */
+    public const SETTINGS_SET_ASIDE_FILE = 'ServerSettings.mine.ini';
 
     public const FEATURE = 'scum_manager';
 
@@ -240,6 +248,129 @@ class ScumServerService
     {
         if (!preg_match('/^' . preg_quote($file, '/') . '\.bak-\d{8}-\d{6}$/', $backup)) {
             throw new RuntimeException('Invalid backup name.');
+        }
+    }
+
+    // ------------------------------------------------------------------ defaults capture
+
+    /**
+     * SCUM's defaults (section => [key => value]), or null until they have been captured.
+     *
+     * @return array<string, array<string, string>>|null
+     */
+    public function settingDefaults(Server $server): ?array
+    {
+        $raw = $this->read($server, $this->configPath(self::SETTINGS_DEFAULTS_FILE));
+
+        return $raw === null ? null : SettingDefaults::fromIni($raw);
+    }
+
+    /** True while the real settings are set aside so SCUM can generate a default file. */
+    public function capturingDefaults(Server $server): bool
+    {
+        return $this->read($server, $this->configPath(self::SETTINGS_SET_ASIDE_FILE)) !== null;
+    }
+
+    /**
+     * Step 1 (server stopped): set ServerSettings.ini aside so SCUM writes a fresh one with
+     * its defaults on the next start. The set-aside copy is checked before the original goes.
+     */
+    public function prepareDefaultsCapture(Server $server): void
+    {
+        $this->assertStopped($server);
+        if ($this->capturingDefaults($server)) {
+            throw new RuntimeException('A capture is already under way. Finish or cancel it first.');
+        }
+
+        $current = $this->read($server, $this->configPath(self::SETTINGS_FILE));
+        if ($current === null) {
+            throw new RuntimeException('There is no ServerSettings.ini to set aside.');
+        }
+
+        $this->backup($server, self::SETTINGS_FILE, $current);
+        $this->write($server, $this->configPath(self::SETTINGS_SET_ASIDE_FILE), $current);
+        if ($this->read($server, $this->configPath(self::SETTINGS_SET_ASIDE_FILE)) !== $current) {
+            throw new RuntimeException('Could not set your settings aside safely, so nothing was changed.');
+        }
+
+        // Not an empty start: the egg's own keys (name, password, ...) stay as they are, so the
+        // server never runs open while SCUM fills in everything else with its defaults.
+        $this->write($server, $this->configPath(self::SETTINGS_FILE), self::eggKeysOnly($current, $this->eggManagedSettings($server)));
+    }
+
+    /**
+     * A settings file holding only the keys the egg manages, with their current values.
+     *
+     * @param  array<string, array<string, string>>  $managed
+     */
+    public static function eggKeysOnly(string $current, array $managed): string
+    {
+        $from = IniDocument::parse($current);
+        $only = IniDocument::parse('');
+        foreach ($managed as $section => $keys) {
+            foreach (array_keys($keys) as $key) {
+                $value = $from->get($section, $key);
+                if ($value !== null) {
+                    $only->set($section, $key, $value);
+                }
+            }
+        }
+
+        return $only->render();
+    }
+
+    /**
+     * Step 3 (server stopped, after it ran once): keep what SCUM generated as the defaults and
+     * put the real settings back.
+     *
+     * @return int how many settings the defaults file holds
+     */
+    public function finishDefaultsCapture(Server $server): int
+    {
+        $this->assertStopped($server);
+        $mine = $this->read($server, $this->configPath(self::SETTINGS_SET_ASIDE_FILE));
+        if ($mine === null) {
+            throw new RuntimeException('No capture is under way.');
+        }
+
+        $generated = $this->read($server, $this->configPath(self::SETTINGS_FILE));
+        $count = $generated === null ? 0 : count(IniDocument::parse($generated)->entries());
+        if ($count < 20) {
+            throw new RuntimeException('SCUM has not written a full ServerSettings.ini yet. Start the server, wait until it is online, stop it, then try again (or cancel to put your settings back).');
+        }
+
+        $this->write($server, $this->configPath(self::SETTINGS_DEFAULTS_FILE), $generated);
+        $this->restoreSetAside($server, $mine);
+
+        return $count;
+    }
+
+    /** Put the real settings back without keeping anything SCUM generated. */
+    public function cancelDefaultsCapture(Server $server): void
+    {
+        $this->assertStopped($server);
+        $mine = $this->read($server, $this->configPath(self::SETTINGS_SET_ASIDE_FILE));
+        if ($mine === null) {
+            throw new RuntimeException('No capture is under way.');
+        }
+
+        $this->restoreSetAside($server, $mine);
+    }
+
+    private function restoreSetAside(Server $server, string $mine): void
+    {
+        $this->write($server, $this->configPath(self::SETTINGS_FILE), $mine);
+        if ($this->read($server, $this->configPath(self::SETTINGS_FILE)) !== $mine) {
+            throw new RuntimeException('Could not put your settings back. They are still safe in ' . self::SETTINGS_SET_ASIDE_FILE . '.');
+        }
+
+        $this->files($server)->deleteFiles(config('scum-manager.config_dir'), [self::SETTINGS_SET_ASIDE_FILE]);
+    }
+
+    private function assertStopped(Server $server): void
+    {
+        if (!$this->isStopped($server)) {
+            throw new RuntimeException('Stop the server first.');
         }
     }
 
