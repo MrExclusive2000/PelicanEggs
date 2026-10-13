@@ -583,6 +583,50 @@ local function findAll(classNames)
     return found
 end
 
+-- Online players' controllers, from the game state's list of players: a handful of objects,
+-- where searching for them means going through every object in the game (tens of thousands),
+-- which made the server lag once the mods ran on the game thread. Players who have left are
+-- already off the list. If the list cannot be read, the search is used instead (said once).
+local playerControllers = (function()
+    local GAME_STATE_CLASSES = { "BP_ConZGameState_C", "ConZGameState", "GameStateBase" }
+    local gameState, foundAt, listWorks = nil, nil, nil
+    return function(search, classes)
+        if listWorks ~= false then
+            local now = os.time()
+            if gameState == nil or foundAt == nil or now - foundAt >= 60 or not isValid(gameState) then
+                gameState, foundAt = nil, now
+                for _, className in ipairs(GAME_STATE_CLASSES) do
+                    local found = safe(function() return FindFirstOf(className) end)
+                    if isValid(found) then gameState = found break end
+                end
+            end
+            if gameState ~= nil then
+                local list, entries = {}, 0
+                local read = safe(function()
+                    gameState.PlayerArray:ForEach(function(_, element)
+                        entries = entries + 1
+                        local controller = safe(function() return element:get():GetOwner() end)
+                        if isValid(controller) then list[#list + 1] = controller end
+                    end)
+                    return true
+                end) == true
+                if read and (#list > 0 or entries == 0) then
+                    if listWorks == nil then
+                        listWorks = true
+                        print(TAG .. "Finding players through the game's player list.\n")
+                    end
+                    return list
+                end
+                if read and entries > 0 then
+                    listWorks = false
+                    print(TAG .. "The game's player list has no controllers; searching for players instead (slower).\n")
+                end
+            end
+        end
+        return search(classes)
+    end
+end)()
+
 local function findFirst(classNames)
     for _, className in ipairs(classNames) do
         local object = safe(function() return FindFirstOf(className) end)
@@ -2667,7 +2711,7 @@ local function tick()
     lastTick = time
 
     local seen = {}
-    local controllers = findAll(CONTROLLER_CLASSES)
+    local controllers = playerControllers(findAll, CONTROLLER_CLASSES)
     for _, controller in ipairs(controllers) do
         local key = address(controller)
         seen[key] = true

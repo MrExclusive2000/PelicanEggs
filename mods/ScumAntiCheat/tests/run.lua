@@ -748,6 +748,49 @@ write(dir .. "/config.lua", 'return { action = "kick" }')
 step(31)
 check("settings reloaded", has(acLog(), "Settings reloaded (action=kick)."))
 
+-- ------------------------------------------------------------------ players from the game's player list
+-- With a game state, players come from its PlayerArray: no search through every object (that
+-- made the server lag 10 times a second), and the checks still work.
+local searchesBefore = liveSearches or 0
+local function PlayerList(entries)
+    return { ForEach = function(_, callback)
+        for index, entry in ipairs(entries()) do callback(index, { get = function() return entry end }) end
+    end }
+end
+local gameState = object()
+gameState.PlayerArray = PlayerList(function()
+    local states = {}
+    for _, controller in ipairs(players) do states[#states + 1] = { GetOwner = function() return controller end } end
+    return states
+end)
+local findFirstBefore = FindFirstOf
+function FindFirstOf(className)
+    if className == "BP_ConZGameState_C" then return gameState end
+    return findFirstBefore(className)
+end
+start('return { action = "log" }')
+local runner = Player("Runner", Pawn("BP_Prisoner_C", 0, 0, 0))
+login("76561198000000031", "Runner")
+players = { runner }
+tick()
+for _ = 1, 3 do
+    runner.pawn.x = runner.pawn.x + 40
+    for _ = 1, 10 do aimTick() end
+    step()
+end
+check("players found from the game's player list", has(table.concat(log), "Finding players through the game's player list."))
+check("checks still work from the list", has(acLog(), "Runner (76561198000000031): moving 40.0 m/s on foot"))
+local searchesAfter = liveSearches or 0
+check("no search through every object, even at 10 aim samples a second", searchesAfter == searchesBefore)
+
+-- A list whose entries have no controller: falls back to the search, and says so once.
+gameState.PlayerArray = PlayerList(function() return { { GetOwner = function() return nil end } } end)
+start('return { action = "log" }')
+players = { Player("Hidden", Pawn("BP_Prisoner_C", 0, 0, 0)) }
+step()
+check("unreadable list falls back to the search", has(table.concat(log), "searching for players instead") and (liveSearches or 0) > searchesAfter)
+FindFirstOf = findFirstBefore
+
 os.execute("rm -rf '" .. tmp .. "'")
 check("player searches leave out objects being destroyed (FindObjects, not FindAllOf)", (liveSearches or 0) > 0)
 check("player searches leave out class default objects and archetypes", templateSearches == nil)
