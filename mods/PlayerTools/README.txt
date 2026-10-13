@@ -63,6 +63,11 @@ Good to know:
    reads balances, which may have crashed a server), PlayerTools checks once
    per run whether SCUM accepts these commands without an admin (1 coin added to a player
    and taken back) and uses that route if it works. The log says which way it went.
+ - Without an admin (confirmed on a live server): when the file no-admin-commands.txt exists
+   in the PelicanConsole mod folder, ChangeCurrencyBalance, ChangeFamePoints, SpawnItem and
+   Teleport run with no admin online, as the player they are for (see PelicanConsole's
+   README). Rewards, bounty payouts and charges then happen straight away. Delete the file
+   to go back to waiting for an admin; a restart always restores SCUM's own settings.
  - Starter kit items: while starterKitItems is empty, starterKitPreset = "basic" gives 2
    water, tuna, beans, 2 apples, 3 bandages, a knife and a small backpack. Items need "Give
    items" on, and an item type is only given once SCUM has loaded it on the server (the log

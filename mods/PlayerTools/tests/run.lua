@@ -985,6 +985,48 @@ check("one backup per day", exists(backupName(clock)) and exists(backupName(cloc
 check("backups older than 7 days removed", not exists(backupName(firstDay)) and exists(backupName(firstDay + 2 * 86400)))
 players = {}
 
+-- ================================================================== no admin online: the no-admin route
+-- With PelicanConsole's no-admin-commands.txt, a reward runs as the player it is for: the money
+-- command's default object is lowered to Regular only while it runs, and the anti-cheat is told.
+local playerSearchTemplates = templateSearches
+private, hud, adminCommands = {}, {}, {}
+local currencyDefault = object({ _requiredExecutorLevel = 1 })
+local levelSeen = nil
+local findAllBefore = FindAllOf
+function FindAllOf(className)
+    if className == "ChangeCurrencyBalance_C" then return { currencyDefault } end
+    return findAllBefore(className)
+end
+os.execute("mkdir -p '" .. mods .. "/ScumAntiCheat'")
+write(mods .. "/ScumAntiCheat/config.lua", "return {}")
+write(dir .. "/players.tsv", "")
+write(dir .. "/config.lua", [[return {
+    newPlayers = { starterKit = false },
+    playtimeRewards = { enabled = true, everyMinutes = 0, commands = {},
+        dailyCommands = { "ChangeCurrencyBalance Normal 200 {steamId}" }, dailyMessage = "Daily!" },
+    featureTips = { onJoin = false, announceEveryMinutes = 0 },
+}]])
+dofile(dir .. "/Scripts/main.lua")
+local una = Player("Una")
+function una.channel:Chat_Server_ProcessAdminCommand(command)
+    adminCommands[#adminCommands + 1] = { by = "Una", command = command }
+    levelSeen = currencyDefault._requiredExecutorLevel
+end
+login("76561198000000060", "Una")
+players = { una }
+step(20)
+check("off without the switch file: nothing run", #adminCommands == 0 and lastPrivate("Una") ~= "Daily!")
+write(mods .. "/PelicanConsole/no-admin-commands.txt", "")
+step(20)
+check("daily bonus paid without an admin, as the player", adminCommands[1] and adminCommands[1].by == "Una"
+    and adminCommands[1].command == "ChangeCurrencyBalance Normal 200 76561198000000060" and lastPrivate("Una") == "Daily!")
+check("level lowered only while it runs", levelSeen == 0 and currencyDefault._requiredExecutorLevel == 1)
+check("anti-cheat told about the command", has(read(mods .. "/ScumAntiCheat/allowed_commands.txt"), "ChangeCurrencyBalance Normal 200 76561198000000060"))
+os.remove(mods .. "/PelicanConsole/no-admin-commands.txt")
+FindAllOf = findAllBefore
+templateSearches = playerSearchTemplates
+players = {}
+
 os.execute("rm -rf '" .. tmp .. "'")
 check("player searches leave out objects being destroyed (FindObjects, not FindAllOf)", (liveSearches or 0) > 0)
 check("player searches leave out class default objects and archetypes", templateSearches == nil)

@@ -88,7 +88,7 @@ final class ModSettings
                     ],
                 ],
                 'Without an admin online (experimental)' => [
-                    'description' => 'Cash rewards, the starter kit cash and paid teleports normally run as an online admin and wait until one is on. With this on, ExclsvPlayerTools checks once per server run whether SCUM accepts the commands without an admin (it adds 1 coin to a player and takes it back) and uses that if it works. The result is in the PlayerTools log.',
+                    'description' => 'Cash rewards, the starter kit cash and paid teleports normally run as an online admin and wait until one is on. The working way round that (confirmed on a live server): create an empty no-admin-commands.txt in the PelicanConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/PelicanConsole/). Then ChangeCurrencyBalance, ChangeFamePoints, SpawnItem and Teleport run without an admin, as the player they are for; delete the file to turn it off. The toggle below is the older test of SCUM\'s command helper, which SCUM ignores; leave it off.',
                     'fields' => [
                         'noAdminFallback' => ['toggle', 'Try without an admin (experimental: reads balances, suspected in a server crash)', false],
                     ],
