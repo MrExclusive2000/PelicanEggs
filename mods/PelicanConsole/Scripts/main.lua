@@ -693,8 +693,10 @@ end
 -- command in while it is lowered. Only the commands below, which our mods use, are allowed.
 -- Off unless no-admin-commands.txt exists in this mod's folder: delete it to turn this off.
 -- The levels live only in memory, so a server restart always puts SCUM's own values back.
+-- Lower-case verb -> SCUM's command class (the native AdminCommand_X and its Blueprint X_C).
 local ELEVATED_COMMANDS = {
-    changecurrencybalance = true, changefamepoints = true, spawnitem = true, teleport = true,
+    changecurrencybalance = "ChangeCurrencyBalance", changefamepoints = "ChangeFamePoints",
+    spawnitem = "SpawnItem", teleport = "Teleport",
 }
 local ELEVATED_SWITCH = "no-admin-commands.txt"
 local REGULAR = 0
@@ -709,19 +711,41 @@ local function elevatedEnabled()
     return true
 end
 
-local function registryCommand(name)
+-- Every object that can hold the command's level: the command's default object (new command
+-- objects copy their values from it), any instances, and what the registry holds (objects, or
+-- classes whose default object is used). Only objects whose level can be read are kept.
+local function commandObjects(name)
+    local className = ELEVATED_COMMANDS[name]
+    local wanted = { [string.lower(className) .. "_c"] = true, ["admincommand_" .. string.lower(className)] = true }
+    local found, seen = {}, {}
+    local function add(object)
+        if not isValid(object) then return end
+        local key = address(object)
+        if seen[key] then return end
+        if type(safe(function() return object._requiredExecutorLevel end)) == "number" then
+            seen[key] = true
+            found[#found + 1] = object
+        end
+    end
+    for _, class in ipairs({ className .. "_C", "AdminCommand_" .. className }) do
+        for _, object in ipairs(liveObjects(class)) do add(object) end
+    end
     local instance = findFirst(GAME_INSTANCE_CLASSES)
     local commands = instance and safe(function() return instance._adminCommandRegistry._commands end)
-    if commands == nil then return nil end
-    local wanted = { ["admincommand_" .. name] = true, [name .. "_c"] = true }
-    local found = nil
-    safe(function()
-        commands:ForEach(function(_, element)
-            local command = element:get()
-            local class = safe(function() return string.lower(command:GetClass():GetFName():ToString()) end)
-            if found == nil and class and wanted[class] then found = command end
+    if commands ~= nil then
+        safe(function()
+            commands:ForEach(function(_, element)
+                local entry = element:get()
+                local own = safe(function() return string.lower(entry:GetFName():ToString()) end)
+                local classOf = safe(function() return string.lower(entry:GetClass():GetFName():ToString()) end)
+                if own and wanted[own] then
+                    add(safe(function() return entry:GetCDO() end)) -- the registry holds the class
+                elseif classOf and wanted[classOf] then
+                    add(entry)
+                end
+            end)
         end)
-    end)
+    end
     return found
 end
 
@@ -754,36 +778,43 @@ local function runElevated(command, executor, quiet)
     executor = executor or players()[1]
     if executor == nil then return false end
     local channel = channelOf(executor.controller)
-    local target = registryCommand(name)
-    if channel == nil or target == nil then
+    local targets = commandObjects(name)
+    if channel == nil or #targets == 0 then
         output("Could not run " .. command .. " without an admin: "
-            .. (channel == nil and ("no command channel for " .. executor.name) or ("SCUM's " .. name .. " command was not found")) .. ".")
+            .. (channel == nil and ("no command channel for " .. executor.name) or ("SCUM's " .. ELEVATED_COMMANDS[name] .. " command was not found")) .. ".")
         return false
     end
-    local level = safe(function() return target._requiredExecutorLevel end)
-    if type(level) ~= "number" then
-        output("Could not read the admin level of SCUM's " .. name .. " command.")
-        return false
+    local levels = {}
+    for index, target in ipairs(targets) do
+        levels[index] = safe(function() return target._requiredExecutorLevel end)
     end
 
     local text = (string.gsub(command, "^#+", ""))
-    local lowered = safe(function() target._requiredExecutorLevel = REGULAR return true end) == true
+    local lowered = true
+    for _, target in ipairs(targets) do
+        if safe(function() target._requiredExecutorLevel = REGULAR return true end) ~= true then lowered = false end
+    end
     local ok, err = false, "the admin level could not be changed"
     if lowered then
         ok, err = pcall(function() channel:Chat_Server_ProcessAdminCommand(text) end)
     end
-    -- Put the level back, check it, and never use this route again if that fails.
-    for _ = 1, 3 do
-        safe(function() target._requiredExecutorLevel = level end)
-        if safe(function() return target._requiredExecutorLevel end) == level then break end
+    -- Put every level back, check them, and never use this route again if that fails.
+    local restored = true
+    for index, target in ipairs(targets) do
+        for _ = 1, 3 do
+            safe(function() target._requiredExecutorLevel = levels[index] end)
+            if safe(function() return target._requiredExecutorLevel end) == levels[index] then break end
+        end
+        if safe(function() return target._requiredExecutorLevel end) ~= levels[index] then restored = false end
     end
-    if safe(function() return target._requiredExecutorLevel end) ~= level then
+    if not restored then
         elevatedBroken = true
-        output("WARNING: could not restore the admin level of " .. name .. ". Restart the server now so players cannot use it.")
+        output("WARNING: could not restore the admin level of " .. ELEVATED_COMMANDS[name] .. ". Restart the server now so players cannot use it.")
     end
 
     if ok then
-        output("Ran without an admin, as " .. executor.name .. ": " .. text .. " (experimental: check it worked, e.g. with Balance)")
+        output("Ran without an admin, as " .. executor.name .. ": " .. text .. " (experimental; " .. #targets
+            .. " command object(s) at level " .. table.concat(levels, "/") .. "; check it worked, e.g. with Balance)")
     else
         output("Failed without an admin: " .. text .. " (" .. tostring(err) .. ")")
     end

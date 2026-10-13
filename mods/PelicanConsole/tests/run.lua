@@ -465,6 +465,30 @@ check("only whitelisted commands", #rpc == 2 and godMode._requiredExecutorLevel 
     and string.find(consoleLog(), "AsPlayer only runs ChangeCurrencyBalance", 1, true) ~= nil)
 check("other commands still go to SCUM's helper", calls[1] and calls[1].command == "SetGodMode 1")
 
+-- SCUM's registry holds command classes: the class's default object (found by the safe search
+-- and through the class) is what gets lowered, once, and put back.
+local cdo = RegistryCommand("Default__ChangeCurrencyBalance_C", 1)
+local cdoLevels = {}
+function regular.channel:Chat_Server_ProcessAdminCommand(command)
+    rpc[#rpc + 1] = { by = "Bob", command = command }
+    cdoLevels[#cdoLevels + 1] = cdo._requiredExecutorLevel
+end
+local blueprintClass = object()
+function blueprintClass:GetFName() return { ToString = function() return "ChangeCurrencyBalance_C" end } end
+function blueprintClass:GetCDO() return cdo end
+registryList = { blueprintClass }
+local findAllBefore = FindAllOf
+function FindAllOf(className)
+    if className == "ChangeCurrencyBalance_C" then return { cdo } end
+    return findAllBefore(className)
+end
+writeCommands("ChangeCurrencyBalance Normal 2 76561198000000001\n")
+loopCallback()
+check("default object of a registry class lowered while it runs", cdoLevels[1] == 0 and cdo._requiredExecutorLevel == 1 and #rpc == 3
+    and string.find(consoleLog(), "1 command object(s) at level 1", 1, true) ~= nil)
+FindAllOf = findAllBefore
+function regular.channel:Chat_Server_ProcessAdminCommand(command) rpc[#rpc + 1] = { by = "Bob", command = command } end
+
 -- The level cannot be put back: warn, and never use the route again.
 local stuckLevel = 1
 local stuck = setmetatable({}, {
@@ -479,10 +503,10 @@ function stuck:GetClass() return currency:GetClass() end
 registryList = { stuck }
 writeCommands("ChangeCurrencyBalance Normal 1 76561198000000001\n")
 loopCallback()
-check("failed restore is reported", string.find(consoleLog(), "WARNING: could not restore the admin level of changecurrencybalance", 1, true) ~= nil)
+check("failed restore is reported", string.find(consoleLog(), "WARNING: could not restore the admin level of ChangeCurrencyBalance", 1, true) ~= nil)
 writeCommands("ChangeCurrencyBalance Normal 1 76561198000000001\n")
 loopCallback()
-check("route switched off after a failed restore", #rpc == 3
+check("route switched off after a failed restore", #rpc == 4
     and string.find(consoleLog(), "switched off after a problem", 1, true) ~= nil)
 
 os.remove(dir .. "/no-admin-commands.txt")
