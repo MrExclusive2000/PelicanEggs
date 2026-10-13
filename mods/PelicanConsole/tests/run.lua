@@ -65,6 +65,13 @@ function FindAllOf(className)
     end
     return nil
 end
+-- UE4SS FindObjects: object searches must leave out objects still loading or being destroyed.
+function FindObjects(count, className, name, required, banned, exact)
+    if className == "Class" then return {} end
+    assert(banned == 0x400 | 0x1000 | 0x8000 | 0x10000, "object searches must leave out objects being destroyed")
+    liveSearches = (liveSearches or 0) + 1
+    return FindAllOf(className) or {}
+end
 function FindFirstOf(className)
     if worldAvailable and className == "World" then return world end
     if worldAvailable and className == "ConZGameMode" then return gameMode end
@@ -233,7 +240,8 @@ function FindObject(className, name)
     if name == "BP_Water_05l_C" then return waterClass end
     return nil
 end
-function FindObjects(count, className) return { waterClass, otherClass } end
+local liveFindObjects = FindObjects
+function FindObjects(count, className, ...) if className ~= "Class" then return liveFindObjects(count, className, ...) end return { waterClass, otherClass } end
 local statics = object()
 local fits = true
 function statics:BeginDeferredActorSpawnFromClass(w, class, transform, collision)
@@ -295,7 +303,7 @@ local function NamedClass(name) local c = object() function c:GetFName() return 
 local classList = { NamedClass("BP_Banker_Outpost_C"), NamedClass("BankATMWidget"), NamedClass("TraderFilterFamePointsButton"),
     NamedClass("BP_SafeZone_C"), NamedClass("Default__BP_Banker_Outpost_C") }
 local savedFindObjects = FindObjects
-function FindObjects(count, className) assert(className == "Class") return classList end
+function FindObjects(count, className, ...) if className ~= "Class" then return liveFindObjects(count, className, ...) end return classList end
 -- Rows along -Y (A at the top), columns along +X: A0 (0, 900), B4 (4, 600), C2 (2, 300), Z3 (3, -300), in km-ish units.
 local bankers = { Banker(0, 900000), Banker(400000, 600000), Banker(200000, 300000), Banker(300000, -300000), Banker(300100, -300100) }
 local zones = {}
@@ -353,7 +361,7 @@ end
 local foodBase = Class("FoodItem", itemBase)
 local loadedClasses = { Class("BP_Water_05l_C", foodBase), Class("BP_Weapon_AK47_C", Class("WeaponItem", itemBase)),
     Class("BP_Door_C", Class("Actor", nil)), Class("SKEL_BP_Apple_C", foodBase) }
-function FindObjects(count, className) assert(className == "Class") return loadedClasses end
+function FindObjects(count, className, ...) if className ~= "Class" then return liveFindObjects(count, className, ...) end return loadedClasses end
 writeCommands("ListItems\n")
 loopCallback()
 local function itemsFile() local f = io.open(dir .. "/items.txt") local t = f and f:read("a") or "" if f then f:close() end return t end
@@ -410,5 +418,6 @@ check("unknown folder disables the mod", loopCallback == nil)
 check("unknown folder reported", string.find(table.concat(log), "Could not work out the mod folder", 1, true) ~= nil)
 
 os.execute("rm -rf '" .. tmp .. "'")
+check("player searches leave out objects being destroyed (FindObjects, not FindAllOf)", (liveSearches or 0) > 0)
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))
 os.exit(failures == 0 and 0 or 1)

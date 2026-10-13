@@ -65,6 +65,13 @@ local hud = {}
 local gameModeAvailable = true
 local gameMode = object()
 function gameMode:SendHUDMessageToAll(message, beep) assert(beep == false) hud[#hud + 1] = message end
+-- UE4SS FindObjects: object searches must leave out objects still loading or being destroyed.
+function FindObjects(count, className, name, required, banned, exact)
+    if className == "Class" then return {} end
+    assert(banned == 0x400 | 0x1000 | 0x8000 | 0x10000, "object searches must leave out objects being destroyed")
+    liveSearches = (liveSearches or 0) + 1
+    return FindAllOf(className) or {}
+end
 function FindFirstOf(className)
     if className == "World" then return world end
     if className == "ConZGameMode" and gameModeAvailable then return gameMode end
@@ -229,6 +236,24 @@ log = {}
 dofile(dir .. "/Scripts/main.lua")
 check("broken config reported", string.find(table.concat(log), "config.lua could not be read, using defaults", 1, true) ~= nil)
 
+-- ------------------------------------------------------------------ scenario 4: a UE4SS that cannot filter
+-- FindObjects finds nothing with the filter although a player is online: fall back to FindAllOf.
+writeConfig("return {}")
+log, sendFails, processorAvailable, gameModeAvailable = {}, false, true, true
+local savedFindObjects, savedFindFirst = FindObjects, FindFirstOf
+function FindObjects() return {} end
+function FindFirstOf(className)
+    if className == "ConZPlayerController" then return players[1] end
+    return savedFindFirst(className)
+end
+dofile(dir .. "/Scripts/main.lua")
+players = { Player("Frank", Pawn("BP_Prisoner_C")) }
+advance(20)
+check("unfiltered fallback announced", string.find(table.concat(log), "cannot leave out objects being destroyed; using FindAllOf", 1, true) ~= nil)
+check("players still found on the fallback", string.find(read(dir .. "/players.log"), "Frank joined", 1, true) ~= nil)
+FindObjects, FindFirstOf = savedFindObjects, savedFindFirst
+
 os.execute("rm -rf '" .. tmp .. "'")
+check("player searches leave out objects being destroyed (FindObjects, not FindAllOf)", (liveSearches or 0) > 0)
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))
 os.exit(failures == 0 and 0 or 1)

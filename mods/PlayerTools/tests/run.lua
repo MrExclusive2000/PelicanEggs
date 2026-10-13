@@ -73,6 +73,13 @@ function FindAllOf(className)
     end
     return nil
 end
+-- UE4SS FindObjects: object searches must leave out objects still loading or being destroyed.
+function FindObjects(count, className, name, required, banned, exact)
+    if className == "Class" then return {} end
+    assert(banned == 0x400 | 0x1000 | 0x8000 | 0x10000, "object searches must leave out objects being destroyed")
+    liveSearches = (liveSearches or 0) + 1
+    return FindAllOf(className) or {}
+end
 function FindFirstOf(className)
     if className == "ConZGameMode" then return gameMode end
     return nil
@@ -971,5 +978,6 @@ check("backups older than 7 days removed", not exists(backupName(firstDay)) and 
 players = {}
 
 os.execute("rm -rf '" .. tmp .. "'")
+check("player searches leave out objects being destroyed (FindObjects, not FindAllOf)", (liveSearches or 0) > 0)
 io.stdout:write(string.format("\n%d checks, %d failed\n", count, failures))
 os.exit(failures == 0 and 0 or 1)

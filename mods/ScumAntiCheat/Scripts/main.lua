@@ -466,6 +466,31 @@ local function isValid(object)
     return object ~= nil and safe(function() return object:IsValid() end) == true
 end
 
+-- Every live object of a class, searched on the C++ side. FindAllOf also returns objects that
+-- are still loading or already being destroyed (a player's connection closing, for one), and
+-- turning one of those into a Lua object crashes the server natively, where pcall cannot
+-- catch it. FindObjects leaves them out; FindAllOf is only used on a UE4SS that cannot.
+local UNSAFE_OBJECT_FLAGS = 0x400 | 0x1000 | 0x8000 | 0x10000 -- NeedLoad, NeedPostLoad, BeginDestroyed, FinishDestroyed
+local filteredSearchWorks = nil -- nil until a filtered search has found something
+
+local function liveObjects(className)
+    if type(FindObjects) == "function" and filteredSearchWorks ~= false then
+        local found = safe(function() return FindObjects(0, className, nil, 0, UNSAFE_OBJECT_FLAGS, false) end)
+        if type(found) == "table" and next(found) ~= nil then
+            filteredSearchWorks = true
+            local list = {}
+            for _, object in pairs(found) do list[#list + 1] = object end
+            return list
+        end
+        if filteredSearchWorks or type(found) == "table" and not isValid(safe(function() return FindFirstOf(className) end)) then
+            return {}
+        end
+        filteredSearchWorks = false
+        print(TAG .. "This UE4SS cannot leave out objects being destroyed; using FindAllOf.\n")
+    end
+    return safe(function() return FindAllOf(className) end) or {}
+end
+
 local function text(value)
     if type(value) == "string" then return value end
     return safe(function() return value:ToString() end)
@@ -478,7 +503,7 @@ end
 local function findAll(classNames)
     local found, seen = {}, {}
     for _, className in ipairs(classNames) do
-        local objects = safe(function() return FindAllOf(className) end)
+        local objects = liveObjects(className)
         for _, object in ipairs(objects or {}) do
             local key = address(object)
             if not seen[key] and isValid(object) then
