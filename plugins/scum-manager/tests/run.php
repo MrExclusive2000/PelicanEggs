@@ -791,5 +791,24 @@ check('history: a gap (server down) breaks the line', substr_count($historySvg, 
 check('history: no data says so', str_contains(HistoryChart::svg([], 'fps', 0, 86400), 'No data yet'), true);
 check('history: nice axis tops', [HistoryChart::niceMax(3), HistoryChart::niceMax(27), HistoryChart::niceMax(1400), HistoryChart::niceMax(0)], [3.0, 30.0, 1500.0, 1.0]);
 
+
+// ---------------------------------------------------------------- EconomyReport
+use MrExclusive\ScumManager\Support\EconomyReport;
+$economyLog = "100\t1\tKim\t-50\t1 x water\n101\t1\tKim\t-220\ta payment to Lee\n101\t2\tLee\t200\tpayment from Kim\n"
+    . "102\t2\tLee\t1000\tdaily bonus\n103\t1\tKim\t360\tlottery win\n104\t1\tKim\t75\tsold AK47\nbad line\n105\t3\tMo\t5\tsomething new\n";
+$economy = EconomyReport::parse($economyLog);
+check('economy: lines parsed, junk skipped', count($economy), 7);
+check('economy: categories', array_column($economy, 'category'), ['shop', 'paySent', 'payReceived', 'daily', 'lotteryWin', 'sell', 'other']);
+check('economy: range', count(EconomyReport::parse($economyLog, 103)), 3);
+$economyTotals = EconomyReport::totals($economy);
+check('economy: paid out, taken in, net', [$economyTotals['paidOut'], $economyTotals['takenIn'], $economyTotals['net']], [1640, 270, 1370]);
+check('economy: biggest category first', array_key_first($economyTotals['categories']), 'daily');
+$economyPlayers = EconomyReport::players($economy);
+check('economy: top earner', $economyPlayers['earners'][0], ['name' => 'Lee', 'steamId' => '2', 'amount' => 1200]);
+check('economy: top spender', $economyPlayers['spenders'][0], ['name' => 'Kim', 'steamId' => '1', 'amount' => 270]);
+check('economy: lottery file', EconomyReport::lottery("draw\t5000\n1\tKim\t3\n2\tLee\t1\n"), ['draw' => 5000, 'tickets' => 4, 'players' => 2]);
+$economyBank = EconomyReport::circulation(['1' => ['name' => 'Kim', 'cash' => 500, 'gold' => 2], '2' => ['name' => 'Lee', 'cash' => 900, 'gold' => null]]);
+check('economy: bank money from the save', [$economyBank['cash'], $economyBank['gold'], $economyBank['richest'][0]['name']], [1400, 2, 'Lee']);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

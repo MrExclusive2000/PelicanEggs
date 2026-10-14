@@ -33,6 +33,10 @@ final class Brand
 
     public const PAGE_RESTARTS = 'ExclsvSCUM Restarts';
 
+    public const PAGE_ECONOMY = 'ExclsvSCUM Economy';
+
+    public const PAGE_ANTICHEAT = 'ExclsvSCUM Anti-cheat';
+
     /** Mod folder => display name (the same since 1.33.0, when the folders were renamed). */
     public const MODS = [
         'ExclsvPlayerTools' => 'ExclsvPlayerTools',

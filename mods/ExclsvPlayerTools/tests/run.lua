@@ -1021,6 +1021,18 @@ check("kill task done", has(table.concat((function() local t = {} for _, m in ip
     and ran("ChangeCurrencyBalance Normal 300 76561198000000071"))
 step(61)
 check("kill race won and paid", anyHud("Kill race over: Kim wins 2000 with 2 kill(s)!") and ran("ChangeCurrencyBalance Normal 2000 76561198000000071"))
+-- economy.log: every money movement, with what it was for, for the panel's Economy page.
+local economyText = read(dir .. "/economy.log")
+local function moneyLine(steamId, name, amount, what)
+    return string.find(economyText, "\t" .. steamId .. "\t" .. name .. "\t" .. amount .. "\t" .. what .. "\n", 1, true) ~= nil
+end
+check("economy.log: shop purchase and refund", moneyLine("76561198000000071", "Kim", "-50", "1 x water")
+    and moneyLine("76561198000000071", "Kim", "50", "refund: the shop could not hand over Water_05l"))
+check("economy.log: payment with fee, and what the receiver got", moneyLine("76561198000000071", "Kim", "-220", "a payment to Lee")
+    and moneyLine("76561198000000072", "Lee", "200", "payment from Kim"))
+check("economy.log: lottery tickets, tasks and the race", moneyLine("76561198000000071", "Kim", "-300", "3 lottery ticket(s)")
+    and moneyLine("76561198000000071", "Kim", "300", "daily task: Kill 2 players") and moneyLine("76561198000000071", "Kim", "2000", "kill race win"))
+check("economy.log: refused payment not logged", not string.find(economyText, "-550", 1, true))
 
 -- !sell: the item in hands is dropped by SCUM, removed, and only then paid for.
 adminCommands, private = {}, {}

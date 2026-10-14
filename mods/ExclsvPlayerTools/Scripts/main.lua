@@ -1371,11 +1371,41 @@ end
 
 -- Commands (need an admin) first, then items (direct). Items are only given once the commands
 -- went through, so nothing is handed out twice while waiting for an admin.
-local function giveReward(session, commands, items, values)
+-- economy.log: every money movement the mod makes, for the panel's Economy page:
+--   <unix time> <tab> SteamID <tab> name <tab> amount (+ paid to the player, - taken) <tab> what for
+-- Winnings are logged when earned (they may be paid out later). Kept to about 1 MB; older lines
+-- go to economy.old.log.
+local economyLog = { FILE = DIR .. "/economy.log", MAX_BYTES = 1024 * 1024 }
+
+function economyLog.write(steamId, name, amount, what)
+    amount = tonumber(amount)
+    if amount == nil or amount == 0 then return end
+    local function cell(value) return (string.gsub(tostring(value or ""), "[\t\r\n]", " ")) end
+    local file = io.open(economyLog.FILE, "a")
+    if file == nil then return end
+    file:write(string.format("%d\t%s\t%s\t%d\t%s\n", os.time(), cell(steamId), cell(name), amount, cell(what)))
+    local size = file:seek("end")
+    file:close()
+    if size and size > economyLog.MAX_BYTES then
+        os.remove(DIR .. "/economy.old.log")
+        os.rename(economyLog.FILE, DIR .. "/economy.old.log")
+    end
+end
+
+-- Money a reward's commands paid (ChangeCurrencyBalance Normal <amount> <SteamID>).
+function economyLog.commands(commands, values, what)
+    for _, command in ipairs(commands or {}) do
+        local amount, steamId = string.match(fill(command, values), "^%s*ChangeCurrencyBalance%s+Normal%s+(%-?%d+)%s+(%d+)")
+        if amount then economyLog.write(steamId, values and values.name, amount, what) end
+    end
+end
+
+local function giveReward(session, commands, items, values, what)
     for _, command in ipairs(commands or {}) do
         local ok, detail = runAdminCommand(fill(command, values))
         if not ok then return false, detail end
     end
+    economyLog.commands(commands, values, what or "reward")
     local given, why = giveItems(session, items)
     if given == nil then return false, why end
     return true
@@ -1524,6 +1554,7 @@ local function bountyCommand(session, rest)
     if not affordable then return tell(session, "You cannot place that bounty: " .. why .. ".") end
     local ok, detail = runAdminCommand(fill(bounties.chargeCommand, { amount = amount, steamId = session.steamId, name = session.name }))
     if not ok then return tell(session, "Bounties cannot be placed right now (" .. detail .. ").") end
+    economyLog.write(session.steamId, session.name, -amount, "bounty placed on " .. target.name)
     target.bounty = (target.bounty or 0) + amount
     recordsDirty = true
     announce(string.format("%s put a %d bounty on %s. Total: %d.", session.name, amount, target.name, target.bounty))
@@ -1657,6 +1688,7 @@ local function teleportCheck(session, time)
     if price > 0 then
         local ok, detail = runAdminCommand(fill(config.teleports.chargeCommand, values))
         if not ok then return tell(session, "Teleports are not available right now (" .. detail .. ").") end
+        economyLog.write(session.steamId, session.name, -price, "teleport")
     end
     local ok, detail
     if config.teleports.method == "direct" then
@@ -1858,8 +1890,8 @@ end
 
 local pendingRewards = {}   -- rewards that wait for an admin (commands) or for the player to spawn
 
-local function queueReward(steamId, commands, items, message)
-    pendingRewards[#pendingRewards + 1] = { steamId = steamId, commands = commands or {}, items = items or {}, message = message }
+local function queueReward(steamId, commands, items, message, what)
+    pendingRewards[#pendingRewards + 1] = { steamId = steamId, commands = commands or {}, items = items or {}, message = message, what = what }
 end
 
 local function payQueuedRewards(session)
@@ -1867,7 +1899,7 @@ local function payQueuedRewards(session)
         local reward = pendingRewards[index]
         if reward.steamId == session.steamId then
             local values = { name = session.name, steamId = session.steamId }
-            if giveReward(session, reward.commands, reward.items, values) then
+            if giveReward(session, reward.commands, reward.items, values, reward.what) then
                 table.remove(pendingRewards, index)
                 if reward.message then tell(session, reward.message) end
             end
@@ -1944,7 +1976,7 @@ local function manhuntTick(time, online)
             hunt = nil
         elseif time >= hunt.endsAt then
             announce("Manhunt over: " .. hunt.targetName .. " survived and wins the reward!")
-            queueReward(hunt.targetId, settings.survivorCommands, settings.survivorItems, "You survived the manhunt. Reward received!")
+            queueReward(hunt.targetId, settings.survivorCommands, settings.survivorItems, "You survived the manhunt. Reward received!", "manhunt: survived")
             output("Manhunt: " .. hunt.targetName .. " survived.")
             hunt = nil
         elseif time >= hunt.nextReveal then
@@ -1979,7 +2011,7 @@ end
 local function manhuntKill(kill)
     if hunt == nil or kill.victimId ~= hunt.targetId or kill.killerId == hunt.targetId then return end
     announce(string.format("Manhunt over: %s killed %s!", kill.killerName or "?", hunt.targetName))
-    queueReward(kill.killerId, config.manhunt.hunterCommands, config.manhunt.hunterItems, "You won the manhunt. Reward received!")
+    queueReward(kill.killerId, config.manhunt.hunterCommands, config.manhunt.hunterItems, "You won the manhunt. Reward received!", "manhunt: hunter")
     output("Manhunt: " .. (kill.killerName or "?") .. " killed " .. hunt.targetName .. ".")
     hunt = nil
 end
@@ -2039,7 +2071,7 @@ local function kothTick(time, elapsed, online)
             local winner, score = hillLeader()
             if winner and score >= (tonumber(settings.minSeconds) or 60) then
                 announce(string.format("King of the Hill over: %s held %s for %s and wins!", hill.names[winner], zone.name, duration(score)))
-                queueReward(winner, settings.rewardCommands, settings.rewardItems, "You won King of the Hill. Reward received!")
+                queueReward(winner, settings.rewardCommands, settings.rewardItems, "You won King of the Hill. Reward received!", "King of the Hill win")
                 output("King of the Hill: " .. hill.names[winner] .. " won.")
             else
                 announce("King of the Hill over: nobody held " .. zone.name .. " long enough.")
@@ -2093,6 +2125,7 @@ local function charge(session, amount, what)
     local ok, detail = runAdminCommand(moneyCommand(session.steamId, -amount))
     if not ok then return false, "money cannot be moved right now (" .. tostring(detail) .. ")" end
     output(string.format("Charged %s %d for %s.", session.name, amount, what))
+    economyLog.write(session.steamId, session.name, -amount, what)
     return true
 end
 
@@ -2103,6 +2136,7 @@ local function credit(steamId, name, amount, why)
     entry.credit = (entry.credit or 0) + amount
     recordsDirty = true
     output(string.format("%s is owed %d (%s).", entry.name, amount, why))
+    economyLog.write(steamId, entry.name, amount, why)
 end
 
 local function payCredit(session)
@@ -2654,7 +2688,7 @@ local function newPlayerCheck(session, time)
             session.newChecked = true
             return
         end
-        local ok, detail = giveReward(session, kit.starterKitCommands, kitItems, values)
+        local ok, detail = giveReward(session, kit.starterKitCommands, kitItems, values, "starter kit")
         if not ok then
             -- Try again later (for example when an admin comes online).
             if not session.kitWaitReported then
@@ -2699,7 +2733,7 @@ local function rewardCheck(session, time)
             end
         end
         if hasDaily and entry.daily ~= today(time) then
-            local paid, why = giveReward(session, rewards.dailyCommands, rewards.dailyItems, values)
+            local paid, why = giveReward(session, rewards.dailyCommands, rewards.dailyItems, values, "daily bonus")
             if paid then
                 entry.daily = today(time)
                 recordsDirty = true
@@ -2713,7 +2747,7 @@ local function rewardCheck(session, time)
         local every = (tonumber(rewards.everyMinutes) or 0) * 60
         local hasReward = #(rewards.commands or {}) > 0 or (itemsOn and #(rewards.items or {}) > 0)
         if every > 0 and hasReward and entry.playtime - (entry.rewarded or 0) >= every then
-            local paid, why = giveReward(session, rewards.commands, rewards.items, values)
+            local paid, why = giveReward(session, rewards.commands, rewards.items, values, "playtime reward")
             if paid then
                 entry.rewarded = (entry.rewarded or 0) + every
                 recordsDirty = true
@@ -2732,6 +2766,7 @@ local function rewardCheck(session, time)
         local ok = runAdminCommand(fill(config.bounties.payCommand, { amount = entry.owed, steamId = session.steamId, name = session.name }))
         if ok then
             tell(session, "Bounty paid: " .. entry.owed .. " added to your account.")
+            economyLog.write(session.steamId, session.name, entry.owed, "bounty collected")
             output(string.format("Paid %d bounty to %s.", entry.owed, session.name))
             entry.owed = 0
             recordsDirty = true

@@ -93,6 +93,9 @@ Good to know:
    log (with weapon and distance), and every other death (suicides, crashes, zombies, falls,
    hunger...) from SCUM.log, about 15 seconds later; SCUM.log does not say what killed them.
    Kept to about 512 KB; older lines go to deaths.old.log.
+ - economy.log lists every money movement the mod makes (rewards, shop, sales, payments, lottery,
+   tasks, races, bounties, teleports) with what it was for; winnings are logged when earned.
+   Kept to about 1 MB; older lines go to economy.old.log. The panel's Economy page shows it.
  - players.tsv is copied once a day to players.backup-<date>.tsv; the last 7 are kept. To
    restore, stop the server and copy a backup over players.tsv.
  - Starter kit commands are SCUM admin commands without the "#", with {steamId} and {name}
