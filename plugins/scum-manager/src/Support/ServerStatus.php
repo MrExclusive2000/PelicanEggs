@@ -46,13 +46,17 @@ final class ServerStatus
         return $result;
     }
 
-    /** How the server is keeping up: SCUM aims for about 30 FPS on a dedicated server. */
+    /** How the server is keeping up: SCUM runs at about 30 FPS with players on and idles at 5 without. */
     public static function fpsLabel(array $status): array
     {
         if (!$status['fresh'] || $status['fps'] === null) {
             return ['Unknown', 'gray'];
         }
         $text = sprintf('%.1f FPS (%.0f ms a frame, slowest %.0f ms)', $status['fps'], $status['frameMs'], $status['slowestMs']);
+        // With nobody on, SCUM idles at about 5 FPS on purpose and speeds up when someone joins.
+        if (($status['players'] ?? null) === 0) {
+            return [sprintf('Idle: %.1f FPS while nobody is on (normal, SCUM speeds up when a player joins)', $status['fps']), 'gray'];
+        }
 
         return [$text, match (true) {
             $status['fps'] >= 25 => 'success',

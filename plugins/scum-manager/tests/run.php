@@ -749,7 +749,9 @@ $parsed = ServerStatus::parse($statusTxt, 1010);
 check('status: fps, frame times and players', [$parsed['fps'], $parsed['frameMs'], $parsed['slowestMs'], $parsed['players'], $parsed['fresh']], [30.8, 32.4, 400.0, 2, true]);
 check('status: label', ServerStatus::fpsLabel($parsed), ['30.8 FPS (32 ms a frame, slowest 400 ms)', 'success']);
 check('status: old file is not current', ServerStatus::fpsLabel(ServerStatus::parse($statusTxt, 1100)), ['Unknown', 'gray']);
-check('status: struggling server', ServerStatus::fpsLabel(ServerStatus::parse("# updated 1000\nLogSCUM: Global Stats: 199.3ms (  5.0FPS), 216.5ms (  4.6FPS), 400.0ms (  2.5FPS) | C: 0 (0), P:   0 (  0)\n", 1000))[1], 'danger');
+check('status: empty server idles, not an alarm', ServerStatus::fpsLabel(ServerStatus::parse("# updated 1000\nLogSCUM: Global Stats: 199.3ms (  5.0FPS), 216.5ms (  4.6FPS), 400.0ms (  2.5FPS) | C: 0 (0), P:   0 (  0)\n", 1000)),
+    ['Idle: 5.0 FPS while nobody is on (normal, SCUM speeds up when a player joins)', 'gray']);
+check('status: struggling server with players', ServerStatus::fpsLabel(ServerStatus::parse("# updated 1000\nLogSCUM: Global Stats: 99.3ms ( 10.1FPS), 116.5ms (  8.6FPS), 400.0ms (  2.5FPS) | C: 9 (9), P:   4 (  4)\n", 1000))[1], 'danger');
 check('status: no stats line yet', ServerStatus::parse("# updated 1000\n\n", 1000)['fps'], null);
 check('status: missing file', ServerStatus::parse(null, 1000)['fresh'], false);
 check('deaths: newest first, blank lines dropped', ServerStatus::deaths("a\nb\n\nc\n", 2), ['c', 'b']);
