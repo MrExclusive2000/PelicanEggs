@@ -74,9 +74,10 @@ Good to know:
    no-admin route below covers them.
  - Bounties and teleports check the player's balance before charging (checkBalance, on).
  - Without an admin (confirmed on a live server): when the file no-admin-commands.txt exists
-   in the ExclsvConsole mod folder, ChangeCurrencyBalance, ChangeFamePoints, SpawnItem and
-   Teleport run with no admin online, as the player they are for (see ExclsvConsole's
-   README). Rewards, bounty payouts and charges then happen straight away. Delete the file
+   in the ExclsvConsole mod folder, ChangeCurrencyBalance, ChangeFamePoints, SpawnItem,
+   Teleport, SetTime and SetWeather run with no admin online, as the player they are for (see
+   ExclsvConsole's README). Rewards, bounty payouts, charges and passed votes then happen
+   straight away. Delete the file
    to go back to waiting for an admin; a restart always restores SCUM's own settings.
  - Starter kit items: while starterKitItems is empty, starterKitPreset = "basic" gives 2
    water, tuna, beans, 2 apples, 3 bandages, a knife and a small backpack. Items need "Give

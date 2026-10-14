@@ -498,6 +498,16 @@ text = acLog()
 check("ban action bans immediately", has(read(configDir .. "/BannedUsers.ini"), "76561198000000006"))
 check("game violation shown (UTF-16 decoded)", has(text, "SCUM violation: 2026.10.11-12.40.00: Ammo count mismatch 76561198000000007"))
 check("admin log header skipped", not has(text, "Game version"))
+-- Starting "dir" stalls the server under Wine: once every log is found, look again only every
+-- half hour (SCUM starts new logs when the server starts).
+gameLogFiles.kill_ = "kill_1.log"
+write(gameLogDir .. "/kill_1.log", "")
+step(61)
+local dirsBefore = #popenCommands
+for _ = 1, 5 do step(61) end
+check("no dir every minute once the logs are found", #popenCommands == dirsBefore)
+step(30 * 60)
+check("logs looked for again after half an hour", #popenCommands > dirsBefore)
 check("admin command shown", has(text, "SCUM admin command: 2026.10.11-12.40.00: '76561198000000001:Admin(1)' Command: 'ListPlayers'"))
 check("game violation counted as strike", has(text, "Reported (76561198000000007): SCUM reported:"))
 
@@ -532,7 +542,7 @@ check("admin command from a non-admin acted on", has(acLog(), "Sneaky (765611980
 -- A new game log file (after SCUM rotates it) is read from the start.
 gameLogFiles.violations_ = "violations_2.log"
 write(gameLogDir .. "/violations_2.log", "first line of new file 76561198000000008\n")
-step(61)
+step(30 * 60 + 1)
 check("new game log read in full", has(acLog(), "SCUM violation: first line of new file"))
 
 -- ------------------------------------------------------------------ scenario 4: aimbot checks from the kill log

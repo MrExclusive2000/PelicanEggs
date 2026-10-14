@@ -41,7 +41,12 @@ local SETTLE_SECONDS = 5      -- seconds after getting into or out of a vehicle 
 local MAX_SAMPLE_GAP = 5      -- seconds; older samples are discarded instead of compared
 local VEHICLE_REPORT_COOLDOWN = 30   -- seconds between reports of the same vehicle glitch
 local REPEAT_COOLDOWN = 5     -- seconds between strikes for the same continuous violation
-local FILE_REFRESH = 60       -- seconds between re-reading AdminUsers.ini and looking for new game logs
+local FILE_REFRESH = 60       -- seconds between re-reading AdminUsers.ini
+-- Looking for new game logs runs Windows' "dir", and starting a process under Wine stalls the
+-- server for a moment (a 400 ms frame every minute). SCUM starts new logs when the server
+-- starts, so once a log is found it is looked for again only every half hour.
+local GAME_LOG_RESCAN = 30 * 60
+local lastGameLogScan = nil
 local MAX_READ = 1024 * 1024  -- bytes read from a log per second
 
 local MOVE_FALLING = 3
@@ -518,8 +523,14 @@ local function refreshFiles(now)
         lastFileRefresh = now
         adminIds = steamIdsIn(CONFIG_DIR .. "/AdminUsers.ini")
 
+        local missing = false
         for prefix in pairs(GAME_LOG_KINDS) do
-            if gameLogEnabled(prefix) then
+            if gameLogEnabled(prefix) and gameLogs[prefix] == nil then missing = true end
+        end
+        local scan = missing or lastGameLogScan == nil or now - lastGameLogScan >= GAME_LOG_RESCAN
+        if scan then lastGameLogScan = now end
+        for prefix in pairs(GAME_LOG_KINDS) do
+            if scan and gameLogEnabled(prefix) then
                 local path = newestGameLog(prefix)
                 if path and (gameLogs[prefix] == nil or gameLogs[prefix].path ~= path) then
                     -- Skip what was already in the file when the mod started; read new files in full.

@@ -53,12 +53,12 @@ final class AdminCommands
         ],
         'settime' => [
             'label' => 'Set the time of day', 'anytime' => false, 'template' => 'SetTime {hour}',
-            'help' => 'Hour from 0 to 23.',
+            'help' => 'Hour from 0 to 23. Also runs with no admin online when no-admin-commands.txt is in the ExclsvConsole folder.',
             'fields' => ['hour' => ['int', 'Hour', 0, 23]],
         ],
         'setweather' => [
             'label' => 'Set the weather', 'anytime' => false, 'template' => 'SetWeather {weather}',
-            'help' => 'SCUM takes a number from 0 (clear) to 1 (heavy rain).',
+            'help' => 'SCUM takes a number from 0 (clear) to 1 (heavy rain). Also runs with no admin online when no-admin-commands.txt is in the ExclsvConsole folder.',
             'fields' => ['weather' => ['select', 'Weather', ['0' => 'Clear', '0.5' => 'Cloudy / light rain', '1' => 'Storm']]],
         ],
         'money' => [

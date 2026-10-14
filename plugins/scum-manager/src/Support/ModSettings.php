@@ -60,7 +60,7 @@ final class ModSettings
                     ],
                 ],
                 'Voting' => [
-                    'description' => 'Players start a vote with !vote <name> and answer with !yes or !no. A passed vote runs the SCUM admin command (without #) as an online admin, so an admin must be online.',
+                    'description' => 'Players start a vote with !vote <name> and answer with !yes or !no. A passed vote runs the SCUM admin command (without #) as an online admin. SetTime and SetWeather also run with no admin online when no-admin-commands.txt exists in the ExclsvConsole mod folder.',
                     'fields' => [
                         'voting.enabled' => ['toggle', 'Voting on', true],
                         'voting.durationSeconds' => ['int', 'Vote length (s)', 60],
@@ -95,7 +95,7 @@ final class ModSettings
                     ],
                 ],
                 'Playtime rewards' => [
-                    'description' => 'SCUM admin commands (without #) run as an online admin; rewards wait until one is online. With no admin online, money, fame, SpawnItem and Teleport commands still run when no-admin-commands.txt exists in the ExclsvConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole/); delete the file to turn that off. Placeholders: {name} {steamId}',
+                    'description' => 'SCUM admin commands (without #) run as an online admin; rewards wait until one is online. With no admin online, money, fame, SpawnItem, Teleport, SetTime and SetWeather commands still run when no-admin-commands.txt exists in the ExclsvConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole/); delete the file to turn that off. Placeholders: {name} {steamId}',
                     'fields' => [
                         'playtimeRewards.enabled' => ['toggle', 'Playtime rewards on', true],
                         'playtimeRewards.everyMinutes' => ['int', 'Reward every (min played)', 60],

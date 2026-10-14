@@ -127,7 +127,7 @@ final class Guide
                 'blocks' => [
                     ['type' => 'text', 'text' => 'Rewards, kits, shop purchases, bounty payouts, votes and paid teleports use SCUM\'s own admin commands. SCUM only runs those for an admin who is in game, so by default the mods run them through an online admin, and rewards wait in players.tsv until one is on.'],
                     ['type' => 'rows', 'items' => [
-                        'Run them without an admin' => 'Create an empty file no-admin-commands.txt in the ExclsvConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole/). Money, fame, SpawnItem and Teleport then run as the player they are for. No restart needed.',
+                        'Run them without an admin' => 'Create an empty file no-admin-commands.txt in the ExclsvConsole mod folder (File Manager: SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole/). Money, fame, SpawnItem, Teleport, SetTime and SetWeather (so !vote works) then run as the player they are for. No restart needed.',
                         'Turn it off again' => 'Delete that file. A restart also always puts SCUM\'s own admin settings back.',
                         'Check a balance' => 'Console → Balance <player>, or the Players page (from the last save).',
                         'Prices and payouts' => 'Mod settings → ' . $tools . ' → Shop & money and Economy. Everything there is off until switched on, and every purchase checks the player\'s balance first.',

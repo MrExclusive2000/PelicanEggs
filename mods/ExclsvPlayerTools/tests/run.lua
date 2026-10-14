@@ -95,7 +95,9 @@ function LoopAsync() error("timers must run on the game thread (LoopInGameThread
 function LoopInGameThreadWithDelay(delay, callback) assert(delay == 1000) loop = callback end
 
 local gameLogFiles = {}
+local popenCalls = 0
 io.popen = function(command)
+    popenCalls = popenCalls + 1
     local prefix = string.match(command, "\\([%a_]+)%*%.log")
     local name = gameLogFiles[prefix]
     return { read = function() return name end, close = function() end }
@@ -423,8 +425,11 @@ check("broken config reported", has(read(dir .. "/playertools.log"), "config.lua
 gameLogFiles.chat_ = "chat_2.log"
 write(gameLogDir .. "/chat_2.log", utf16("2026.10.11-15.00.00: '76561198000000002:Bob(2)' 'Local: !discord'\n"))
 private = {}
-step(61)
-check("new chat log read", lastPrivate("Bob") == "No Discord link has been set.")
+local popensBefore = popenCalls
+step(29 * 60)
+check("no dir every minute once the logs are found (a process start stalls the server under Wine)", popenCalls - popensBefore <= 2)
+step(60 + 1)
+check("new chat log read within half an hour", lastPrivate("Bob") == "No Discord link has been set.")
 
 
 -- ================================================================== rewards, streaks, bounties, teleports, info, reports

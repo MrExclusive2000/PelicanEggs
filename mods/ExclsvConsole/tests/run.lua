@@ -471,6 +471,19 @@ check("only whitelisted commands", #rpc == 2 and godMode._requiredExecutorLevel 
     and string.find(consoleLog(), "AsPlayer only runs ChangeCurrencyBalance", 1, true) ~= nil)
 check("other commands need an admin", string.find(consoleLog(), "SCUM cannot run SetGodMode 1.", 1, true) ~= nil and #calls == 0)
 
+-- !vote's SetTime and SetWeather are on the list too.
+local setTime = RegistryCommand("AdminCommand_SetTime", 1)
+registryList = { godMode, currency, setTime }
+local timeLevels = {}
+function regular.channel:Chat_Server_ProcessAdminCommand(command)
+    rpc[#rpc + 1] = { by = "Bob", command = command }
+    timeLevels[#timeLevels + 1] = setTime._requiredExecutorLevel
+end
+writeCommands("SetTime 10\n")
+loopCallback()
+check("SetTime runs without an admin, level put back", rpc[3] and rpc[3].command == "SetTime 10"
+    and timeLevels[1] == 0 and setTime._requiredExecutorLevel == 1 and currency._requiredExecutorLevel == 1)
+
 -- SCUM's registry holds command classes: the class's default object (found by the safe search
 -- and through the class) is what gets lowered, once, and put back.
 local cdo = RegistryCommand("Default__ChangeCurrencyBalance_C", 1)
@@ -490,7 +503,7 @@ function FindAllOf(className)
 end
 writeCommands("ChangeCurrencyBalance Normal 2 76561198000000001\n")
 loopCallback()
-check("default object of a registry class lowered while it runs", cdoLevels[1] == 0 and cdo._requiredExecutorLevel == 1 and #rpc == 3
+check("default object of a registry class lowered while it runs", cdoLevels[1] == 0 and cdo._requiredExecutorLevel == 1 and #rpc == 4
     and string.find(consoleLog(), "command level ?=1", 1, true) ~= nil)
 FindAllOf = findAllBefore
 function regular.channel:Chat_Server_ProcessAdminCommand(command) rpc[#rpc + 1] = { by = "Bob", command = command } end
@@ -512,7 +525,7 @@ loopCallback()
 check("failed restore is reported", string.find(consoleLog(), "WARNING: could not restore the admin level of ChangeCurrencyBalance", 1, true) ~= nil)
 writeCommands("ChangeCurrencyBalance Normal 1 76561198000000001\n")
 loopCallback()
-check("route switched off after a failed restore", #rpc == 4
+check("route switched off after a failed restore", #rpc == 5
     and string.find(consoleLog(), "switched off after a problem", 1, true) ~= nil)
 
 os.remove(dir .. "/no-admin-commands.txt")

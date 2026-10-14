@@ -37,8 +37,9 @@ return {
     },
 
     -- Players vote with !vote <option>, then !yes / !no.
-    -- Options run SCUM admin commands, so an admin (AdminUsers.ini) must be online for a
-    -- passed vote to take effect.
+    -- Options run SCUM admin commands: an admin (AdminUsers.ini) must be online for a passed
+    -- vote to take effect, unless no-admin-commands.txt is in the ExclsvConsole folder (SetTime
+    -- and SetWeather then run without one).
     voting = {
         enabled = true,
         durationSeconds = 60,

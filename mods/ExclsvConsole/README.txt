@@ -24,14 +24,16 @@ How commands run:
    admin typed it in chat (replies appear in their chat). An admin from AdminUsers.ini
    must be online.
  - With no admin online, SCUM does not run admin commands; the console says so. Money, fame,
-   SpawnItem and Teleport commands can still run with the no-admin route below.
+   SpawnItem, Teleport, SetTime and SetWeather commands can still run with the no-admin
+   route below.
 
 Commands without an admin (confirmed on a live server; off until you turn it on):
  - Turn on: create an empty file no-admin-commands.txt in this folder (File Manager:
    SCUM/Binaries/Win64/ue4ss/Mods/ExclsvConsole/). No restart needed.
  - Turn off: delete that file. No restart needed. A restart also always puts SCUM's own
    admin levels back, because they are only changed in memory.
- - What it does: for ChangeCurrencyBalance, ChangeFamePoints, SpawnItem and Teleport only,
+ - What it does: for ChangeCurrencyBalance, ChangeFamePoints, SpawnItem, Teleport, SetTime
+   and SetWeather (what !vote runs) only,
    it lowers that one command's required admin level, runs it through an online player's own
    command channel and puts the level back at once, on the game thread, so no player can
    use the command in between. It reads the level back afterwards; if that ever fails it

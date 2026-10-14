@@ -43,7 +43,10 @@ local MAX_READ = 1024 * 1024       -- bytes read from a log per second
 local CONFIG_CHECK = 30            -- seconds between looks at config.lua
 local SAVE_EVERY = 60              -- seconds between writes of players.tsv
 local BACKUP_DAYS = 7              -- daily copies of players.tsv kept (players.backup-<date>.tsv)
-local LOG_REFRESH = 60             -- seconds between looks for a newer chat or kill log
+-- Seconds between looks for a newer chat or kill log. Looking runs Windows' "dir", and starting
+-- a process under Wine stalls the server for a moment; SCUM starts new logs when the server
+-- starts, so after finding them a look every half hour is plenty.
+local LOG_REFRESH = 30 * 60
 local SPAWN_DELAY = 10             -- seconds after spawning before new-player messages and kits
 local AFK_MOVE = 1                 -- metres
 local AFK_TURN = 2                 -- degrees
@@ -850,6 +853,7 @@ local runElevated = (function()
 local ELEVATED_COMMANDS = {
     changecurrencybalance = "ChangeCurrencyBalance", changefamepoints = "ChangeFamePoints",
     spawnitem = "SpawnItem", teleport = "Teleport",
+    settime = "SetTime", setweather = "SetWeather",   -- !vote day / night / sun
 }
 local ELEVATED_SWITCH = DIR .. "/../ExclsvConsole/no-admin-commands.txt"
 local elevatedBroken = false

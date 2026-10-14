@@ -7,7 +7,7 @@
     Announce, ListPlayers, Kick <name>, WhereIs, Balance, FindOutposts, FindItem and ListItems
     are handled directly and work with no admin online, as do TeleportPlayer and GiveItem (not
     yet confirmed on a live server). With no-admin-commands.txt in this folder, money, fame,
-    SpawnItem and Teleport commands also run without an admin (see the README). A minute after the world loads, the mod writes the item names to items.txt
+    SpawnItem, Teleport, SetTime and SetWeather commands also run without an admin (see the README). A minute after the world loads, the mod writes the item names to items.txt
     for SCUM Manager's item dropdowns.
 
     Results and errors are written to ue4ss/Mods/ExclsvConsole/console.log, which the
@@ -716,6 +716,7 @@ end
 local ELEVATED_COMMANDS = {
     changecurrencybalance = "ChangeCurrencyBalance", changefamepoints = "ChangeFamePoints",
     spawnitem = "SpawnItem", teleport = "Teleport",
+    settime = "SetTime", setweather = "SetWeather",   -- !vote day / night / sun
 }
 local ELEVATED_SWITCH = "no-admin-commands.txt"
 local REGULAR = 0
@@ -867,7 +868,7 @@ local function asPlayer(rest)
     local player, command = playerAndRest(rest, "Usage: AsPlayer <player> <command>")
     if player == nil then return end
     if not ELEVATED_COMMANDS[verb(command or "")] then
-        output("AsPlayer only runs ChangeCurrencyBalance, ChangeFamePoints, SpawnItem and Teleport.")
+        output("AsPlayer only runs ChangeCurrencyBalance, ChangeFamePoints, SpawnItem, Teleport, SetTime and SetWeather.")
         return
     end
     runElevated(command, player)

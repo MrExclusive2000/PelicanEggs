@@ -25,7 +25,7 @@ final class SettingHelp
         'WelcomeMessage' => 'Shown to players when they join.',
         'MessageOfTheDay' => 'Repeated in chat every "Message Of The Day Cooldown" minutes.',
         'MessageOfTheDayCooldown' => 'Minutes between messages of the day.',
-        'MinServerTickRate' => 'Lowest server updates per second it will run at when busy.',
+        'MinServerTickRate' => 'Server updates per second while nobody is online (SCUM idles down to this). 5 is normal.',
         'MaxServerTickRate' => 'Highest server updates per second. Higher is smoother but uses more CPU; 30 is common.',
         'MaxPingCheckEnabled' => 'Kick players whose ping stays above Max Ping.',
         'MaxPing' => 'Ping (ms) above which players are kicked, when the ping check is on.',
