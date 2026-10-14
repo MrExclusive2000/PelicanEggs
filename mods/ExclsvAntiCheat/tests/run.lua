@@ -316,6 +316,27 @@ reborn.pawn.x = 6000
 step()
 check("teleport after respawning still flagged", has(acLog(), "Reborn: teleported"))
 
+-- SCUM can also revive the very same character elsewhere (same body, same creation time). Its
+-- SCUM.log says so, naming the profile id from the login line.
+local revived = Player("Revived Pilot", Pawn("BP_Prisoner_C", -2000, -2000, 0))
+revived.pawn.CreationTime = 100
+write(scum .. "/Saved/Logs/SCUM.log", "LogSCUM: '1.2.3.4 76561198000000077:Revived Pilot(7)' logged in at: X=1 Y=2 Z=3\n", "a")
+players = { revived }
+tick()
+step()
+write(scum .. "/Saved/Logs/SCUM.log", "[2026.10.14-02.33.16:356][712]LogSCUM: Updating profile deletion because prisoner died.\n"
+    .. "[2026.10.14-02.33.16:356][712]LogSCUM: Update profile deletion - userProfileId: 7.\n"
+    .. "[2026.10.14-02.33.42:856][402]LogSCUM: Updating profile deletion because prisoner revived.\n"
+    .. "[2026.10.14-02.33.42:856][402]LogSCUM: Update profile deletion - userProfileId: 7.\n", "a")
+revived.pawn.x, revived.pawn.y = 4669, -228   -- same body, 6 km away
+step()
+step()
+check("revived in place of a teleport (SCUM.log) is not a strike", not has(acLog(), "Revived Pilot"))
+for _ = 1, 11 do step() end
+revived.pawn.x = 12000
+step()
+check("teleport well after the revive still flagged", has(acLog(), "Revived Pilot (76561198000000077): teleported"))
+
 -- Vehicles are never asked for functions only characters have (UE4SS name lookups on objects
 -- that lack the name are its least-tested path).
 local driverCar = Pawn("BPC_WolfsWagen_C", 0, -5000, 0)

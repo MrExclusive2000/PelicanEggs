@@ -383,9 +383,34 @@ chat("76561198000000001", "Alice", "/online")
 step()
 check("kill feed turned off by reload", #hud == 0)
 check("deaths still logged with the kill feed off", has(read(dir .. "/deaths.log"), "2026-10-11 14:00:00 | Bob (76561198000000002) killed Alice (76561198000000001) with Knife, 1 m\n"))
-write(gameLogDir .. "/kill_1.log", "2026.10.11-14.05.00: Died: Carol (76561198000000003), Killer: Carol (76561198000000003) Weapon: Grenade S[Distance: 0.00 m]\n", "a")
+-- Every other death comes from SCUM.log, named by the profile id from the login line.
+local scumLog = scum .. "/Saved/Logs/SCUM.log"
+write(scumLog, "LogSCUM: '1.2.3.4 76561198000000003:Carol(5)' logged in at: X=1 Y=2 Z=3\n"
+    .. "LogSCUM: '1.2.3.4 76561198000000004:Dave Pilot(6)' logged in at: X=1 Y=2 Z=3\n", "a")
 step()
-check("suicides logged, not counted as kills", has(read(dir .. "/deaths.log"), "2026-10-11 14:05:00 | Carol (76561198000000003) killed themselves with Grenade\n"))
+write(scumLog, "[2026.10.14-02.34.20:784][493]LogSCUM: '76561198000000003:Carol(5)' was killed by '76561198000000003:Carol(5)'\n"
+    .. "[2026.10.14-02.34.20:786][493]LogSCUM: Updating profile deletion because prisoner died.\n"
+    .. "[2026.10.14-02.34.20:786][493]LogSCUM: Update profile deletion - userProfileId: 5.\n"
+    .. "[2026.10.14-02.33.16:356][712]LogSCUM: Updating profile deletion because prisoner died.\n"
+    .. "[2026.10.14-02.33.16:356][712]LogSCUM: Update profile deletion - userProfileId: 6.\n"
+    .. "[2026.10.14-02.33.42:856][402]LogSCUM: Updating profile deletion because prisoner revived.\n"
+    .. "[2026.10.14-02.33.42:856][402]LogSCUM: Update profile deletion - userProfileId: 6.\n", "a")
+step()
+check("SCUM.log deaths are held back briefly", not has(read(dir .. "/deaths.log"), "Carol"))
+step(16)
+local deathsText = read(dir .. "/deaths.log")
+check("suicide from SCUM.log", has(deathsText, "2026-10-14 02:34:20 | Carol (76561198000000003) killed themselves\n"))
+check("any other death from SCUM.log (a plane crash)", has(deathsText, "2026-10-14 02:33:16 | Dave Pilot (76561198000000004) died\n"))
+check("revives are not deaths", select(2, string.gsub(deathsText, "Dave Pilot", "")) == 1)
+-- A kill by another player is in both logs: the kill log's line (with the weapon) is the one kept.
+write(scumLog, "[2026.10.14-03.00.00:100][100]LogSCUM: Updating profile deletion because prisoner died.\n"
+    .. "[2026.10.14-03.00.00:100][100]LogSCUM: Update profile deletion - userProfileId: 5.\n", "a")
+write(gameLogDir .. "/kill_1.log", "2026.10.14-03.00.00: Died: Carol (76561198000000003), Killer: Bob (76561198000000002) Weapon: M9 S[Distance: 12.00 m]\n", "a")
+step()
+step(16)
+deathsText = read(dir .. "/deaths.log")
+check("player kill logged once, from the kill log", has(deathsText, "Bob (76561198000000002) killed Carol (76561198000000003) with M9, 12 m\n")
+    and select(2, string.gsub(deathsText, "Carol %(76561198000000003%) died", "")) == 0)
 check("new prefix after reload", has(lastPrivate("Alice"), "3 online: Alice, Bob, Carol"))
 
 -- A broken config keeps working with defaults.

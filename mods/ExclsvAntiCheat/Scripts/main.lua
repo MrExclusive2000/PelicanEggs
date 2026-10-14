@@ -36,6 +36,7 @@ local GAME_MODE_CLASSES = { "BP_ConZGameMode_C", "ConZGameMode" }
 local CM_PER_M = 100
 local FALLING_SPEED = 5       -- m/s downwards; above this the horizontal speed check is skipped
 local HOVER_SPEED = 1         -- m/s; slower vertical movement than this while falling is hovering
+local RESPAWN_SETTLE_SECONDS = 10   -- after SCUM.log says a player died or was revived
 local SETTLE_SECONDS = 5      -- seconds after getting into or out of a vehicle before movement counts
 local MAX_SAMPLE_GAP = 5      -- seconds; older samples are discarded instead of compared
 local VEHICLE_REPORT_COOLDOWN = 30   -- seconds between reports of the same vehicle glitch
@@ -339,11 +340,32 @@ end
 
 loadOffenses()
 
+-- Deaths and revives from SCUM.log. SCUM can revive the same character somewhere else, which
+-- looks just like a teleport; SCUM logs both, naming the player by profile id:
+--   LogSCUM: Updating profile deletion because prisoner revived.
+--   LogSCUM: Update profile deletion - userProfileId: 3.
+-- The profile id is the number after the name in the login line.
+local profileNames = {}       -- SCUM profile id -> name
+local lifeEvents = {}         -- name -> os.time of their newest death or revive
+local lifeEventPending = false
+
 local function handleServerLogLine(line)
     -- LogSCUM: '1.2.3.4 76561198000000000:Name(2)' logged in at: X=...
-    local id, name = string.match(line, "'%S+ (%d+):(.*)%(%d+%)' logged in at:")
+    local id, name, profile = string.match(line, "'%S+ (%d+):(.*)%((%d+)%)' logged in at:")
     if id then
         steamIdByName[name] = id
+        profileNames[profile] = name
+        return
+    end
+    if string.find(line, "because prisoner died", 1, true) or string.find(line, "because prisoner revived", 1, true) then
+        lifeEventPending = true
+        return
+    end
+    local deleted = string.match(line, "Update profile deletion %- userProfileId: (%d+)")
+    if deleted and lifeEventPending then
+        lifeEventPending = false
+        local who = profileNames[deleted]
+        if who then lifeEvents[who] = os.time() end
     end
 end
 
@@ -1110,6 +1132,14 @@ local function check(controller, time, seen)
     if previous ~= nil and (elapsed <= 0 or elapsed > MAX_SAMPLE_GAP) then
         previous = nil
         player.flyingSince, player.hoverSince = nil, nil
+    end
+
+    -- Died or was revived (SCUM.log): a revived character can be the same one, put back
+    -- somewhere else. Nothing counts until it has settled.
+    local life = lifeEvents[player.name]
+    if life ~= nil and life ~= player.lifeSeen then
+        player.lifeSeen = life
+        player.settleUntil = time + RESPAWN_SETTLE_SECONDS
     end
 
     -- Unconscious (passed out, knocked out) bodies ragdoll: physics throws them about, out of

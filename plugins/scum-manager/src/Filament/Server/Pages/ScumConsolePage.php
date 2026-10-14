@@ -217,7 +217,7 @@ class ScumConsolePage extends Page
                 ->schema([$this->logEntry('console_output', fn () => $this->output, 'No output yet.')]),
             Section::make('Deaths')
                 ->icon('tabler-skull')
-                ->description('Every death in SCUM\'s kill log, newest first, suicides included (' . Brand::mod('ExclsvPlayerTools') . '). SCUM does not log deaths to zombies, animals, falls or hunger.')
+                ->description('Every death, newest first (' . Brand::mod('ExclsvPlayerTools') . '). Kills by players come from SCUM\'s kill log, with the weapon and distance; suicides, crashes, zombies, animals, falls and hunger come from SCUM.log, which does not say what killed them, and show about 15 seconds later.')
                 ->collapsible()
                 ->schema([$this->logEntry('deaths', fn () => $this->deaths, 'No deaths logged yet.')]),
             Section::make('Server log')

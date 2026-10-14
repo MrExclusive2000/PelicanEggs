@@ -460,13 +460,80 @@ local function parseChat(line)
     return { steamId = id, name = name, text = message }
 end
 
+-- Every death is in SCUM.log, not just kills by players (those are in the kill log, with the
+-- weapon). A death reads:
+--   [2026.10.14-02.34.20:784][493]LogSCUM: '7656...:Packet(3)' was killed by '7656...:Packet(3)'   (sometimes)
+--   [2026.10.14-02.34.20:786][493]LogSCUM: Updating profile deletion because prisoner died.
+--   [2026.10.14-02.34.20:786][493]LogSCUM: Update profile deletion - userProfileId: 3.
+-- The profile id is the number after the name in the login line.
+local deathLog = {
+    profileNames = {},        -- SCUM profile id -> name
+    killedBy = {},            -- victim profile id -> { killerId, killerName } from the line before
+    waiting = nil,            -- timestamp of a "prisoner died" line waiting for its profile id
+    pending = {},             -- deaths from SCUM.log held back for HOLD_SECONDS
+    killLog = {},             -- victim SteamID or name -> os.time the kill log named them
+    HOLD_SECONDS = 15,
+}
+local logDeath                -- writes deaths.log; set with the kill feed below
+
 local function handleServerLogLine(line)
     -- LogSCUM: '1.2.3.4 76561198000000000:Name(2)' logged in at: X=...
-    local id, name = string.match(line, "'%S+ (%d+):(.*)%(%d+%)' logged in at:")
-    if id then steamIdByName[name] = id end
+    local id, name, profile = string.match(line, "'%S+ (%d+):(.*)%((%d+)%)' logged in at:")
+    if id then
+        steamIdByName[name] = id
+        deathLog.profileNames[profile] = name
+        return
+    end
+    local victimId, victimName, victimProfile, killerId, killerName =
+        string.match(line, "'(%d+):(.-)%((%d+)%)' was killed by '(%d+):(.-)%(%d+%)'")
+    if victimProfile then
+        deathLog.profileNames[victimProfile] = victimName
+        steamIdByName[victimName] = victimId
+        deathLog.killedBy[victimProfile] = { killerId = killerId, killerName = killerName }
+        return
+    end
+    if string.find(line, "because prisoner died", 1, true) then
+        deathLog.waiting = string.match(line, "^%[(%d+%.%d+%.%d+%-%d+%.%d+%.%d+)") or ""
+        return
+    end
+    local deleted = string.match(line, "Update profile deletion %- userProfileId: (%d+)")
+    if deleted and deathLog.waiting then
+        local stamp = deathLog.waiting
+        deathLog.waiting = nil
+        local name = deathLog.profileNames[deleted] or ("profile " .. deleted)
+        local victim = steamIdByName[name]
+        local killer = deathLog.killedBy[deleted]
+        deathLog.killedBy[deleted] = nil
+        -- Kills by another player are logged from the kill log, which has the weapon.
+        if killer and killer.killerId ~= victim then return end
+        -- Held back a little: if the kill log names this player as killed after all, that line
+        -- (with the weapon) is the one kept.
+        deathLog.pending[#deathLog.pending + 1] = {
+            at = os.time(), stamp = stamp ~= "" and stamp or nil,
+            kill = {
+                victimName = name, victimId = victim,
+                killerName = killer and killer.killerName, killerId = killer and killer.killerId,
+                died = killer == nil,
+            },
+        }
+    end
 end
 
-local logDeath   -- writes deaths.log; set with the kill feed below
+deathLog.flush = function(time)
+    local keep = {}
+    for _, death in ipairs(deathLog.pending) do
+        local id, name = death.kill.victimId, death.kill.victimName
+        local killed = (id and deathLog.killLog[id]) or deathLog.killLog[name]
+        if killed and math.abs(killed - death.at) <= deathLog.HOLD_SECONDS * 2 then
+            -- the kill log has it
+        elseif time - death.at >= deathLog.HOLD_SECONDS then
+            pcall(logDeath, death.kill, death.stamp)
+        else
+            keep[#keep + 1] = death
+        end
+    end
+    deathLog.pending = keep
+end
 
 local function handleKillLine(line)
     local kill = parseKill(line)
@@ -475,8 +542,11 @@ local function handleKillLine(line)
     local key = tostring(kill.killerId) .. ">" .. tostring(kill.victimId) .. "@" .. (stamp or line)
     if recentKillKeys[key] then return end
     recentKillKeys[key] = true
-    pcall(logDeath, kill, stamp)
+    if kill.victimId then deathLog.killLog[kill.victimId] = os.time() end
+    if kill.victimName then deathLog.killLog[kill.victimName] = os.time() end
     if kill.killerId == nil or kill.killerId == kill.victimId then return end
+    -- Kills by other players; suicides and every other death come from SCUM.log.
+    pcall(logDeath, kill, stamp)
     pendingKills[#pendingKills + 1] = kill
 end
 
@@ -535,6 +605,7 @@ local function refreshLogs(time)
     for prefix, tail in pairs(gameLogs) do
         for _, line in ipairs(readTail(tail)) do LOG_HANDLERS[prefix](line) end
     end
+    deathLog.flush(time)
 end
 
 -- ------------------------------------------------------------------ game access
@@ -940,7 +1011,8 @@ local function weaponName(weapon)
     return (string.gsub(weapon, "_", " "))
 end
 
--- Every death in SCUM's kill log, suicides included, newest last, for the panel's Console page:
+-- Every death, newest last, for the panel's Console page (kills from the kill log, everything
+-- else from SCUM.log):
 --   2026-10-11 13:01:00 | Alice (76561198000000001) killed Bob (76561198000000002) with AK47, 250 m
 -- Kept to about 512 KB: the older half moves to deaths.old.log.
 local DEATHS_FILE = DIR .. "/deaths.log"
@@ -951,7 +1023,9 @@ logDeath = function(kill, stamp)
     local when = y and string.format("%s-%s-%s %s:%s:%s", y, mo, d, h, mi, se) or os.date("!%Y-%m-%d %H:%M:%S")
     local function who(name, id) return tostring(name or "?") .. (id and " (" .. id .. ")" or "") end
     local what
-    if kill.killerId ~= nil and kill.killerId == kill.victimId then
+    if kill.died then
+        what = who(kill.victimName, kill.victimId) .. " died"
+    elseif kill.killerId ~= nil and kill.killerId == kill.victimId then
         what = who(kill.victimName, kill.victimId) .. " killed themselves"
     else
         what = who(kill.killerName, kill.killerId) .. " killed " .. who(kill.victimName, kill.victimId)

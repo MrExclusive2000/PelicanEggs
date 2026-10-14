@@ -48,7 +48,7 @@ Actions (config.action):
   "ban"   add the SteamID to BannedUsers.ini and kick
 
 Not checked: admins listed in AdminUsers.ini, players the game is teleporting (admin teleports,
-respawns), falling or parachuting players, config.ignoreNames and config.ignoreSteamIds.
+respawns; SCUM.log's "prisoner died / revived" lines count too, for 10 s), falling or parachuting players, config.ignoreNames and config.ignoreSteamIds.
 SteamIDs come from the login lines in SCUM.log.
 
 Use:

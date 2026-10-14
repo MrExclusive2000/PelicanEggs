@@ -86,11 +86,12 @@ Good to know:
    (stops bounty farming with friends). Squads are checked every 30 seconds.
  - Replies to a player who is driving or dead arrive as an on-screen notice instead of a
    chat line.
- - online.tsv lists who is online, where, for how long and their ping (not yet confirmed on a
-   live server), rewritten every 15 seconds. The panel's Overview and Console pages show it.
- - deaths.log lists every death in SCUM's kill log, suicides included (SCUM does not log deaths
-   to zombies, animals, falls or hunger). Kept to about 512 KB; older lines go to
-   deaths.old.log. The panel's Console page shows it.
+ - online.tsv lists who is online, where, for how long and their ping, rewritten every 15
+   seconds. The panel's Overview and Console pages show it.
+ - deaths.log lists every death for the panel's Console page: kills by players from SCUM's kill
+   log (with weapon and distance), and every other death (suicides, crashes, zombies, falls,
+   hunger...) from SCUM.log, about 15 seconds later; SCUM.log does not say what killed them.
+   Kept to about 512 KB; older lines go to deaths.old.log.
  - players.tsv is copied once a day to players.backup-<date>.tsv; the last 7 are kept. To
    restore, stop the server and copy a backup over players.tsv.
  - Starter kit commands are SCUM admin commands without the "#", with {steamId} and {name}
