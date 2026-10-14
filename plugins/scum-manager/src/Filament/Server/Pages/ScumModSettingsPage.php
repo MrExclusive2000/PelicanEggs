@@ -64,6 +64,10 @@ class ScumModSettingsPage extends ServerFormPage
     #[Locked]
     public array $installed = [];
 
+    /** @var array<string, string> our mods still in their pre-1.33.0 folders: old => new */
+    #[Locked]
+    public array $legacy = [];
+
     /** @var list<string> fields of section switches that were off when loaded (those sections start collapsed) */
     #[Locked]
     public array $switchedOff = [];
@@ -89,6 +93,8 @@ class ScumModSettingsPage extends ServerFormPage
         $server = $this->getRecord();
 
         $this->installed = $service->installedModsOf($server, array_keys(ModSettings::MODS));
+        $legacy = $service->legacyFolders($server);
+        $this->legacy = $legacy['rename'] + $legacy['conflicts'];
         $this->hashes = [];
         $this->problems = [];
         $state = [];
@@ -113,6 +119,17 @@ class ScumModSettingsPage extends ServerFormPage
 
     public function form(Schema $schema): Schema
     {
+        $moveNotice = Section::make('Your mods are still in their old folders')
+            ->description('Since 1.33.0 our mods live in new folders ('
+                . implode(', ', array_map(fn ($old, $new) => "$old → $new", array_keys($this->legacy), $this->legacy))
+                . '). Their settings show here once they have moved: stop the server, then press "Install / update our mods" on the ' . Brand::PAGE_MODS
+                . ' page. Settings, player stats and everything else move with them.')
+            ->icon('tabler-folder-share');
+
+        if ($this->installed === [] && $this->legacy !== []) {
+            return parent::form($schema)->components([$moveNotice]);
+        }
+
         if ($this->installed === []) {
             return parent::form($schema)->components([
                 Section::make('No ' . Brand::MANAGER . ' mods installed')

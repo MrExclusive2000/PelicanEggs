@@ -71,6 +71,10 @@ class ScumModsPage extends Page implements HasTable
             && app(ScumServerService::class)->isScumServer($server);
     }
 
+    /** @var array<string, string> our mods still in their pre-1.33.0 folders: old => new */
+    #[Locked]
+    public array $legacy = [];
+
     public function mount(): void
     {
         $this->refreshStatus();
@@ -84,11 +88,19 @@ class ScumModsPage extends Page implements HasTable
         $this->ue4ss = $service->ue4ss($server);
         $this->overrideVariableExists = $service->variable($server, 'WINEDLLOVERRIDES') !== null;
         $this->dwmapiOverride = $service->hasDwmapiOverride($server);
+        $legacy = $service->legacyFolders($server);
+        $this->legacy = $legacy['rename'] + $legacy['conflicts'];
     }
 
     public function content(Schema $schema): Schema
     {
         return $schema->components([
+            Section::make('Move our mods to their new folders')
+                ->icon('tabler-folder-share')
+                ->visible(fn () => $this->legacy !== [])
+                ->description(fn () => 'Since 1.33.0 our mods live in new folders: '
+                    . implode(', ', array_map(fn ($old, $new) => "$old → $new", array_keys($this->legacy), $this->legacy))
+                    . '. Stop the server, then press "Install / update our mods" above. Settings, player stats and everything else move with them. Until then the Mod Settings page cannot show their settings.'),
             Section::make('UE4SS')
                 ->description('SCUM has no official mod support yet. Server-side mods run through UE4SS, a script loader for Unreal Engine games. Players do not need to install anything, and BattlEye stays on.')
                 ->schema([
@@ -334,6 +346,7 @@ class ScumModsPage extends Page implements HasTable
                         report($exception);
                         Notification::make()->title('Could not install the mods')->body($exception->getMessage())->danger()->persistent()->send();
                     }
+                    $this->refreshStatus();
                 }),
             Action::make('safe_settings')
                 ->label('SCUM-safe UE4SS settings')

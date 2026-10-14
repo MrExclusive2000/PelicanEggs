@@ -1003,10 +1003,16 @@ class ScumServerService
             return null;
         }
 
-        $exists = collect($this->listDirectory($server, $ue4ss['mods']))
-            ->contains(fn (array $entry) => $entry['directory'] && $entry['name'] === 'ExclsvConsole');
+        $folders = collect($this->listDirectory($server, $ue4ss['mods']))->where('directory', true)->pluck('name');
 
-        return $exists ? $ue4ss['mods'] . '/ExclsvConsole' : null;
+        // Until "Install / update our mods" moves it, the mod still runs from its pre-1.33.0 folder.
+        foreach (['ExclsvConsole', 'PelicanConsole'] as $folder) {
+            if ($folders->contains($folder)) {
+                return $ue4ss['mods'] . '/' . $folder;
+            }
+        }
+
+        return null;
     }
 
     /**
