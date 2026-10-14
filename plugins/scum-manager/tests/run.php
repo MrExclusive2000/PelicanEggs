@@ -775,5 +775,21 @@ check('restarts: daily time read back', [RestartPlan::timeOf('5', '6'), RestartP
 check('restarts: in step', RestartPlan::compare(['00:00', '12:00'], ['0:00', '12:00'])['inSync'], true);
 check('restarts: drift found both ways', RestartPlan::compare(['00:00', '12:00'], ['00:00', '18:00']), ['inSync' => false, 'noWarning' => ['12:00'], 'noRestart' => ['18:00']]);
 
+
+// ---------------------------------------------------------------- HistoryChart
+use MrExclusive\ScumManager\Support\HistoryChart;
+$historyTsv = "1000\t2\t60.0\t55.0\t9800\t40\n1300\t3\t58.5\t50.0\t9900\t\n90000\t1\t30.0\t28.0\t\t\nbroken line\n";
+$historyRows = HistoryChart::parse($historyTsv, 0);
+check('history: rows parsed, junk skipped', count($historyRows), 3);
+check('history: empty fields are null', [$historyRows[1]['cpu'], $historyRows[2]['memory']], [null, null]);
+check('history: range cut', count(HistoryChart::parse($historyTsv, 1300)), 2);
+check('history: summary', HistoryChart::summary($historyRows, 'players'), ['latest' => 1.0, 'peak' => 3.0, 'average' => 2.0]);
+check('history: summary of a series with no data', HistoryChart::summary([], 'cpu'), ['latest' => null, 'peak' => null, 'average' => null]);
+$historySvg = HistoryChart::svg($historyRows, 'players', 0, 100000);
+check('history: svg drawn', str_starts_with($historySvg, '<svg') && str_ends_with($historySvg, '</svg>'), true);
+check('history: a gap (server down) breaks the line', substr_count($historySvg, '<polyline') + substr_count($historySvg, '<circle'), 2);
+check('history: no data says so', str_contains(HistoryChart::svg([], 'fps', 0, 86400), 'No data yet'), true);
+check('history: nice axis tops', [HistoryChart::niceMax(3), HistoryChart::niceMax(27), HistoryChart::niceMax(1400), HistoryChart::niceMax(0)], [3.0, 30.0, 1500.0, 1.0]);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

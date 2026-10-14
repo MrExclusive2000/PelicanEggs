@@ -27,6 +27,7 @@ use MrExclusive\ScumManager\Services\ScumServerService;
 use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\Accuracy;
 use MrExclusive\ScumManager\Support\Brand;
+use MrExclusive\ScumManager\Support\HistoryChart;
 use MrExclusive\ScumManager\Support\ItemSelect;
 use MrExclusive\ScumManager\Support\OnlinePlayers;
 use MrExclusive\ScumManager\Support\Overview;
@@ -99,6 +100,13 @@ class ScumOverviewPage extends Page
 
     #[Locked]
     public bool $consoleInstalled = false;
+
+    /** Graph range: '24h' or '7d'. */
+    public string $historyRange = '24h';
+
+    /** ExclsvConsole's history.tsv (one line every 5 minutes), read on load. */
+    #[Locked]
+    public string $historyTsv = '';
 
     /** @var array{name: string, modified: string, count: int}|null */
     #[Locked]
@@ -178,6 +186,8 @@ class ScumOverviewPage extends Page
         }
 
         $this->consoleInstalled = $present->has('ExclsvConsole');
+        $consoleDir = $service->consoleModDir($server);
+        $this->historyTsv = $consoleDir === null ? '' : ($service->read($server, "$consoleDir/history.tsv") ?? '');
         $this->logDir = $ue4ss['installed'] ? $ue4ss['root'] : null;
         $this->previousLog = $this->logDir === null ? '' : $service->tailOf($server, $this->logDir . '/UE4SS.previous.log', 40);
         $this->crashLines = Overview::crashLines($this->previousLog);
@@ -269,6 +279,26 @@ class ScumOverviewPage extends Page
                     ->description('Sent with !report, newest first.')
                     ->schema([$this->logEntry('reports', fn () => $this->reports, 'No reports.')]),
             ]),
+            Section::make('History')
+                ->icon('tabler-chart-line')
+                ->description(fn () => $this->historyDescription())
+                ->collapsible()
+                ->headerActions([
+                    Action::make('history_24h')->label('24 hours')->size('sm')
+                        ->color(fn () => $this->historyRange === '24h' ? 'primary' : 'gray')
+                        ->action(fn () => $this->historyRange = '24h'),
+                    Action::make('history_7d')->label('7 days')->size('sm')
+                        ->color(fn () => $this->historyRange === '7d' ? 'primary' : 'gray')
+                        ->action(fn () => $this->historyRange = '7d'),
+                ])
+                ->schema([
+                    Grid::make(['default' => 1, 'lg' => 2])->schema(array_map(
+                        fn (string $key) => TextEntry::make('history_' . $key)
+                            ->label(fn () => $this->historyLabel($key))
+                            ->state(fn () => new HtmlString($this->historyGraph($key))),
+                        array_keys(HistoryChart::SERIES),
+                    )),
+                ]),
             Section::make('Accuracy watch')
                 ->icon('tabler-target')
                 ->description('Players who hit ' . Accuracy::WATCH_PERCENT . '% or more of at least ' . Accuracy::MIN_SHOTS . ' shots in SCUM\'s lifetime stats (from the save). Most players stay well under that; spectate anyone listed.')
@@ -285,6 +315,50 @@ class ScumOverviewPage extends Page
                     $this->logEntry('previous_log', fn () => $this->previousLog, 'No previous UE4SS log yet (it is kept from the next restart on).'),
                 ]),
         ]);
+    }
+
+    /** @return array{0: int, 1: int} */
+    private function historyWindow(): array
+    {
+        $now = time();
+
+        return [$now - ($this->historyRange === '7d' ? 7 * 86400 : 86400), $now];
+    }
+
+    private function historyRows(): array
+    {
+        return HistoryChart::parse($this->historyTsv, $this->historyWindow()[0]);
+    }
+
+    private function historyGraph(string $key): string
+    {
+        [$from, $to] = $this->historyWindow();
+
+        return HistoryChart::svg($this->historyRows(), $key, $from, $to);
+    }
+
+    private function historyLabel(string $key): string
+    {
+        $series = HistoryChart::SERIES[$key];
+        $summary = HistoryChart::summary($this->historyRows(), $key);
+        if ($summary['latest'] === null) {
+            return $series['label'];
+        }
+        $format = fn (float $value) => ($value == floor($value) ? (string) (int) $value : sprintf('%.1f', $value)) . $series['unit'];
+
+        return $series['label'] . ' · now ' . $format($summary['latest']) . ', peak ' . $format($summary['peak']) . ', average ' . $format(round($summary['average'], 1));
+    }
+
+    private function historyDescription(): string
+    {
+        if (!$this->consoleInstalled) {
+            return 'Needs ' . Brand::mod('ExclsvConsole') . '.';
+        }
+        if ($this->historyTsv === '') {
+            return Brand::mod('ExclsvConsole') . ' records a point every 5 minutes while the server runs; the graphs fill in from there.';
+        }
+
+        return 'One point every 5 minutes, times in UTC. Gaps are when the server was down. With nobody on, SCUM idles at about 5 FPS on purpose. Refresh the page to update.';
     }
 
     private function onlineSummary(): string

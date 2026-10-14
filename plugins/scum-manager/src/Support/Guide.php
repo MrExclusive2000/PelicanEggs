@@ -45,7 +45,7 @@ final class Guide
                 'summary' => 'What each page in the ' . Brand::NAV_GROUP . ' menu is for.',
                 'blocks' => [
                     ['type' => 'rows', 'items' => [
-                        'Overview' => 'Server and mod status, who is online and where, anti-cheat flags, player reports, the last crash. "Manage a player" runs the common commands on one player.',
+                        'Overview' => 'Server and mod status, who is online and where, anti-cheat flags, player reports, the last crash, and graphs of players, server FPS, memory and CPU over the last day or week. "Manage a player" runs the common commands on one player.',
                         'Players' => 'Everyone who has played: stats, money, fame, squad, inventory (from the save), lists they are on and anti-cheat kicks. Run commands or ban from here.',
                         'World' => 'Live map with players, bases and outposts; every base with its owner; save backups and restores.',
                         'Server settings' => 'Every setting in ServerSettings.ini, explained, with SCUM\'s defaults once captured. The server must be stopped to save.',
@@ -181,7 +181,7 @@ final class Guide
                         'SCUM/Binaries/Win64/ue4ss/' => 'UE4SS, UE4SS.log (and UE4SS.previous.log from before the last restart).',
                         'ue4ss/Mods/ExclsvPlayerTools/' => 'config.lua, players.tsv (stats and unpaid rewards, backed up daily), online.tsv (who is on, where, ping), deaths.log, reports.log.',
                         'ue4ss/Mods/ExclsvAntiCheat/' => 'config.lua, anticheat.log, offenses.txt.',
-                        'ue4ss/Mods/ExclsvConsole/' => 'console.log (command results), status.txt (server FPS), server.log (end of SCUM.log), items.txt, no-admin-commands.txt when switched on.',
+                        'ue4ss/Mods/ExclsvConsole/' => 'console.log (command results), status.txt (server FPS), server.log (end of SCUM.log), history.tsv (the graphs), items.txt, no-admin-commands.txt when switched on.',
                         'ue4ss/Mods/ExclsvMessages/' => 'config.lua, players.log (who joined and left).',
                     ]],
                     ['type' => 'text', 'text' => 'ServerSettings exports and the Discord webhook can contain passwords: keep them private.'],

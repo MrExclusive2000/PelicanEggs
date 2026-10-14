@@ -17,6 +17,10 @@ For the Console page, every 5 seconds the mod also writes status.txt (SCUM's new
 Stats" line: server FPS and frame times) and server.log (the end of SCUM.log without those
 lines). It only reads SCUM.log; it never touches game objects for this.
 
+history.tsv gets one line every 5 minutes (players, average and lowest server FPS, memory
+and CPU of the server process, read from /proc through Wine), kept for about 8 days, for the
+graphs on the panel's Overview page.
+
 How commands run:
  - Announce <message>, ListPlayers and Kick <name> are handled by the mod itself and work
    with no admin in game.

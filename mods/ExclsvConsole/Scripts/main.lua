@@ -970,6 +970,96 @@ local SERVER_TAIL_FILE = DIR and (DIR .. "/server.log") or nil
 local STATUS_EVERY, STATUS_READ_BYTES, STATUS_TAIL_LINES = 5, 64 * 1024, 120
 local lastStatus, lastStatsLine, statusFailed = 0, nil, false
 
+-- history.tsv, for the panel's graphs: one line every 5 minutes, kept for about 8 days.
+--   <unix time> <tab> players <tab> average FPS <tab> lowest FPS <tab> memory MB <tab> CPU %
+-- FPS comes from the Global Stats lines seen in those 5 minutes. Memory and CPU are this
+-- process's own, read from Linux's /proc through Wine (Z:); empty when that cannot be read.
+local HISTORY_FILE = DIR and (DIR .. "/history.tsv") or nil
+local HISTORY_EVERY, HISTORY_KEEP_SECONDS, HISTORY_MAX_BYTES = 300, 8 * 86400, 256 * 1024
+local history = { started = nil, fps = {}, players = nil, lastLine = nil, cpu = nil }
+
+local function procFile(name)
+    for _, path in ipairs({ "Z:/proc/self/" .. name, "/proc/self/" .. name }) do
+        local file = io.open(path, "r")
+        if file then
+            local text = file:read("a")
+            file:close()
+            if text and text ~= "" then return text end
+        end
+    end
+    return nil
+end
+
+local function memoryMb()
+    local kb = tonumber(string.match(procFile("status") or "", "VmRSS:%s*(%d+)"))
+    return kb and math.floor(kb / 1024 + 0.5) or nil
+end
+
+-- CPU % since the last call (100 % = one core), from utime + stime in /proc/self/stat.
+local function cpuPercent(now)
+    local stat = procFile("stat")
+    if stat == nil then return nil end
+    local rest = string.match(stat, "%) (.*)$")
+    if rest == nil then return nil end
+    local fields = {}
+    for field in string.gmatch(rest, "%S+") do fields[#fields + 1] = field end
+    local ticks = (tonumber(fields[12]) or 0) + (tonumber(fields[13]) or 0)   -- utime, stime
+    local previous = history.cpu
+    history.cpu = { ticks = ticks, time = now }
+    if previous == nil or now <= previous.time then return nil end
+    return math.floor((ticks - previous.ticks) / 100 / (now - previous.time) * 100 + 0.5)
+end
+
+local function noteStats(line)
+    if line == nil or line == history.lastLine then return end
+    history.lastLine = line
+    local fps = tonumber(string.match(line, "ms %(%s*([%d%.]+)FPS%)"))
+    if fps then history.fps[#history.fps + 1] = fps end
+    local players = tonumber(string.match(line, "P:%s*(%d+)"))
+    if players then history.players = math.max(history.players or 0, players) end
+end
+
+local function writeHistory(now)
+    if HISTORY_FILE == nil then return end
+    if history.started == nil then
+        history.started = now
+        cpuPercent(now)
+        return
+    end
+    if now - history.started < HISTORY_EVERY then return end
+    local sum, low = 0, nil
+    for _, fps in ipairs(history.fps) do
+        sum = sum + fps
+        low = (low == nil or fps < low) and fps or low
+    end
+    local average = #history.fps > 0 and string.format("%.1f", sum / #history.fps) or ""
+    local line = string.format("%d\t%s\t%s\t%s\t%s\t%s\n", now, history.players or "", average,
+        low and string.format("%.1f", low) or "", memoryMb() or "", cpuPercent(now) or "")
+    history.started, history.fps, history.players = now, {}, nil
+
+    local file = io.open(HISTORY_FILE, "a")
+    if file == nil then return end
+    file:write(line)
+    local size = file:seek("end")
+    file:close()
+    if size and size > HISTORY_MAX_BYTES then
+        -- Keep the last HISTORY_KEEP_SECONDS.
+        local read = io.open(HISTORY_FILE, "r")
+        if read == nil then return end
+        local kept = {}
+        for entry in read:lines() do
+            local time = tonumber(string.match(entry, "^(%d+)"))
+            if time and now - time <= HISTORY_KEEP_SECONDS then kept[#kept + 1] = entry end
+        end
+        read:close()
+        local write = io.open(HISTORY_FILE, "w")
+        if write then
+            write:write(table.concat(kept, "\n") .. (#kept > 0 and "\n" or ""))
+            write:close()
+        end
+    end
+end
+
 local function writeStatus(now)
     if SERVER_LOG == nil or now - lastStatus < STATUS_EVERY then return end
     lastStatus = now
@@ -1003,6 +1093,8 @@ local function writeStatus(now)
         status:write(string.format("# updated %d\n%s\n", now, lastStatsLine or ""))
         status:close()
     end
+    noteStats(lastStatsLine)
+    writeHistory(now)
 end
 
 every(1000, function()

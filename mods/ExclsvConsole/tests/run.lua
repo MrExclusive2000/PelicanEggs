@@ -139,6 +139,7 @@ check("status.txt: stamped, with the newest Global Stats line", string.match(rea
 check("server.log: the end of SCUM.log without Global Stats", readFile("server.log")
     == "[2026.10.12-13.05.58:100][250]LogSCUM: '1.2.3.4 76561198000000001:Alice(2)' logged in at: X=1 Y=2 Z=3\n[2026.10.12-13.06.00:000][260]LogSCUM: [Vehicle] Player mounted vehicle\n")
 
+
 -- Nothing queued: nothing runs and the loop keeps going.
 check("loop keeps running", loopCallback() == false)
 check("no commands, nothing run", gameThreadRuns == 1)   -- the item list check only
@@ -532,6 +533,33 @@ os.remove(dir .. "/no-admin-commands.txt")
 FindFirstOf = findFirstBefore
 online = {}
 
+
+-- history.tsv: one line every 5 minutes with players, average and lowest FPS (memory and CPU
+-- from /proc, empty where it cannot be read).
+local realTime = os.time
+local fakeNow = realTime() + 1000
+os.time = function() return fakeNow end
+local scumLogPath = tmp .. "/SCUM/Saved/Logs/SCUM.log"
+local function stats(fps, players)
+    assert(io.open(scumLogPath, "a")):write(string.format("[x]LogSCUM: Global Stats: %5.1fms (%5.1fFPS),  1.0ms ( 1.0FPS), 400.0ms (  2.5FPS) | C:   1 (  1), P:%4d (%3d), Z:   0 (  0)\r\n", 1000 / fps, fps, players, players)):close()
+end
+loopCallback()                                   -- closes the window open since the start
+os.remove(dir .. "/history.tsv")
+for _, sample in ipairs({ { 60, 2 }, { 30, 3 }, { 45, 1 } }) do
+    fakeNow = fakeNow + 6
+    stats(sample[1], sample[2])
+    loopCallback()
+end
+check("history: nothing before 5 minutes", readFile("history.tsv") == "")
+fakeNow = fakeNow + 300
+loopCallback()
+local entry = readFile("history.tsv")
+local fields = {}
+for field in string.gmatch(string.match(entry, "^[^\n]*"), "([^\t]*)") do fields[#fields + 1] = field end
+check("history: time, most players, average and lowest FPS", tonumber(fields[1]) == fakeNow and fields[2] == "3" and fields[3] == "45.0" and fields[4] == "30.0")
+check("history: one line, six columns", select(2, string.gsub(entry, "\n", "")) == 1 and #fields == 6)
+os.time = realTime
+
 -- Started from an unexpected path: disabled with a message instead of erroring.
 log, loopCallback = {}, nil
 local strayPath = tmp .. "/stray.lua"
@@ -539,6 +567,7 @@ assert(io.open(strayPath, "w")):write(source):close()
 dofile(strayPath)
 check("unknown folder disables the mod", loopCallback == nil)
 check("unknown folder reported", string.find(table.concat(log), "Could not work out the mod folder", 1, true) ~= nil)
+
 
 os.execute("rm -rf '" .. tmp .. "'")
 check("player searches leave out objects being destroyed (FindObjects, not FindAllOf)", (liveSearches or 0) > 0)
