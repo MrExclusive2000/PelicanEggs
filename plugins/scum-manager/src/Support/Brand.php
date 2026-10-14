@@ -31,6 +31,8 @@ final class Brand
 
     public const PAGE_HELP = 'ExclsvSCUM Help & guide';
 
+    public const PAGE_RESTARTS = 'ExclsvSCUM Restarts';
+
     /** Mod folder => display name (the same since 1.33.0, when the folders were renamed). */
     public const MODS = [
         'ExclsvPlayerTools' => 'ExclsvPlayerTools',

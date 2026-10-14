@@ -296,7 +296,7 @@ final class ModSettings
                     ],
                 ],
                 'Restart warnings' => [
-                    'description' => 'Countdown announcements before each daily restart. Times are HH:MM in UTC. The restart itself is a Pelican schedule (Schedules), at the same times.',
+                    'description' => 'Countdown announcements before each daily restart. Times are HH:MM in UTC. Easiest on the ' . Brand::PAGE_RESTARTS . ' page, which sets these and the Pelican schedule that restarts the server together.',
                     'fields' => [
                         'restartTimes' => ['lines', 'Restart times, UTC (one per line, e.g. 06:00)', []],
                         'restartWarnings' => ['ints', 'Warn this many minutes before (comma separated)', [30, 15, 5, 1]],

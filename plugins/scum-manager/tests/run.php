@@ -760,5 +760,20 @@ check('uptime from milliseconds', [ServerStatus::uptime(90_000), ServerStatus::u
 $withPing = OnlineList::parse("# updated 1000\n76561198000000001\tAlice\t1\t2\t3\tB2\t0\t0\t60\t48\n76561198000000002\tBob\t1\t2\t3\t\t0\t0\t60\t\n76561198000000003\tCarol\t1\t2\t3\t\t0\t0\t60\n", 1000)['players'];
 check('online: ping in ms, empty or missing (older mod) is null', array_column($withPing, 'ping', 'name'), ['Alice' => 48, 'Bob' => null, 'Carol' => null]);
 
+
+// ---------------------------------------------------------------- RestartPlan
+use MrExclusive\ScumManager\Support\RestartPlan;
+check('restarts: times parsed, padded, sorted, deduplicated', RestartPlan::parseTimes("18:00, 6:00\n06:00"), ['06:00', '18:00']);
+check('restarts: empty means none', RestartPlan::parseTimes('  '), []);
+throws('restarts: bad hour refused', fn () => RestartPlan::parseTimes('25:00'), 'is not a time');
+throws('restarts: words refused', fn () => RestartPlan::parseTimes('midnight'), 'is not a time');
+check('restarts: warnings largest first', RestartPlan::parseWarnings('5, 30 1 15 5'), [30, 15, 5, 1]);
+throws('restarts: warning out of range', fn () => RestartPlan::parseWarnings('0'), 'minutes');
+check('restarts: cron fields', RestartPlan::cron('06:05'), ['minute' => '5', 'hour' => '6']);
+check('restarts: our schedules by name', [RestartPlan::isOurs(RestartPlan::scheduleName('06:00')), RestartPlan::isOurs('Daily backup')], [true, false]);
+check('restarts: daily time read back', [RestartPlan::timeOf('5', '6'), RestartPlan::timeOf('*/5', '*'), RestartPlan::timeOf('0', '6', '*', '*', '1')], ['06:05', null, null]);
+check('restarts: in step', RestartPlan::compare(['00:00', '12:00'], ['0:00', '12:00'])['inSync'], true);
+check('restarts: drift found both ways', RestartPlan::compare(['00:00', '12:00'], ['00:00', '18:00']), ['inSync' => false, 'noWarning' => ['12:00'], 'noRestart' => ['18:00']]);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

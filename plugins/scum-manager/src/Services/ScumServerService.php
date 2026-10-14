@@ -5,16 +5,19 @@ namespace MrExclusive\ScumManager\Services;
 use App\Enums\ContainerStatus;
 use App\Enums\SubuserPermission;
 use App\Facades\Activity;
+use App\Helpers\Utilities;
 use App\Models\Server;
 use App\Repositories\Daemon\DaemonFileRepository;
 use App\Repositories\Daemon\DaemonServerRepository;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use MrExclusive\ScumManager\Support\AdminCommands;
 use MrExclusive\ScumManager\Support\ConsoleCommand;
 use MrExclusive\ScumManager\Support\FolderRename;
+use MrExclusive\ScumManager\Support\RestartPlan;
 use MrExclusive\ScumManager\Support\LuaTable;
 use MrExclusive\ScumManager\Support\TeleportDestinations;
 use MrExclusive\ScumManager\Support\ModArchive;
@@ -1085,15 +1088,100 @@ class ScumServerService
     /** @param \Closure(array<mixed>): array<mixed> $change */
     private function updatePlayerTools(Server $server, \Closure $change): void
     {
-        if ($this->installedModsOf($server, ['ExclsvPlayerTools']) === []) {
-            throw new RuntimeException('The ' . Brand::mod('ExclsvPlayerTools') . ' mod is not installed.');
+        $this->updateModConfig($server, 'ExclsvPlayerTools', $change);
+    }
+
+    // ------------------------------------------------------------------ restarts
+
+    /**
+     * Pelican schedules that restart the server: ours (named by RestartPlan) and any others with a
+     * power task, so the page can point out duplicates.
+     *
+     * @return array{ours: list<array{id: int, time: ?string, active: bool, next: ?string}>, others: list<array{id: int, name: string, time: ?string}>}
+     */
+    public function restartSchedules(Server $server): array
+    {
+        $result = ['ours' => [], 'others' => []];
+        foreach ($server->schedules()->with('tasks')->get() as $schedule) {
+            $time = RestartPlan::timeOf($schedule->cron_minute, $schedule->cron_hour, $schedule->cron_day_of_month, $schedule->cron_month, $schedule->cron_day_of_week);
+            if (RestartPlan::isOurs($schedule->name)) {
+                $result['ours'][] = [
+                    'id' => $schedule->id, 'time' => $time, 'active' => (bool) $schedule->is_active,
+                    'next' => $schedule->next_run_at?->toDateTimeString(),
+                ];
+            } elseif ($schedule->tasks->contains(fn ($task) => $task->action === 'power' && in_array($task->payload, ['restart', 'stop'], true))) {
+                $result['others'][] = ['id' => $schedule->id, 'name' => $schedule->name, 'time' => $time];
+            }
+        }
+        usort($result['ours'], fn ($a, $b) => strcmp((string) $a['time'], (string) $b['time']));
+
+        return $result;
+    }
+
+    /**
+     * Set the daily restarts: replaces our Pelican schedules (one power restart per time, UTC) and
+     * writes the same times, warnings and message to ExclsvMessages when it is installed.
+     *
+     * @param  list<string>  $times  "HH:MM", from RestartPlan::parseTimes
+     * @param  list<int>  $warnings  minutes before, from RestartPlan::parseWarnings
+     * @return list<string> notes for the person
+     */
+    public function saveRestarts(Server $server, array $times, array $warnings, string $message): array
+    {
+        DB::transaction(function () use ($server, $times) {
+            foreach ($server->schedules()->get() as $schedule) {
+                if (RestartPlan::isOurs($schedule->name)) {
+                    $schedule->tasks()->delete();
+                    $schedule->delete();
+                }
+            }
+            foreach ($times as $time) {
+                $cron = RestartPlan::cron($time);
+                $schedule = $server->schedules()->create([
+                    'name' => RestartPlan::scheduleName($time),
+                    'cron_minute' => $cron['minute'], 'cron_hour' => $cron['hour'],
+                    'cron_day_of_month' => '*', 'cron_month' => '*', 'cron_day_of_week' => '*',
+                    'is_active' => true, 'only_when_online' => true,
+                    'next_run_at' => Utilities::getScheduleNextRunDate($cron['minute'], $cron['hour'], '*', '*', '*'),
+                ]);
+                $schedule->tasks()->create([
+                    'sequence_id' => 1, 'action' => 'power', 'payload' => 'restart', 'time_offset' => 0, 'continue_on_failure' => false,
+                ]);
+            }
+        });
+
+        Activity::event('server:schedule.update')
+            ->property('name', RestartPlan::NAME_PREFIX . ': ' . ($times === [] ? 'none' : implode(', ', $times) . ' UTC'))
+            ->log();
+
+        if ($this->installedModsOf($server, ['ExclsvMessages']) === []) {
+            return ['The restart warnings need ' . Brand::mod('ExclsvMessages') . ', which is not installed: the server restarts without a countdown.'];
+        }
+        $this->updateModConfig($server, 'ExclsvMessages', function (array $config) use ($times, $warnings, $message) {
+            $config['restartTimes'] = $times;
+            $config['restartWarnings'] = $warnings;
+            if (trim($message) !== '') {
+                $config['restartMessage'] = trim($message);
+            }
+
+            return $config;
+        });
+
+        return [];
+    }
+
+    /** Change one of our mods' config.lua: $change gets the settings table and returns the new one. */
+    public function updateModConfig(Server $server, string $mod, \Closure $change): void
+    {
+        if ($this->installedModsOf($server, [$mod]) === []) {
+            throw new RuntimeException('The ' . Brand::mod($mod) . ' mod is not installed.');
         }
 
-        $raw = $this->modConfig($server, 'ExclsvPlayerTools');
+        $raw = $this->modConfig($server, $mod);
         $config = $raw === null ? [] : LuaTable::parse($raw);
-        $this->writeModConfig($server, 'ExclsvPlayerTools', LuaTable::render(
+        $this->writeModConfig($server, $mod, LuaTable::render(
             $change($config),
-            Brand::mod('ExclsvPlayerTools') . " settings, written by " . Brand::MANAGER . " (" . Brand::PAGE_MOD_SETTINGS . " page).\nYou can edit this file by hand; comments are not kept when the page saves it.",
+            Brand::mod($mod) . " settings, written by " . Brand::MANAGER . " (" . Brand::PAGE_MOD_SETTINGS . " page).\nYou can edit this file by hand; comments are not kept when the page saves it.",
         ));
     }
 
