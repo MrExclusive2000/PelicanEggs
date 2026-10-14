@@ -49,7 +49,7 @@ final class Guide
                         'Players' => 'Everyone who has played: stats, money, fame, squad, inventory (from the save), lists they are on and anti-cheat kicks. Run commands or ban from here.',
                         'World' => 'Live map with players, bases and outposts; every base with its owner; save backups and restores.',
                         'Server settings' => 'Every setting in ServerSettings.ini, explained, with SCUM\'s defaults once captured. The server must be stopped to save.',
-                        'Console' => 'Start, restart, stop or kill the server (Power), see its status, uptime, CPU, memory, the game\'s own FPS and each player\'s ping, every death, and the server log. Pick a command (announce, kick, money, items, teleport, time, weather...) and run it, without being in game. Also adds teleport destinations and King of the Hill zones.',
+                        'Console' => 'Start, restart or stop the server (Kill appears while it is stopping), see its status, uptime, CPU, memory, the game\'s own FPS and each player\'s ping, every death, and the server log. Pick a command (announce, kick, money, items, teleport, time, weather...) and run it, without being in game. Also adds teleport destinations and King of the Hill zones.',
                         'Mods' => 'Install or update UE4SS and our mods, upload other mods, switch mods on and off.',
                         'Mod settings' => 'Every option of our mods: chat commands, rewards, economy, events, messages, anti-cheat. Export / Import saves or copies them all in one file.',
                         'Player lists' => 'Admins, settings admins, whitelist, exclusive, banned and silenced players. The server must be stopped to save.',

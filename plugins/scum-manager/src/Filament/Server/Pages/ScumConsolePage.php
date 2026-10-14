@@ -187,7 +187,7 @@ class ScumConsolePage extends Page
         return $schema->components([
             Section::make('Server')
                 ->icon('tabler-server')
-                ->description('Updates every 10 seconds. Start, restart and stop are under Power.')
+                ->description('Updates every 10 seconds. Start, restart and stop are at the top of the page.')
                 ->extraAttributes(fn () => $this->live ? ['wire:poll.10s' => 'pollServer'] : [])
                 ->columns(['default' => 1, 'md' => 3])
                 ->schema([
@@ -326,18 +326,17 @@ class ScumConsolePage extends Page
                 $this->pollServer();
             });
         $stopped = fn () => ScumServerService::isStoppedState($this->resources['state']);
+        $stopping = fn () => $this->resources['state'] === ContainerStatus::Stopping->value;
 
+        // Like Pelican's own console: Start, Restart and Stop side by side; Kill replaces Stop
+        // while the server is stopping.
         return [
             ActionGroup::make([
-                $power('start', 'Start', 'tabler-player-play', 'success', SubuserPermission::ControlStart, null, $stopped),
-                $power('restart', 'Restart', 'tabler-reload', 'warning', SubuserPermission::ControlRestart, 'Players are disconnected. SCUM takes a few minutes to come back up.', fn () => !$stopped()),
-                $power('stop', 'Stop', 'tabler-player-stop', 'danger', SubuserPermission::ControlStop, 'Players are disconnected and SCUM saves and shuts down.', fn () => !$stopped()),
-                $power('kill', 'Kill', 'tabler-skull', 'danger', SubuserPermission::ControlStop, 'Ends SCUM at once without saving. Only use this when Stop does not work.', fn () => !$stopped()),
-            ])
-                ->label('Power')
-                ->icon('tabler-power')
-                ->button()
-                ->color('gray'),
+                $power('start', 'Start', 'tabler-player-play', 'primary', SubuserPermission::ControlStart, null, $stopped),
+                $power('restart', 'Restart', 'tabler-reload', 'gray', SubuserPermission::ControlRestart, 'Players are disconnected. SCUM takes a few minutes to come back up.', fn () => !$stopped()),
+                $power('stop', 'Stop', 'tabler-player-stop', 'danger', SubuserPermission::ControlStop, 'Players are disconnected and SCUM saves and shuts down.', fn () => !$stopped() && !$stopping()),
+                $power('kill', 'Kill', 'tabler-alert-square', 'danger', SubuserPermission::ControlStop, 'Ends SCUM at once without saving. Only use this when Stop does not work.', $stopping),
+            ])->buttonGroup(),
             Action::make('send')
                 ->label('Run a command')
                 ->icon('tabler-player-play')
