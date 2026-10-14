@@ -345,6 +345,42 @@ end
 
 loadOffenses()
 
+-- For the panel's Anti-cheat page:
+--  flags.tsv: every strike, kick, ban and report, with the date (anticheat.log has only the time):
+--    <unix time> <tab> SteamID <tab> name <tab> kind <tab> detail
+--    kind: strike, glitch, logonly, kick, ban, suspect, spectate. Kept to about 512 KB.
+--  review.txt: written by the panel, one "clear <SteamID>" per line: forget that player's strikes
+--    and kick count. Read and emptied every second.
+local review = { FLAGS_FILE = DIR .. "/flags.tsv", COMMANDS_FILE = DIR .. "/review.txt", cleared = {} }
+
+function review.flag(steamId, name, kind, detail)
+    local function cell(value) return (string.gsub(tostring(value or ""), "[\t\r\n]", " ")) end
+    local file = io.open(review.FLAGS_FILE, "a")
+    if file == nil then return end
+    file:write(string.format("%d\t%s\t%s\t%s\t%s\n", math.floor(os.time()), cell(steamId), cell(name), kind, cell(detail)))
+    local size = file:seek("end")
+    file:close()
+    if size and size > 512 * 1024 then
+        os.remove(DIR .. "/flags.old.tsv")
+        os.rename(review.FLAGS_FILE, DIR .. "/flags.old.tsv")
+    end
+end
+
+function review.readCommands()
+    local text = readFile(review.COMMANDS_FILE)
+    if text == nil or text == "" then return end
+    local file = io.open(review.COMMANDS_FILE, "w")
+    if file then file:close() end
+    for id in string.gmatch(text, "clear%s+(%d+)") do
+        review.cleared[id] = true
+        if offenses[id] then
+            offenses[id] = nil
+            saveOffenses()
+        end
+        output("Strikes and kick count cleared for " .. id .. " (from the panel).")
+    end
+end
+
 -- Deaths and revives from SCUM.log. SCUM can revive the same character somewhere else, which
 -- looks just like a teleport; SCUM logs both, naming the player by profile id:
 --   LogSCUM: Updating profile deletion because prisoner revived.
@@ -511,6 +547,7 @@ local function readAllowedTeleports()
 end
 
 local function refreshFiles(now)
+    review.readCommands()
     readAllowedTeleports()
     readAllowedCommands(now)
     for _, line in ipairs(readTail(serverLog)) do
@@ -745,6 +782,7 @@ local function act(player, controller, why)
     local who = describe(player)
     if config.action == "log" then
         output(who .. ": " .. why .. ". action = \"log\", so nothing was done.")
+        review.flag(player.steamId, player.name, "logonly", why)
         return
     end
 
@@ -762,6 +800,7 @@ local function act(player, controller, why)
     if banNow then
         if player.steamId and ban(player.steamId) then
             output("Banned " .. who .. " (added to BannedUsers.ini): " .. why .. ".")
+            review.flag(player.steamId, player.name, "ban", why)
         elseif player.steamId then
             output("Could not write BannedUsers.ini; ban " .. who .. " manually.")
         else
@@ -771,6 +810,7 @@ local function act(player, controller, why)
 
     if kick(controller, player.name) then
         output("Kicked " .. who .. ": " .. why .. ".")
+        review.flag(player.steamId, player.name, "kick", why)
     else
         output("Could not kick " .. who .. "; kick them manually.")
     end
@@ -785,6 +825,7 @@ local function strike(player, controller, reason, time)
     player.strikes = recent
 
     output(string.format("%s: %s [strike %d/%d]", describe(player), reason, #recent, config.strikesToAct))
+    review.flag(player.steamId, player.name, "strike", reason)
 
     if #recent >= config.strikesToAct then
         player.strikes = {}
@@ -880,6 +921,7 @@ local function analyseKill(kill, byId, time)
 
     local function suspect(reason)
         output("SUSPECT " .. who .. ": " .. reason)
+        review.flag(kill.killerId, player and player.name or kill.killerName, "suspect", reason)
         if config.strikeOnKillFlags and player and player.controller then
             strike(player, player.controller, reason, time)
         end
@@ -1064,6 +1106,7 @@ local function checkMovement(player, controller, pawn, position, previous, elaps
             player.lastReport = player.lastReport or {}
             player.lastReport[kind] = time
             output("Possible vehicle glitch, not counted as a strike: " .. describe(player) .. ": " .. reason)
+            review.flag(player.steamId, player.name, "glitch", reason)
         else
             strike(player, controller, reason, time)
         end
@@ -1096,6 +1139,10 @@ local function check(controller, time, seen)
         tracked[key] = player
     end
     player.controller = controller
+    if player.steamId and review.cleared[player.steamId] then
+        review.cleared[player.steamId] = nil
+        player.strikes, player.lastStrike = {}, {}
+    end
 
     checkIdentity(player, controller, isTrue(controller, "IsUserAdmin"))
 
@@ -1260,6 +1307,7 @@ local function wallCheck(time)
                         state.flagged, state.streak = time, 0
                         output(string.format("SPECTATE %s: aim followed %s behind cover for %d s at %.0f m (at %.0f, %.0f, %.0f). Possible wallhack.",
                             describe(player), target.player.name, config.wallTrackSeconds, distance, watcher.at.x, watcher.at.y, watcher.at.z))
+                        review.flag(player.steamId, player.name, "spectate", string.format("aim followed %s behind cover for %d s at %.0f m", target.player.name, config.wallTrackSeconds, distance))
                     end
                 end
             end

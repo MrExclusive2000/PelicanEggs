@@ -23,7 +23,7 @@ class ScumHelpPage extends Page
 
     protected static ?string $slug = 'scum-help';
 
-    protected static ?int $navigationSort = 37;
+    protected static ?int $navigationSort = 38;
 
     protected static ?string $navigationLabel = 'Help & guide';
 

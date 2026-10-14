@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use MrExclusive\ScumManager\Support\AdminCommands;
+use MrExclusive\ScumManager\Support\AntiCheatReview;
 use MrExclusive\ScumManager\Support\ConsoleCommand;
 use MrExclusive\ScumManager\Support\FolderRename;
 use MrExclusive\ScumManager\Support\RestartPlan;
@@ -1089,6 +1090,85 @@ class ScumServerService
     private function updatePlayerTools(Server $server, \Closure $change): void
     {
         $this->updateModConfig($server, 'ExclsvPlayerTools', $change);
+    }
+
+    // ------------------------------------------------------------------ anti-cheat review
+
+    private const ANTICHEAT_NOTES = self::EXTRAS_DIR . '/anticheat-notes.json';
+
+    /**
+     * What the Anti-cheat page needs: flags.tsv (and its older half), kick counts, the ban list,
+     * the ignored SteamIDs from config.lua and the admins' notes.
+     *
+     * @return array{installed: bool, flags: string, offenses: string, banned: string, ignored: list<string>, notes: array<string, string>}
+     */
+    public function antiCheatData(Server $server): array
+    {
+        $installed = $this->installedModsOf($server, ['ExclsvAntiCheat']) !== [];
+        $dir = $this->ue4ss($server)['mods'] . '/ExclsvAntiCheat';
+        $ignored = [];
+        if ($installed) {
+            try {
+                $ignored = array_values(array_map('strval', (array) (LuaTable::parse($this->modConfig($server, 'ExclsvAntiCheat') ?? 'return {}')['ignoreSteamIds'] ?? [])));
+            } catch (Throwable) {
+                $ignored = [];
+            }
+        }
+
+        return [
+            'installed' => $installed,
+            'flags' => $installed ? ($this->read($server, "$dir/flags.old.tsv") ?? '') . ($this->read($server, "$dir/flags.tsv") ?? '') : '',
+            'offenses' => $installed ? ($this->read($server, "$dir/offenses.txt") ?? '') : '',
+            'banned' => $this->read($server, $this->configPath('BannedUsers.ini')) ?? '',
+            'ignored' => $ignored,
+            'notes' => AntiCheatReview::notes($this->read($server, self::ANTICHEAT_NOTES)),
+        ];
+    }
+
+    /** Ask ExclsvAntiCheat to forget a player's strikes and kick count (it reads review.txt every second). */
+    public function clearAntiCheatStrikes(Server $server, string $steamId): void
+    {
+        $this->assertSteamId($steamId);
+        $path = $this->ue4ss($server)['mods'] . '/ExclsvAntiCheat/review.txt';
+        $this->write($server, $path, ($this->read($server, $path) ?? '') . "clear $steamId\n");
+    }
+
+    /** Add or remove a SteamID in ExclsvAntiCheat's ignoreSteamIds (picked up within 30 seconds). */
+    public function setAntiCheatIgnored(Server $server, string $steamId, bool $ignored): void
+    {
+        $this->assertSteamId($steamId);
+        $this->updateModConfig($server, 'ExclsvAntiCheat', function (array $config) use ($steamId, $ignored) {
+            $ids = array_values(array_filter(array_map('strval', (array) ($config['ignoreSteamIds'] ?? [])), fn ($id) => $id !== $steamId));
+            if ($ignored) {
+                $ids[] = $steamId;
+            }
+            $config['ignoreSteamIds'] = $ids;
+
+            return $config;
+        });
+    }
+
+    public function saveAntiCheatNote(Server $server, string $steamId, string $note): void
+    {
+        $this->assertSteamId($steamId);
+        $notes = AntiCheatReview::notes($this->read($server, self::ANTICHEAT_NOTES));
+        $note = trim(mb_substr($note, 0, 1000));
+        if ($note === '') {
+            unset($notes[$steamId]);
+        } else {
+            $notes[$steamId] = $note;
+        }
+        if (!in_array(self::EXTRAS_DIR, array_column($this->listDirectory($server, '/'), 'name'), true)) {
+            $this->files($server)->createDirectory(self::EXTRAS_DIR, '/');
+        }
+        $this->files($server)->putContent(self::ANTICHEAT_NOTES, json_encode($notes, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+    }
+
+    private function assertSteamId(string $steamId): void
+    {
+        if (!preg_match('/^\d{17}$/', $steamId)) {
+            throw new RuntimeException('Not a SteamID64.');
+        }
     }
 
     // ------------------------------------------------------------------ restarts

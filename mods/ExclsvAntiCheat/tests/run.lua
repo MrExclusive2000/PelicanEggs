@@ -456,6 +456,16 @@ local banned = read(configDir .. "/BannedUsers.ini")
 check("banned after second kick", has(banned, "76561198000000099\n76561198000000004\n"))
 check("ban logged", has(acLog(), "Banned Cheater (76561198000000004) (added to BannedUsers.ini)"))
 check("kicked again with the ban", #kicks == 2)
+-- flags.tsv: the same events with the date, for the panel's Anti-cheat page.
+local flagsText = read(dir .. "/flags.tsv") or ""
+check("flags.tsv: strikes, kick and ban with SteamID and kind", string.find(flagsText, "%d+\t76561198000000004\tCheater\tstrike\t") ~= nil
+    and string.find(flagsText, "\t76561198000000004\tCheater\tkick\treached 2 strikes\n", 1, true) ~= nil
+    and string.find(flagsText, "\t76561198000000004\tCheater\tban\treached 2 strikes\n", 1, true) ~= nil)
+-- The panel clears a player's strikes and kick count through review.txt.
+write(dir .. "/review.txt", "clear 76561198000000004\n")
+step()
+check("review: kick count cleared", not has(read(dir .. "/offenses.txt"), "76561198000000004"))
+check("review: clearing logged, file emptied", has(acLog(), "Strikes and kick count cleared for 76561198000000004") and read(dir .. "/review.txt") == "")
 
 -- Strikes outside the window expire.
 local slow = Player("Slow", Pawn("BP_Prisoner_C", 0, 0, 0))

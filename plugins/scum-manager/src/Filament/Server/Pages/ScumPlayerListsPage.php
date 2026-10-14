@@ -24,7 +24,7 @@ class ScumPlayerListsPage extends ServerFormPage
 
     protected static ?string $slug = 'scum-player-lists';
 
-    protected static ?int $navigationSort = 36;
+    protected static ?int $navigationSort = 37;
 
     protected static ?string $navigationLabel = 'Player lists';
 

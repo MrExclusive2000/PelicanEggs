@@ -810,5 +810,23 @@ check('economy: lottery file', EconomyReport::lottery("draw\t5000\n1\tKim\t3\n2\
 $economyBank = EconomyReport::circulation(['1' => ['name' => 'Kim', 'cash' => 500, 'gold' => 2], '2' => ['name' => 'Lee', 'cash' => 900, 'gold' => null]]);
 check('economy: bank money from the save', [$economyBank['cash'], $economyBank['gold'], $economyBank['richest'][0]['name']], [1400, 2, 'Lee']);
 
+
+// ---------------------------------------------------------------- AntiCheatReview
+use MrExclusive\ScumManager\Support\AntiCheatReview;
+$flagsTsv = "100\t76561198000000004\tCheater\tstrike\tmoving 20 m/s\n101\t76561198000000004\tCheater\tkick\treached 2 strikes\n"
+    . "102\t76561198000000005\tSniper\tsuspect\tkilled at 1200 m\n103\t\tNoId\tstrike\tflying\n104\t76561198000000006\tDriver\tglitch\tcar jumped\njunk\n105\t1\tX\tweird\tunknown kind\n";
+$flags = AntiCheatReview::parse($flagsTsv);
+check('anticheat: flags parsed, unknown kinds and junk skipped', count($flags), 5);
+$review = AntiCheatReview::players($flags, AntiCheatReview::offenses("76561198000000004 2\n"), AntiCheatReview::steamIds("76561198000000004\r\n"), ['76561198000000006'], ['76561198000000005' => 'spectated, looks legit']);
+check('anticheat: most worrying first', array_column($review, 'name'), ['Cheater', 'Sniper', 'NoId', 'Driver']);
+check('anticheat: counts, kicks, ban', [$review[0]['counts'], $review[0]['kicks'], $review[0]['banned']], [['strike' => 1, 'kick' => 1], 2, true]);
+check('anticheat: latest flag described', $review[0]['lastDetail'], 'Kicks: reached 2 strikes');
+check('anticheat: note and ignore status', [$review[1]['note'], $review[3]['ignored']], ['spectated, looks legit', true]);
+check('anticheat: player without SteamID kept by name', $review[2]['key'], 'name:NoId');
+check('anticheat: counts text', AntiCheatReview::countsText(['strike' => 3, 'kick' => 1]), '1 kicks, 3 strikes');
+check('anticheat: range', count(AntiCheatReview::parse($flagsTsv, 103)), 2);
+check('anticheat: UTF-16 ban list read', AntiCheatReview::steamIds("\xff\xfe" . implode("\0", str_split("76561198000000009\r\n")) . "\0"), ['76561198000000009']);
+check('anticheat: notes only for SteamIDs', AntiCheatReview::notes('{"76561198000000004":"x","bad":"y","76561198000000005":5}'), ['76561198000000004' => 'x']);
+
 echo "\n$count checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

@@ -9,6 +9,9 @@ Adds these pages to SCUM servers in the Pelican client area:
 | **SCUM Player Lists** | Admins, settings admins, whitelist, exclusive, banned and silenced players |
 | **SCUM Mods** | Installs or updates UE4SS and our mods, uploads mods, and turns them on/off or deletes them |
 | **ExclsvSCUM Mod Settings** | Settings for our mods (with Export / Import of everything in one file): player tools (chat commands, kill feed, stats, AFK, voting, starter kit, rewards, bounties, teleports, manhunt, King of the Hill...), messages and restart warnings, anti-cheat. Item fields are searchable dropdowns of the server's items |
+| **Restarts** | Daily restart times in one place: creates the Pelican schedule (power restart, only while running) and sets ExclsvMessages' countdown to the same times, so they never drift apart; points out other schedules that also restart the server |
+| **Economy** | What the mods paid out and took in (rewards, shop, sales, payments, lottery, tasks, events, bounties, teleports) per category for 24 h / 7 / 30 days / all, the lottery pot, top earners and spenders, the richest players and the bank money in circulation (from the save), and the latest movements |
+| **Anti-cheat** | Everyone ExclsvAntiCheat flagged, most worrying first, with every dated strike, kick, ban and report; clear a player's strikes and kick count, stop checking a trusted player, unban, or keep a note |
 | **Help & guide** | How to set up and use the plugin and our mods: first-time setup, what each page is for, everyday tasks, updating, player chat commands, money and the no-admin route, the anti-cheat, troubleshooting and where the files are |
 
 The pages only appear on SCUM servers: eggs with the `scum_manager` feature or `scum` tag, or any server whose startup command runs `SCUMServer.exe`.
@@ -27,6 +30,7 @@ The first page in the **ExclsvSCUM** menu shows what needs attention on one scre
 
 - **Server:** status, UE4SS, how many players have joined, and the panel version (with a notice when a newer one is published).
 - **Our mods:** each mod's state compared with the latest build on GitHub (up to date, update available, disabled, not installed).
+- **History:** graphs of players online, server FPS, memory and CPU over the last 24 hours or 7 days (ExclsvConsole records a point every 5 minutes).
 - **Online players:** who is on, where (map sector and coordinates), whether they are driving or an admin, and how long they have been on, refreshed every 15 seconds from ExclsvPlayerTools' `online.tsv`. **Manage a player** runs the common commands on one of them (where is, money and fame check, give item, give/take money, set fame, teleport, bring/go to, kick, ban) and shows the answer.
 - **Anti-cheat flags:** strikes, kicks, bans and spectate flags, newest first, refreshed every 15 seconds. Start-up and reload messages are left out.
 - **Player reports:** the newest `!report` messages.

@@ -1,11 +1,11 @@
 {
   "format": "exclsv-mods",
-  "manager": "1.36.0",
+  "manager": "1.37.0",
   "mods": {
-    "ExclsvAntiCheat": { "file": "ExclsvAntiCheat.zip", "build": "c37204e05923", "sha256": "6866b29902675d60a3e7fc60d5e6e46c0b1d33dd8c0dac13ba7c2528b9bab92e", "bytes": 21493 },
-    "ExclsvConsole": { "file": "ExclsvConsole.zip", "build": "37d89ee34351", "sha256": "ae13029c95c8458739700d3090b0d99349b6809e42510287da39a7ca8443877b", "bytes": 17645 },
+    "ExclsvAntiCheat": { "file": "ExclsvAntiCheat.zip", "build": "7021cfcc5839", "sha256": "dd842484c24404f7b862725ccc018dc4e8b7a8874d8e23b4bdcb9af67137abdb", "bytes": 22290 },
+    "ExclsvConsole": { "file": "ExclsvConsole.zip", "build": "c69e5d7e888d", "sha256": "3e66aed7d4857cb516f971a7d45928bad447ac37c2aebc4da9749300f5dbf296", "bytes": 18797 },
     "ExclsvMessages": { "file": "ExclsvMessages.zip", "build": "eb5a00d5378e", "sha256": "61f1072a9b6cca439b14b88df4f9e4b016ec74d1fdf4a2dc5e5938f87ae8c27c", "bytes": 6466 },
-    "ExclsvPlayerTools": { "file": "ExclsvPlayerTools.zip", "build": "56f40f7e33fa", "sha256": "4bb9a6955d652b56691614fdfb4bca9638c106144d65aac846f8d3265265a7b1", "bytes": 44111 },
+    "ExclsvPlayerTools": { "file": "ExclsvPlayerTools.zip", "build": "e88236c818d7", "sha256": "b0a2d7161d42fee29e41bf0ba2c5e910ed60e9e3ba56fbfe38df849d8b881dab", "bytes": 44689 },
     "ExclsvProbe": { "file": "ExclsvProbe.zip", "build": "01416993d7a3", "sha256": "17e8b5099e0d1d83ae18804171d2d2ac97714224e733cd172b4cc6395b337565", "bytes": 9893 }
   }
 }

@@ -47,6 +47,10 @@ Actions (config.action):
   "kick"  kick; with banAfterKicks, players kicked that many times are banned
   "ban"   add the SteamID to BannedUsers.ini and kick
 
+For the panel's Anti-cheat page: flags.tsv lists every strike, kick, ban and report with the date
+(anticheat.log has only the time), kept to about 512 KB; the page writes "clear <SteamID>" lines to
+review.txt to forget a player's strikes and kick count, which the mod picks up within a second.
+
 Not checked: admins listed in AdminUsers.ini, players the game is teleporting (admin teleports,
 respawns; SCUM.log's "prisoner died / revived" lines count too, for 10 s), falling or parachuting players, config.ignoreNames and config.ignoreSteamIds.
 SteamIDs come from the login lines in SCUM.log.
